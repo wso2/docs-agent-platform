@@ -233,7 +233,7 @@ const config: Config = {
       appId: 'HGUIB02S86',
       apiKey: '08ce042847a47babb4833e131c226e33',
       indexName: 'Docs-agent-platform Crawler',
-      contextualSearch: true,
+      contextualSearch: false,
       searchParameters: {},
       askAi: {
         assistantId: 'X4ZuiOLg5WnL',
@@ -244,6 +244,7 @@ const config: Config = {
     },
     navbar: {
       logo: {
+        href: `/${latestVersion}/get-started/what-is-amp`,
         alt: 'WSO2 Agent Manager Logo',
         src: 'img/WSO2 Agent Manager Logo_Black.svg',
         srcDark: 'img/WSO2 Agent Manager Logo_white.svg',

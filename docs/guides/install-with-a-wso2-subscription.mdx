@@ -39,6 +39,25 @@ WSO2 publishes the 0.0.0-dev release to your project, followed by updates to it.
 Helm treats an update such as `0.0.0-dev-u2` as a pre-release of `0.0.0-dev`, so it ranks every update below the release. `helm install` and `helm upgrade` without `--version`, and version ranges in tools such as Argo CD or Flux, therefore resolve to `0.0.0-dev` and never to an update. Pass the exact version every time.
 :::
 
+## List the Published Versions
+
+To see which versions are published to your project, list the tags of the `wso2-agent-manager` chart with [ORAS](https://oras.land/). Helm cannot list the versions of a chart in an OCI registry, and `helm list` shows only the version installed in your cluster.
+
+```bash
+oras login registry.wso2.com
+oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep -v '\.sig$' | sort -V
+```
+
+`oras login` asks for your registry username and token. Run `oras logout registry.wso2.com` when you are done, so the login is not kept on your machine.
+
+Without ORAS installed, run the same commands in a temporary container. Nothing is kept after it exits:
+
+```bash
+docker run --rm -it --entrypoint sh ghcr.io/oras-project/oras:v1.2.3 -c 'oras login registry.wso2.com && oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep -v "\.sig$" | sort -V'
+```
+
+The list starts with the release, `0.0.0-dev`, followed by its updates in order, so the last version is the newest. The `.sig` tags that `grep` removes are the signatures described in [Verify Image Signatures](#verify-image-signatures-optional).
+
 ## Install on k3d
 
 ### One Command

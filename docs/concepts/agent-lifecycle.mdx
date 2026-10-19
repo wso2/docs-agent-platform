@@ -14,6 +14,7 @@ An agent's definition combines several pieces, each independently configurable:
 - **Provisioning** — for platform-hosted agents, the source repository, branch, and path the platform builds from.
 - **Build** — the build strategy: `buildpack` (language + start command, e.g. Python) or `docker` (a `Dockerfile` in the repository).
 - **Configurations** — runtime settings: auto-instrumentation, environment variables, API key / OAuth security, CORS, and resilience timeouts.
+- **Health checks**: for platform-hosted agents, the startup, readiness, and liveness checks the platform runs on the agent. They are set once on the agent, saved in the release the next deploy creates, and carried to later environments when that release is promoted. See [Configure Agent Health Checks](../guides/configure-agent-health-checks.mdx).
 - **Kind** — optionally, an agent can be created from a published [Agent Kind](./agent-kind-and-catalog.mdx) rather than a raw repository.
 
 ## Life Cycle Actions
@@ -37,7 +38,7 @@ An agent's deployment status is tracked independently for each environment it ta
 | Status | Meaning |
 |---|---|
 | `active` | Deployed and able to serve traffic. |
-| `in-progress` | A deployment is under way — either still rolling out, or applied but with pods that haven't passed their readiness probe yet. |
+| `in-progress` | A deployment is under way — either still rolling out, or applied but with pods that haven't passed their [readiness check](../guides/configure-agent-health-checks.mdx) yet. |
 | `failed` | The deployment did not come up successfully. |
 | `not-deployed` | The agent has never been deployed to this environment. |
 | `suspended` | Previously deployed, then stopped by the suspend action. |

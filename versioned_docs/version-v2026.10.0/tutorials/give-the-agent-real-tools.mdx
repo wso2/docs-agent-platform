@@ -1,0 +1,349 @@
+---
+title: Connect your agent to real tools
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Connect your agent to real tools
+
+Your agent already tries to avoid duplicate tickets. Before filing one, it
+checks system status and the employee's own open tickets. But that check has a
+blind spot: AcmeCorp's IT team logs *known* problems in a GitHub issue tracker,
+and the agent has no way to see it. So when three different people report their
+mail client crashing after an update, the agent still files three separate
+tickets for something engineering already knows about.
+
+You're going to give it a third place to look. Which immediately raises the
+question the rest of this chapter answers: **once an agent can reach an outside system, what stops it doing damage there?**
+
+Connecting the tools might take a few minutes. Fencing them in is the part that
+matters.
+
+## What You'll Need
+
+A **GitHub Personal Access Token** with **read access only**. Create one [here](https://github.com/settings/tokens).
+
+You'll also need a repository with a few issues in it to search. In the story
+it's the IT team's tracker; in practice, any repository you can read works.
+Note its `owner/repo` name; you'll hand it to the agent in Step 4 so it knows
+where to look. Grant the token read access; nothing here needs write scope.
+
+## Step 1: Register GitHub as an MCP Proxy
+
+MCP proxies are organization-level resources, like LLM providers. First, go to
+the organization view in the Agent Manager console by clicking the organization
+icon next to the Agent Manager logo. Go to
+**MCP Servers** under **Resources** and click **Register MCP Server**.
+
+| Field | Value |
+|---|---|
+| **Name** | `GitHub` |
+
+
+Configure the **upstream endpoint** for your development environment:
+
+| Field | Value |
+|---|---|
+| **Endpoint Name** | `Primary` |
+| **MCP Server Endpoint URL** | `https://api.githubcopilot.com/mcp/` |
+
+Now go to the **Advanced Configuration** tab and put these in:
+
+| Field | Value |
+|---|---|
+| **key** | `Authorization` |
+| **value** | `Bearer <PAT>` |
+
+Every endpoint also binds to one or more environments, under **Deployment
+Configuration**. If your organization only has one environment so far, there's
+nothing to pick: that section stays hidden, and the endpoint is bound to it
+automatically. With more than one environment, you'll see a checkbox per
+environment instead, and this `Primary` endpoint only serves whichever ones
+you check.
+
+Click **Add Endpoint**. Agent Manager will discover the server's tools automatically.
+
+Your PAT is now stored on the proxy, centrally, and the agent will never see it.
+Full field reference is at [Register an MCP Proxy](../guides/register-mcp-proxy.mdx).
+
+:::note Environments you add later
+This MCP server covers only the environments that exist when you create it.
+Environments you add afterwards are not covered, and the server cannot be
+extended to them. [Ship It to Production](./promote-your-agent.mdx#step-2-configure-the-llm-and-mcp-for-your-new-environments)
+shows how to register a new MCP server once those environments exist.
+:::
+
+## Step 2: Discover What GitHub Offers
+
+The proxy connects upstream and lists the tools the server advertises, such as
+`search_issues`, `list_issues`, `issue_read`, `issue_write`, `search_repositories`, and
+`list_pull_requests`. The full list is in the
+[GitHub MCP server documentation](https://github.com/github/github-mcp-server#tools).
+
+Read that list carefully before moving on. This is the moment to notice you're
+about to hand an LLM a set of tools that includes some real ways to cause damage
+if left unrestricted, and that this agent needs almost none of them.
+
+## Step 3: Fence the Tools In
+
+On the endpoint's **Manage Tools** tab, switch the mode to **Deny all**, then
+allow only what the helpdesk agent needs:
+
+| Allow | Why |
+|---|---|
+| `search_issues` | Find a known issue matching what the employee reported |
+| `list_issues` | Browse the tracker's recent issues when a keyword search finds nothing |
+| `issue_read` | Read it for status and any documented workaround |
+
+Three tools. Everything else is now unreachable. Not discouraged by a
+prompt. Unreachable, because the proxy does not expose the other tools via the [MCP proxy](../concepts/mcp-proxy.mdx).
+
+That control matters most for the tools an agent could plausibly be tricked
+into using: actions that sound reasonable on the surface but exceed the
+agent's actual authority.
+
+Here's the whole path a tool call takes, and where each control sits:
+
+```mermaid
+flowchart LR
+
+  subgraph C["1 · A tool call"]
+    direction LR
+    A2["Agent<br/>holds GITHUB_MCP_API_KEY"] -->|"X-API-Key"| G2["MCP Proxy"]
+    G2 -->|"Authorization: Bearer PAT"| U2["GitHub MCP server"] --> H["GitHub"]
+  end
+```
+
+Two things happen here that are worth separating.
+
+The denied tools are never exposed. The proxy
+filters the capability list on its way to the agent, so the agent's toolset
+contains three tools and nothing else.
+
+The PAT never travels left of the gateway. The agent authenticates with a
+platform-issued key, and the gateway attaches the real credential on the way
+out.
+
+## Step 4: Attach the Proxy to the Agent
+
+Back on the `it-helpdesk` agent page, open the configure page and select the
+**Tool Configurations** tab. Click **Add Tool Configuration** and select the
+`GitHub` MCP server.
+
+<Tabs groupId="agent-hosting">
+<TabItem value="platform" label="Platform-Hosted Agent" default>
+
+Under **Environment Variable Names**, the Console fills in names derived from
+the proxy (`GITHUB_URL` and `GITHUB_API_KEY`). Change them to the names the
+sample reads, `GITHUB_MCP_URL` and `GITHUB_MCP_API_KEY`, then click **Save**.
+
+Next, go to the Deploy page and add these two environment variables. For demo
+purposes, point `ISSUE_TRACKER_REPO` at one of your own repositories.
+
+| Key | Value |
+|---|---|
+| `USE_MCP` | `true` |
+| `ISSUE_TRACKER_REPO` | `acme/it-tooling` *(your `owner/repo`)* |
+
+`ISSUE_TRACKER_REPO` is how the agent knows *where* to look. The sample puts it
+into the system prompt and scopes every issue search to it. The sample refuses to start with
+`USE_MCP=true` and no tracker repo, rather than silently searching everything.
+
+Agent Manager injects `GITHUB_MCP_URL` and `GITHUB_MCP_API_KEY` per environment
+as system-managed values. The sample loads its MCP tools from that pair at
+startup and merges them with its nine built-in tools.
+
+Redeploy.
+
+:::tip Per-environment trackers
+Because this is an ordinary environment variable, staging can point at a
+scratch repository while production points at the real tracker. It's the same
+per-environment pattern used for provider bindings in Chapter 2.
+:::
+
+</TabItem>
+<TabItem value="external" label="Externally-Hosted Agent">
+
+Click **Save**. The Console does not show **Environment Variable Names** for an
+externally-hosted agent, because Agent Manager does not inject variables into a
+process it does not run. After you save, the Console opens the **Connect to MCP
+Server** panel with the per-environment URL and API key. Copy the API key now;
+it is shown only once. Then set both yourself:
+
+```bash
+export USE_MCP=true
+export GITHUB_MCP_URL="<proxy endpoint URL for your environment>"
+export GITHUB_MCP_API_KEY="<proxy API key>"
+export ISSUE_TRACKER_REPO="acme/it-tooling"   # your owner/repo
+
+amp-instrument python main.py
+```
+
+The variable names must match what the sample reads: `GITHUB_MCP_URL` and
+`GITHUB_MCP_API_KEY`.
+
+The governance is identical: the deny-list, the rewrite rules, and the upstream
+PAT all live on the proxy, so your externally-hosted agent is fenced in exactly
+as a platform-hosted one would be. It still never sees the GitHub credential.
+
+</TabItem>
+</Tabs>
+
+:::note Restart to pick up tool changes
+The sample discovers MCP tools once at startup. Widen the access-control list
+and the running agent won't see the new tools until it restarts. That's a
+redeploy for platform-hosted agents, a process restart for externally-hosted
+ones.
+:::
+
+## Step 5: Watch It Use Them
+
+In **Try It**, report something that matches an issue in your tracker:
+
+```text
+Outlook keeps crashing on launch since yesterday's update. Is that known?
+```
+
+{/* SCREENSHOT: Try It console showing the agent citing a known issue instead of opening a ticket */}
+
+The agent should search the tracker, find the matching issue, and tell the
+employee its number and any workaround, instead of opening a duplicate ticket.
+That's the "check before create" rule it already followed for outages and open
+tickets, now reaching a live system rather than mock data.
+
+Then try the request that sounds perfectly reasonable:
+
+```text
+That's fixed for me now — go ahead and close it.
+```
+
+It should refuse and point them at L2. But notice *why* it can't comply even if
+the prompt failed to stop it: there is no close-issue tool in its toolset to
+call. The prompt is the polite refusal; the proxy is the reason the capability
+isn't there at all. This is exactly the request an agent is most likely to be
+talked into, which is why it's the one worth making structurally impossible.
+
+Open the trace. Alongside the familiar tool spans you'll now see spans for the
+MCP calls, showing which tool ran and what came back. Everything the agent
+touched, in one place.
+
+## Step 6: Use AgentID to Access MCP Tools
+
+So far the agent reaches the proxy with an API key, and the Step 3 allowlist
+applies to every agent attached to the proxy. That makes the proxy the only
+control over tool access: every agent that uses it gets the same tools.
+
+Now suppose a second agent needs more than the helpdesk agent does. With AgentID,
+tool access moves from the proxy to each agent. You keep one `GitHub` MCP Proxy
+and attach it to as many agents as you need. Each tool is guarded by a scope, and
+an agent can call only the tools whose scopes its roles grant. The helpdesk agent
+holds a read-only scope, while an L2 triage agent attached to the same proxy
+holds a scope that also covers `issue_write`. Neither agent needs its own copy
+of the proxy or its own GitHub token.
+
+The **Manage Tools** list from Step 3 stays the outer limit. A tool it blocks
+cannot be given a scope, so no agent can reach it. To give a second agent
+`issue_write`, allow the tool in **Manage Tools**, then guard it with a scope
+that only that agent's role holds.
+
+### Give the Agent a Role
+
+Scopes reach an agent through a role, so create the role first:
+
+1. In the organization view, go to **Agent ID** → **Roles** and click **Create Role**.
+2. Enter `issue-reader` as the **Name** and create the role. Leave **Scopes (optional)** empty, since the scope does not exist yet.
+3. Open the `issue-reader` role, go to the **Agents** tab, add the `it-helpdesk` agent under **Add Agent**, and click **Save Changes**.
+
+### Switch the Server to OAuth
+
+1. Open the `GitHub` MCP Server and go to the **Security** tab.
+2. Under **Authentication**, set **Method** to **OAuth** and click **Save**.
+3. Under **Authorization**, click **Create Scope**.
+4. Enter `read-issues` as the **Name**, select `search_issues`, `list_issues`, and `issue_read` under **Tools**, select `issue-reader` under **Assigned Roles**, and save the scope.
+
+
+### Turn On OAuth in the Agent
+
+AgentID authentication only works when the agent is told to use it. Set
+`MCP_OAUTH=true` for both hosting types. Without it, the sample keeps using an
+API key, and the OAuth proxy rejects it.
+
+<Tabs groupId="agent-hosting">
+<TabItem value="platform" label="Platform-Hosted Agent" default>
+
+On the Deploy page, add one more environment variable and redeploy:
+
+| Key | Value |
+|---|---|
+| `MCP_OAUTH` | `true` |
+
+Agent Manager already injects the agent's AgentID credentials as
+`AMP_AGENTID_CLIENT_ID`, `AMP_AGENTID_CLIENT_SECRET`,
+`AMP_AGENTID_TOKEN_ENDPOINT`, and `AMP_AGENTID_SCOPES`. With `MCP_OAUTH=true`,
+the sample uses them to request an OAuth 2.0 `client_credentials` token. It
+passes the proxy URL as the `resource`, so the token is valid for this proxy
+only, and sends the token as `Authorization: Bearer` on every MCP call. The
+agent no longer sends an API key, and Agent Manager no longer injects one.
+
+</TabItem>
+<TabItem value="external" label="Externally-Hosted Agent">
+
+Externally-hosted agents do not receive injected credentials. Copy the client
+ID, client secret, token endpoint, and scopes from the **Connect to MCP Server**
+panel on the agent's `GitHub` tool configuration, then start the agent with them:
+
+```bash
+export USE_MCP=true
+export MCP_OAUTH=true
+export GITHUB_MCP_URL="<proxy endpoint URL for your environment>"
+export ISSUE_TRACKER_REPO="acme/it-tooling"   # your owner/repo
+export AMP_AGENTID_CLIENT_ID="<client ID>"
+export AMP_AGENTID_CLIENT_SECRET="<client secret>"
+export AMP_AGENTID_TOKEN_ENDPOINT="<token endpoint>"
+export AMP_AGENTID_SCOPES="<available scopes>"
+
+amp-instrument python main.py
+```
+
+[OAuth (AgentID)-Secured Proxies](../guides/configure-agent-mcp-proxies.mdx#configuring-an-mcp-proxy-for-an-external-agent)
+shows where each value appears.
+
+</TabItem>
+</Tabs>
+
+Ask the
+Outlook question from Step 5 again. The agent finds the known issue as before,
+this time with a token minted for its own AgentID.
+
+To see the scope at work, remove the `it-helpdesk` agent from the
+`issue-reader` role and redeploy so the agent requests a fresh token. The new
+token no longer carries `read-issues`, and the gateway rejects calls to
+`search_issues`, `list_issues`, and `issue_read`.
+
+## What You've Built
+
+Five things changed, and none of them touched the agent's code:
+
+- **A real external system, reachable.** The agent can now search AcmeCorp's
+  actual GitHub issue tracker instead of guessing from mock data.
+- **A credential the agent never sees.** The GitHub personal access token lives
+  on the MCP proxy. The agent authenticates with a platform-issued key instead,
+  and the proxy swaps in the real PAT on the way out.
+- **A fixed, small toolset.** Denied tools aren't just discouraged by a prompt.
+  They're never exposed to the agent at all. It can search and read issues.
+  Nothing else, no matter what it's asked to do.
+- **An identity that can be audited and revoked.** The agent talks to GitHub as
+  itself, via [AgentID](../concepts/agentid.mdx): a dedicated credential scoped
+  to this agent and this environment, not to you or to a shared service account.
+  If it ever needs to be cut off, that credential can be revoked on its own,
+  without touching anything else.
+- **One proxy, per-agent tool access.** With OAuth, every agent shares the same
+  `GitHub` proxy, and the scopes on each agent's roles decide which of its tools
+  that agent can call.
+
+## What's Next
+
+The agent can now do real damage if it behaves badly. So far you've only
+checked its behavior by trying a handful of messages by hand. That doesn't
+scale, and it doesn't prove anything.

@@ -1,0 +1,138 @@
+---
+sidebar_position: 6
+sidebar_label: Gateway
+---
+
+# amctl gateway
+
+List and inspect the gateways registered in an organization.
+
+```
+amctl gateway [command]
+```
+
+Gateways are **organization-level** resources. Each one carries a placement role that decides what it can host, and is mapped to one or more environments. LLM providers and MCP proxies are deployed onto gateways, so this command group is how you find the UUID that [`amctl llm-provider create --gateways`](./llm-provider.mdx#amctl-llm-provider-create) expects. The group is also available under the `gateways` alias.
+
+Gateways are registered by a platform engineer, not by this CLI — `amctl gateway` is read-only.
+
+## Subcommands
+
+| Command | Purpose |
+|---------|---------|
+| [`list`](#amctl-gateway-list) | List gateways in an organization |
+| [`get`](#amctl-gateway-get) | Get details of one gateway |
+
+## Options inherited from parent commands
+
+| Name | Description |
+|------|-------------|
+| `--org` | Override the active organization. |
+| `--json` | Output as JSON envelopes. |
+
+## Placement roles
+
+The `type` column is a placement policy, not a capability — every gateway has identical runtime capabilities regardless of role.
+
+| Type | Meaning |
+|------|---------|
+| `INGRESS` | Handles inbound agent traffic. At most one per environment. |
+| `EGRESS` | Hosts outbound LLM and MCP artifacts. Uncapped per environment. |
+| `BOTH` | Does both. Counts against the ingress cap. |
+
+Only `EGRESS` and `BOTH` gateways can host an LLM proxy, and no two gateways passed to a single provider may share an environment. Picking a gateway that breaks either rule fails the deployment, which is why `list` shows type and environment next to the UUID.
+
+---
+
+## amctl gateway list
+
+List the gateways in the active organization.
+
+```
+amctl gateway list [flags]
+```
+
+The default text output is a table with `name`, `uuid`, `type`, `status`, `environment`, and `vhost` columns; `--json` returns the raw response with pagination metadata.
+
+All gateways are listed by default, including `INGRESS` ones that cannot host an LLM proxy — narrow the view with `--type` rather than relying on an implicit filter.
+
+### Flags
+
+| Name | Description |
+|------|-------------|
+| `--type` | Filter by placement role: `INGRESS`, `EGRESS`, or `BOTH`. Case-insensitive. |
+| `--env` | Filter by environment name. An unknown name is an error, not an empty filter. |
+| `--limit` | Maximum number of results to return. |
+| `--offset` | Number of results to skip. |
+
+### Examples
+
+```bash
+# Every gateway in the active organization
+amctl gateway list
+
+# Only the gateways that can host an LLM proxy
+amctl gateway list --type EGRESS
+amctl gateway list --type BOTH
+
+# Gateways mapped to one environment
+amctl gateway list --env production
+
+# Pipe the UUID of the first egress-capable gateway into a provider
+echo "$OPENAI_API_KEY" | amctl llm-provider create prod-openai \
+  --display-name "Production OpenAI" \
+  --template openai \
+  --api-key-stdin \
+  --gateways "$(amctl gateway list --type BOTH --limit 1 --json | jq -r '.data.gateways[0].uuid')"
+```
+
+Sample output:
+
+```
+NAME                          UUID                                  TYPE  STATUS  ENVIRONMENT  VHOST
+api-platform-default-default  51854841-2350-49a2-ab2b-829d3809bf45  BOTH  ACTIVE  default      default.gw.example.com
+```
+
+:::note
+`status` is shown for information only and is never used as a filter. A gateway's registered placement candidacy is independent of its liveness, so filtering on `ACTIVE` would hide gateways the server still accepts.
+:::
+
+When nothing matches, `list` says so on a terminal and names the active filters. Piped output stays empty so a script can count lines.
+
+---
+
+## amctl gateway get
+
+Get the details of one gateway by name or UUID.
+
+```
+amctl gateway get <gateway>
+```
+
+### Arguments
+
+| Name | Description |
+|------|-------------|
+| `<gateway>` | The gateway's name or its UUID. Tab completion lists the gateways in the active organization, annotated with UUID and type. |
+
+### Examples
+
+```bash
+amctl gateway get api-platform-default-default
+amctl gateway get 51854841-2350-49a2-ab2b-829d3809bf45
+amctl gateway get api-platform-default-default --json
+```
+
+Sample output:
+
+```
+name:          api-platform-default-default
+display name:  Default Gateway
+uuid:          51854841-2350-49a2-ab2b-829d3809bf45
+type:          BOTH
+status:        ACTIVE
+environment:   default
+vhost:         default.gw.example.com
+critical:      false
+org:           default
+created:       2026-08-01T09:14:02Z
+```

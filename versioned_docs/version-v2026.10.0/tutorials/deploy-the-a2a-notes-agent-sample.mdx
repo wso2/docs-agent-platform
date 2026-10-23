@@ -1,0 +1,202 @@
+---
+sidebar_position: 1
+description: Deploy the A2A Notes Agent sample, a Python agent that summarizes meeting notes and extracts action items over the A2A protocol.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Deploy the A2A Notes Agent Sample
+
+WSO2 Agent Manager includes a ready-to-deploy sample agent that speaks the [A2A protocol](https://a2a-protocol.org/), called the A2A Notes Agent. In this tutorial you deploy it as an **A2A Agent**, then call it through the gateway over both A2A transports. You do not need to write or change any code.
+
+The sample lives in the platform's GitHub repository, at [`samples/a2a-agent`](https://github.com/wso2/agent-manager/tree/main/samples/a2a-agent). It is built on the official [`a2a-sdk`](https://github.com/a2aproject/a2a-python) Python package and FastAPI.
+
+## What You Will Build
+
+Give the A2A Notes Agent meeting notes and it does one of two things, both backed by OpenAI:
+
+| Skill | What it does | Result |
+|---|---|---|
+| `summarize-notes` | Condenses the notes into at most three sentences. This is the default skill. | A `text/plain` artifact, streamed as it is written |
+| `extract-action-items` | Pulls out who owes what, and when | An `application/json` artifact |
+
+The sample shows the A2A protocol surface Agent Manager publishes:
+
+- **An agent card** at `/.well-known/agent-card.json`, declaring a JSON-RPC interface under `/rpc`, an HTTP+JSON interface under `/rest`, and the two skills.
+- **Both transports from one process**, over one task store, so a task sent over JSON-RPC can be read over HTTP+JSON.
+- **Streaming** through `SendStreamingMessage`, which returns the summary as a stream of artifact chunks.
+- **The task lifecycle**: `submitted`, `working`, then `completed`. A request with no notes is `rejected`, and a failed model call is `failed`.
+
+For how Agent Manager exposes A2A agents in general, see [Deploy an A2A Agent](../guides/deploy-an-a2a-agent.mdx).
+
+## Prerequisites
+
+- WSO2 Agent Manager installed. See the [Quick Start Guide](../get-started/quick-start.mdx).
+- An OpenAI API key. Both skills call the model.
+- To use the CLI path: `amctl` installed and logged in. See [CLI Installation](../guides/cli-installation.mdx).
+
+## Step 1: Create and Deploy the Agent
+
+<Tabs groupId="am-client">
+<TabItem value="console" label="Console" default>
+
+1. Open your project and click **Add Agent**.
+2. Choose **Platform-Hosted Agent**, then **Source Code** as the source type.
+3. Fill in the agent and repository details:
+
+    | Field | Value |
+    |---|---|
+    | **Name** | `a2a-notes-agent` |
+    | **Description** *(optional)* | `Summarizes meeting notes and extracts action items over A2A` |
+    | **GitHub Repository** | `https://github.com/wso2/agent-manager` |
+    | **Branch** | `main` |
+    | **Project Path** | `/samples/a2a-agent` |
+
+4. Choose **Python** as the build type, set **Language Version** to `3.11`, and set **Start Command** to `python main.py`.
+5. Leave **Enable auto instrumentation** checked.
+6. Under **Agent Type**, choose **A2A Agent**, and set **Port** to `9099`.
+7. Under **Environment Variables (Optional)**, click **Add**, enter `OPENAI_API_KEY` as the **Key** and your OpenAI key as the **Value**, and turn on **Mark as a Secret**.
+8. Click **Deploy**.
+
+</TabItem>
+<TabItem value="cli" label="amctl">
+
+```bash
+amctl agent create a2a-notes-agent \
+  --display-name "A2A Notes Agent" \
+  --subtype a2a-agent \
+  --port 9099 \
+  --repo-url https://github.com/wso2/agent-manager \
+  --repo-branch main \
+  --repo-path /samples/a2a-agent \
+  --build-type buildpack \
+  --language python \
+  --language-version 3.11 \
+  --run-command "python main.py" \
+  --env-secret OPENAI_API_KEY=<your-openai-key>
+
+amctl agent build create a2a-notes-agent
+amctl agent deploy a2a-notes-agent
+amctl agent status a2a-notes-agent
+```
+
+Replace `<your-openai-key>` with your OpenAI API key. `amctl agent deploy` deploys the newest build, and `amctl agent status` shows the deployment status and the agent's endpoint URL.
+
+</TabItem>
+</Tabs>
+
+The build takes a few minutes. When it finishes, the agent deploys to the first environment and the platform publishes it to the gateway.
+
+Optional environment variables:
+
+| Key | Default | Purpose |
+|---|---|---|
+| `OPENAI_MODEL` | `gpt-4o-mini` | The model both skills use |
+| `AGENT_PUBLIC_BASE_URL` | `http://localhost:9099` | The address the agent advertises in its own card. Leave it unset for a deployed agent. |
+
+:::info Why auto instrumentation works with this sample
+The sample pins `a2a-sdk` to `1.1.5`, the first release that accepts `protobuf` 7. The auto instrumentation init container puts `protobuf` 7 on the agent's `PYTHONPATH`, and `a2a-sdk` 1.1.2 through 1.1.4 fail every A2A message under it with JSON-RPC error `-32603`. If you adapt the sample with an older SDK, turn **Enable auto instrumentation** off.
+:::
+
+## Step 2: Get the Agent's URL and a Key
+
+1. Open the agent's overview and copy the **Invoke URL** for the environment. The agent's transports sit under it:
+
+    | URL | What it serves |
+    |---|---|
+    | `<invoke-url>/.well-known/agent-card.json` | The agent card |
+    | `<invoke-url>/rpc` | The JSON-RPC transport |
+    | `<invoke-url>/rest` | The HTTP+JSON transport |
+
+2. If the agent's **Endpoint Authentication** is **API key**, create a key as described in [Secure Agent Endpoints with API Keys](../guides/secure-agent-endpoints-with-api-keys.mdx).
+
+The **Try It** page does not work for A2A agents, so the rest of this tutorial uses `curl`.
+
+## Step 3: Summarize Notes over JSON-RPC
+
+```bash
+curl -X POST "<invoke-url>/rpc" \
+  -H "Content-Type: application/json" \
+  -H "A2A-Version: 1.0" \
+  -H "X-API-Key: <agent-api-key>" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "msg-1",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Standup: the gateway rollout is on track. Priya will cut the release branch on Thursday. Sam is blocked on the staging certificate."}]
+      }
+    }
+  }'
+```
+
+Replace `<invoke-url>` and `<agent-api-key>` with the values from Step 2. If the agent uses **No authentication**, drop the `X-API-Key` header.
+
+The reply is a `Task` in the `completed` state, carrying a `summary.txt` artifact with the summary.
+
+## Step 4: Extract Action Items over HTTP+JSON
+
+Choose the other skill by naming it in the message's `metadata.skill`, and send it over the HTTP+JSON transport:
+
+```bash
+curl -X POST "<invoke-url>/rest/message:send" \
+  -H "Content-Type: application/json" \
+  -H "A2A-Version: 1.0" \
+  -H "X-API-Key: <agent-api-key>" \
+  -d '{
+    "message": {
+      "messageId": "msg-2",
+      "role": "ROLE_USER",
+      "metadata": {"skill": "extract-action-items"},
+      "parts": [{"text": "Standup: Priya cuts the release branch Thursday; Sam is blocked on the staging certificate."}]
+    }
+  }'
+```
+
+The task completes with an `action-items.json` artifact. You can also pick a skill by starting the text with `Extract action items:` or `Summarize:`. A `metadata.skill` the agent does not have is rejected rather than answered with a summary.
+
+## Step 5: Stream a Summary
+
+Call `SendStreamingMessage` with `-N` so `curl` prints events as they arrive:
+
+```bash
+curl -N -X POST "<invoke-url>/rpc" \
+  -H "Content-Type: application/json" \
+  -H "A2A-Version: 1.0" \
+  -H "X-API-Key: <agent-api-key>" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "SendStreamingMessage",
+    "params": {"message": {"messageId": "msg-3", "role": "ROLE_USER",
+      "parts": [{"text": "Standup: Priya cuts the release branch Thursday."}]}}
+  }'
+```
+
+Each server-sent event is one line: first the `Task`, then a `working` status update, then the summary as artifact chunks, then `completed`.
+
+## Call It from an A2A Client
+
+Any A2A client works. Point it at the agent's card through the gateway, `<invoke-url>/.well-known/agent-card.json`. That card lists the gateway URLs, so the client calls the agent through the gateway. The [sample README](https://github.com/wso2/agent-manager/tree/main/samples/a2a-agent#call-it-from-an-a2a-client) includes an `a2a-sdk` client example.
+
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| Every message fails with JSON-RPC error `-32603`, and the logs show `'FieldDescriptor' object has no attribute 'label'` | The agent runs an `a2a-sdk` release older than `1.1.5` with auto instrumentation on. Upgrade the SDK, or turn **Enable auto instrumentation** off. |
+| The call returns `401` | Send a valid key in the `X-API-Key` header, or check the agent's **Endpoint Authentication** setting. |
+| A `GetExtendedAgentCard` call always returns `401` | The sample publishes no extended card. The gateway serves an extended card only to a caller it has authenticated. |
+| Push notification operations return `FAILED_PRECONDITION` | The sample declares push notifications off in its card. |
+| Task history disappears after a restart | The sample keeps tasks in memory. Swap in a database task store from `a2a-sdk` if tasks must survive restarts. |
+
+## See Also
+
+| Guide | What it covers |
+|---|---|
+| [Deploy an A2A Agent](../guides/deploy-an-a2a-agent.mdx) | Deploying your own A2A agent, Agent Card CORS, and endpoint settings |
+| [Sample Agents](../reference/sample-agents.mdx) | The other samples in the repository |
+| [Create Your First Agent](create-your-first-agent.mdx) | The general agent creation flow |

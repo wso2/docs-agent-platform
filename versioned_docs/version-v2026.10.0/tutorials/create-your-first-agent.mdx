@@ -1,0 +1,342 @@
+---
+title: Create Your First Agent
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Create Your First Agent
+
+AcmeCorp’s IT operations team spends countless hours managing repetitive L1 support requests, including password resets, application access grants, and system status inquiries.
+
+In this tutorial, you will take a pre-built IT support agent and bring it to life using WSO2 Agent Manager.
+
+## About This Series
+
+This is the first of five chapters that follow **one agent** from a bare deployment
+to a governed, evaluated, production-ready service. Each chapter starts from a
+problem the previous one leaves behind, so they're meant to be read in order.
+
+| # | Chapter | The problem it solves |
+|---|---|---|
+| 1 | **Create Your First Agent** *(you are here)* | Nothing is running yet. Get the agent deployed, talk to it, and read its first trace. |
+| 2 | [Add guardrails to your agent](./govern-the-model.mdx) | It answers anything which get asked. Put a gateway in front of the model. |
+| 3 | [Connect your agent to real tools](./give-the-agent-real-tools.mdx) | It only knows mock data. Connect a real MCP server and control the tools. |
+| 4 | [Monitor Your Agent](./observe-first-agent.mdx) | You've only checked the agent by hand. Score its behaviour automatically and continuously. |
+| 5 | [Ship the agent to Production](./promote-your-agent.mdx) | It works in development. Promote it safely, and know how to stop it if something goes wrong. |
+
+
+### What you'll achieve in this chapter
+
+- Get your agent up and running in an active environment.
+- Execute your first real-time dialogue with the agent.
+- Analyze a detailed trace map to see how the agent reasons through and answers queries.
+
+## What You'll Need
+
+- Agent Manager installed and reachable. [Quickstart](../get-started/quick-start.mdx) is the fastest route.
+- An OpenAI API key.
+
+The agent itself is an [`it-helpdesk-agent`](https://github.com/wso2/agent-manager/tree/main/samples/it-helpdesk-agent).
+It's a LangGraph agent on FastAPI with nine tools over mock data such as employee lookup,
+identity verification, tickets, password resets, software access, system status,
+policy search, and escalation to L2.
+
+### Choose How You'll Run It
+
+Every chapter in this series offers two paths, and the choice is fixed at
+creation time. See [Internal and External Agent](../concepts/internal-and-external-agent.mdx).
+
+| | **Platform-Hosted** | **Externally-Hosted** |
+|---|---|---|
+| Who builds and runs it | Agent Manager, from your repository | You, wherever you like |
+| Tracing | Automatic, no code changes | Requires the `amp-instrumentation` package |
+
+If you're new here, pick **Platform-Hosted**. Most of the series works either
+way, but building, deploying, promoting, and endpoint security are
+things the platform can only do for a workload it runs. Those steps are marked
+where they appear.
+
+
+## Step 1: Create the Agent
+
+Log in to the Agent Manager console using `admin` for both the username and password.
+
+Where you land next depends on whether your organization already has a project.
+On a brand-new install with no projects yet, you'll land on the **Projects**
+view. That's the organization-wide screen listing every project across the org.
+If a project already exists (for example a `default` one created during setup),
+you're dropped straight into it instead.
+
+Either way, get to the right project before creating anything:
+
+- **Using an existing project**: open it from the project list, then skip
+  ahead to creating the agent below.
+- **Starting a new one**: from the **Projects** view (click the organization
+  icon next to the Agent Manager logo if you're not already there), click **Add
+  Project** and fill in:
+
+  | Field | Value |
+  |---|---|
+  | **Name** | `it-support` |
+  | **Description** *(optional)* | `AcmeCorp IT helpdesk agents` |
+  | **Deployment Pipeline** | The pipeline that defines which environments (development, staging, production) this project's agents can be promoted through. See [Deployment Pipeline](../concepts/deployment-pipeline.mdx) if you don't have one yet. |
+
+  You'll come back to this project in [Chapter 5](./promote-your-agent.mdx)
+  to promote the agent through that pipeline, so use `it-support` as the name
+  now.
+
+If the project has no agents yet, you land directly on the **Add a New Agent**
+page. Otherwise, click **Add Agent** to get there. Either way, choose the
+agent type you want to deploy:
+
+<Tabs groupId="agent-hosting">
+<TabItem value="platform" label="Platform-Hosted Agent" default>
+
+Choose **Platform-Hosted Agent**, then **Source Code** as the source type, and fill in:
+
+| Field | Value |
+|---|---|
+| **Name** | `it-helpdesk` |
+| **GitHub Repository** | `https://github.com/wso2/agent-manager` |
+| **Branch** | `main` |
+| **Project Path** | `/samples/it-helpdesk-agent` |
+
+
+The repository is public, so no Git Secret is needed.
+
+### Build Details
+
+Choose **Python**, leave the start command as `python main.py`, and pick a
+language version of `3.11` or later.
+
+Leave **Enable auto instrumentation** checked. Agent Manager injects an OpenTelemetry init container at build time, so the agent
+emits traces without a single line of tracing code in the sample. The full
+mechanism is in [Observability](../concepts/observability.mdx).
+
+:::note Building a Ballerina agent instead
+Ballerina is also a build option here. Choose it and there's no Start Command
+or Language Version to set: the platform reads the project's Ballerina
+version and builds it directly. See
+[Deploy the Ballerina Leave Assistant Sample](./build-a-ballerina-agent.mdx)
+for a full walkthrough with a ready-to-deploy sample.
+:::
+
+### Agent Type
+
+Choose **Chat Agent**. That contract is `POST /chat` on port `8000`. It takes
+`{message, session_id, context}` and returns `{response}`, which is exactly
+what the sample's `app.py` serves. Picking **Custom API Agent** here would make
+the console expect an OpenAPI spec instead.
+
+### Environment Variables
+
+The sample needs one variable to start. Add it, and mark it **Secret**:
+
+| Key | Value | Secret |
+|---|---|---|
+| `OPENAI_API_KEY` | your OpenAI key | ✅ |
+
+
+Two optional ones are worth setting now, because later chapters use them:
+
+| Key | Value | Why |
+|---|---|---|
+| `COMPANY_NAME` | `AcmeCorp` | Appears in the agent's system prompt |
+| `AGENT_VERSION` | `1.0.0` | Echoed in every response. This is how [Chapter 5](./promote-your-agent.mdx) makes a promotion visible |
+
+Everything else has a default. 
+
+Click **Deploy**.
+
+</TabItem>
+<TabItem value="external" label="Externally-Hosted Agent">
+
+Choose **Externally-Hosted Agent**. Registration is deliberately thin, because
+the platform isn't going to build or run anything. It only needs a record to
+hang governance and observability on.
+
+| Field | Value |
+|---|---|
+| **Name** | `it-helpdesk` |
+| **Description** *(optional)* | `L1 IT helpdesk agent` |
+
+Click **Register**. A **Setup Agent** panel opens on the right with what you need
+to connect the agent.
+
+### Run the Sample Yourself
+
+```bash
+git clone https://github.com/wso2/agent-manager
+cd agent-manager/samples/it-helpdesk-agent
+
+python -m venv env && source env/bin/activate
+pip install -r requirements.txt
+pip install amp-instrumentation
+
+export OPENAI_API_KEY=sk-...
+export COMPANY_NAME="AcmeCorp"
+export AGENT_VERSION=1.0.0
+```
+
+### Connect It for Tracing
+
+There's no init container to inject instrumentation, so you add it yourself. In
+the Setup Agent panel, choose a **Token Duration** and click **Generate**. Copy
+the key immediately, since it isn't shown again.
+
+```bash
+export AMP_OTEL_ENDPOINT="<INSTRUMENTATION_URL>"
+export AMP_AGENT_API_KEY="<your-generated-api-key>"
+
+amp-instrument python main.py
+```
+
+The `amp-instrument` prefix is the whole integration. No code changes needed.
+Full detail, including the Ballerina path and a manual `init_otel()` alternative, is in
+[AMP Instrumentation](../guides/amp-instrumentation.mdx).
+
+:::note AgentID arrives immediately
+Because there's no deploy step to wait for, [AgentID](../concepts/agentid.mdx)
+credentials are provisioned for every environment in the organization as soon as
+you register. They aren't tied to a first deployment.
+:::
+
+</TabItem>
+</Tabs>
+
+## Step 2: Build process of the platform hosted agent
+
+:::info Platform-hosted only
+Building is something Agent Manager does to source it fetched itself. If you
+registered an externally-hosted agent, your process is already running.
+Skip to Step 4.
+:::
+After clicking Deploy, you will be redirected to the build page, where the build process will start and display a status of `Running`.
+ 
+The build clones the repo, resolves `requirements.txt`, and
+produces an image. The deploy places that image in your development environment.
+
+First builds take a few minutes. If it fails, open the build logs from the details button in same
+panel, a missing dependency or a bad start command shows up there.
+
+Once complete, the agent's build status will change to **Completed**. Since you also chose to deploy the agent automatically, navigate to the Deploy tab to view the deployment status for the default environment.
+
+On the deployment page you can also configure other deployment settings for your agent.
+
+## Step 3: Talk to Your agent
+
+<Tabs groupId="agent-hosting">
+<TabItem value="platform" label="Platform-Hosted Agent" default>
+
+Open the **Try It** console from the agent's page and send a message:
+
+```text
+Hi, I forgot my password and need it reset.
+```
+
+The agent should ask you to verify your identity rather than resetting anything.
+Give it a real test employee:
+
+```text
+My email is alice.chen@acmecorp.com and my employee ID is E-1001.
+```
+
+The **Try It** console keeps one `session_id` for as long as the page stays
+open, which is why the agent remembers Alice's email if you keep chatting. To
+test a different employee cleanly, refresh the page first. That's the reset.
+There's no separate "new conversation" button. Then try an admin account:
+
+```text
+My email is david.kim@acmecorp.com and my employee ID is E-1004.
+```
+
+The agent should refuse the reset and escalate to L2 instead.
+
+### Calling It from Outside the Console
+
+**Try It** is convenient, but the agent has a real endpoint that anything can
+call. It isn't open, though: **API key security is enabled by default** for
+platform-hosted API agents, so an external caller needs a key and sends it in the
+`X-API-Key` header.
+
+[Secure Agent Endpoints with API Keys](../guides/secure-agent-endpoints-with-api-keys.mdx)
+covers creating, rotating, and revoking those keys, plus turning the
+protection off or swapping it for JWT. You'll need a key for
+[Chapter 4](./observe-first-agent.mdx), where the traffic seeding script calls
+this endpoint with `--api-key`.
+
+:::note Why Try It needed no key
+The console issues its own short-lived key per environment for the Test page and
+sends it for you. That key is reserved for Try It and never appears under
+**Credentials**, which is why the console worked without you creating anything.
+:::
+
+</TabItem>
+<TabItem value="external" label="Externally-Hosted Agent">
+
+The platform doesn't front your endpoint, so call it directly. Reuse one
+`session_id` to hold a conversation together:
+
+```bash
+curl -s localhost:8000/chat -H 'Content-Type: application/json' -d '{
+  "session_id": "demo-1",
+  "message": "Hi, I forgot my password and need it reset."
+}'
+
+curl -s localhost:8000/chat -H 'Content-Type: application/json' -d '{
+  "session_id": "demo-1",
+  "message": "My email is alice.chen@acmecorp.com and my employee ID is E-1001."
+}'
+```
+
+The agent should ask for verification on the first call rather than resetting
+anything, then act on the second.
+
+Now try an admin account on a fresh `session_id`: `david.kim@acmecorp.com`,
+`E-1004`. The agent should refuse the reset and escalate to L2 instead.
+
+That refusal isn't a hardcoded branch. It's the system prompt plus the
+`is_admin` flag on the employee record, and in
+[Chapter 4](./observe-first-agent.mdx) you'll write an evaluator that checks the
+agent actually obeys it every time.
+
+</TabItem>
+</Tabs>
+
+## Step 4: Read the First Trace
+
+In the left sidebar under **Observability**, click **Traces**, and open the trace
+for your password-reset conversation. It should be the most recent one in the list.
+
+
+Read it top to bottom:
+
+- The **root span** is the whole request which provides the details about end to end latency and the success/failure of the request.
+- **LLM spans** show the model, the token counts, and how long the call took. You can identify LLM spans by the LLM chip.
+- **Tool spans** show which tool ran, with its input and output.
+
+You should see `verify_identity` tool fire before any password
+tool does. That ordering *is* the identity-first rule being followed, and it's
+the exact thing Chapter 4 turns into an automated check.
+
+Traces look the same whichever path you took (platform hosted or external).
+What differs is only how the instrumentation got there. Platform-hosted agents
+got it from the init container you left enabled in Step 2; externally-hosted
+agents got it from the `amp-instrument` prefix. Neither required editing the
+agent's code.
+
+## What You've Built
+
+An agent registered in a project, holding a multi-turn conversation, and fully
+traced.
+
+If you went platform-hosted, note what you did *not* have to do: no Dockerfile, no CI
+pipeline, no registry, no Kubernetes manifests, no OpenTelemetry setup. The
+whole agent deployment process was taken care of by the Agent Manager
+Platform. If you went externally-hosted, you kept your own runtime and still
+got the traces.
+
+## What's Next
+
+Right now, the agent communicates directly with OpenAI using the key you provided, without any limits or content policies. This gives you less control over how the agent responds.

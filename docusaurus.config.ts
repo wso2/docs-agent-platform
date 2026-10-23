@@ -6,8 +6,18 @@ import gtmNoscriptPlugin from './plugins/gtm-noscript';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 const versions: string[] = JSON.parse(fs.readFileSync('./versions.json', 'utf-8'));
+// STS (short-term support) releases are listed in the version dropdown but never
+// become the default version; the site keeps opening on the latest other release.
+const stsVersions = ['v2026.10.0'];
+const stsLabel = (v: string) => `STS ${v.replace(/^v/, '')}`;
 // Skip non-release entries like "cloud" which are manually maintained versions
-const latestVersion = versions.find(v => /^v\d+/.test(v)) ?? versions[0];
+const latestVersion =
+  versions.find(v => /^v\d+/.test(v) && !stsVersions.includes(v)) ?? versions[0];
+// The newest release, STS or not. The announcement bar announces this one.
+const newestRelease = versions.find(v => /^v\d+/.test(v)) ?? versions[0];
+const newestReleaseLabel = stsVersions.includes(newestRelease)
+  ? stsLabel(newestRelease)
+  : newestRelease;
 
 // Read quickStartDockerTag from _constants.md
 const constantsFile = fs.readFileSync('./docs/_constants.md', 'utf-8');
@@ -17,8 +27,8 @@ const quickStartDockerTag = dockerTagMatch ? dockerTagMatch[1] : latestVersion;
 // Where the announcement bar's link points. A version like "v1.0.0-rc1" is a real
 // release tag; a train like "v0.18.x" never is (that release was tagged v0.18.0), so
 // anything not shaped like an exact version links to the release list instead of a 404.
-const releaseUrl = /^v\d+\.\d+\.\d+/.test(latestVersion)
-  ? `https://github.com/wso2/agent-manager/releases/tag/amp%2F${latestVersion}`
+const releaseUrl = /^v\d+\.\d+\.\d+/.test(newestRelease)
+  ? `https://github.com/wso2/agent-manager/releases/tag/amp%2F${newestRelease}`
   : 'https://github.com/wso2/agent-manager/releases';
 
 // Pages whose path changed when the docs were reorganised into the
@@ -186,7 +196,7 @@ const config: Config = {
             from: `/latest/${from}`,
             to: `/${latestVersion}/${to}`,
           })),
-          ...['next', 'cloud', latestVersion, 'latest'].map((alias) => ({
+          ...['next', 'cloud', latestVersion, ...stsVersions, 'latest'].map((alias) => ({
             from: `/${alias}`,
             to: `/${alias === 'latest' ? latestVersion : alias}/get-started/what-is-amp`,
           })),
@@ -226,6 +236,13 @@ const config: Config = {
               label: latestVersion,
               path: latestVersion,
             },
+            // An STS release sorts above the default version, which would
+            // otherwise give it the "unreleased" banner.
+            ...Object.fromEntries(stsVersions.map((v) => [v, {
+              label: stsLabel(v),
+              path: v,
+              banner: 'none' as const,
+            }])),
           },
           sidebarPath: './sidebars.ts',
           showLastUpdateAuthor: true,
@@ -263,14 +280,15 @@ const config: Config = {
       {property: 'og:type', content: 'website'},
     ],
     announcementBar: {
-      // Announce latestVersion (versions.json), NOT quickStartDockerTag. The latter is the
+      // Announce newestRelease (versions.json), NOT quickStartDockerTag. The latter is the
       // container image tag the quick-start guide pins, and it moves for reasons that have
       // nothing to do with a release: 271d85aaa retagged it to a ThunderID version, which
       // silently changed this banner to announce a "1.0.0" release of Agent Manager that
       // did not exist — and pointed "Explore what's new" at a tag that 404s.
-      id: `release_${latestVersion.replace(/\./g, '_')}`,
+      // A new id per release shows the bar again to readers who closed the last one.
+      id: `release_${newestRelease.replace(/\./g, '_')}`,
       content:
-        `🎉 WSO2 Agent Manager <a target="_blank" rel="noopener noreferrer" href="${releaseUrl}">${latestVersion}</a> has been released! Explore what's new. 🎉`,
+        `🎉 WSO2 Agent Manager <a target="_blank" rel="noopener noreferrer" href="${releaseUrl}">${newestReleaseLabel}</a> has been released! Explore what's new. 🎉`,
       isCloseable: true,
     },
 
@@ -305,6 +323,12 @@ const config: Config = {
           type: 'docsVersionDropdown',
           position: 'right',
           dropdownActiveClassDisabled: true,
+          // Custom option, see src/theme/NavbarItem/DocsVersionDropdownNavbarItem.tsx.
+          // Self-hosted lists Next, then every release in versions.json order.
+          versionGroups: [
+            {label: 'Self-hosted', versions: ['current', ...versions.filter(v => v !== 'cloud')]},
+            {versions: ['cloud']},
+          ],
         },
         {
           href: 'https://github.com/wso2/agent-manager',

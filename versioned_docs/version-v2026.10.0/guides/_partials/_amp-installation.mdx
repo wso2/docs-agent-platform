@@ -1,0 +1,676 @@
+{/* Shared partial: Agent Manager installation (Phase 2).
+     Imported by on-k3d.mdx and on-your-environment.mdx.
+     Props expected from parent:
+       - props.version            — release version string (e.g. "2026.10.0", "0.12.0")
+       - props.rewriteJwksForK3d  — (boolean, optional) if true, rewrites the JWKS URI
+         so the gateway reaches the AMP API via the Docker host network (k3d only)
+       - props.expandRegistryConfig — (boolean, optional) if true, shows registry config
+         expanded instead of collapsed (for non-k3d environments)
+       - props.production         — (boolean, optional) if true, renders the production
+         variants of the install commands (external database, generated client secrets,
+         multiple replicas, non-debug logging) instead of the development-grade
+         defaults. The gateway installs with developmentMode=true either way; the
+         encryption keys it needs are created in Step 1 and passed through the
+         operator, since the gateway requires them regardless of that setting.
+*/}
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+export const Prod = ({production, children}) => (production ? <>{children}</> : null);
+export const Dev = ({production, children}) => (production ? null : <>{children}</>);
+
+The Agent Manager installs as a set of Helm charts on top of OpenChoreo. The components fall into two groups based on install order:
+
+1. **Agent Manager Core :** Gateway Operator, Agent Manager, Agent Sandbox Module and Platform Resources (agent component types, workflow templates etc). Each depends on the one before it.
+2. **Extensions :** Secret Management, Observability, Evaluation extensions and the API Platform Gateway Extension.
+
+:::info Prerequisites
+Thunder (identity provider) must be installed before proceeding — see the Thunder installation step in Phase 1. The variables `THUNDER_PUBLIC_URL`, `THUNDER_INTERNAL_URL`, `CONSOLE_PUBLIC_URL`, `API_PUBLIC_URL`, `OBS_API_PUBLIC_URL`, `CONSOLE_PUBLIC_HOST`, `API_PUBLIC_HOST`, `OBS_API_PUBLIC_HOST`, and `INSTRUMENTATION_URL` must be set from the Configuration Variables section. The production steps below additionally use `AGENTS_DOMAIN` — the domain deployed agents are served on, `agents.<your base domain>` — to build the gateway's hostname and virtual host. The `*_PUBLIC_HOST` variables carry the bare hostname (no scheme or port) and become the HTTPRoute hostnames on the plane gateways.
+:::
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+The community images are public, so no image pull secret is needed.
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+Create the `wso2-registry-credentials` image pull secret in the namespaces that run Agent Manager images, with the registry username and token from the earlier **WSO2 Subscription** tab:
+
+```bash
+for ns in "${AMP_NS}" "${OBSERVABILITY_NS}" workflows-default; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl create secret docker-registry wso2-registry-credentials \
+    --namespace "$ns" \
+    --docker-server=registry.wso2.com \
+    --docker-username="$AMP_REGISTRY_USERNAME" \
+    --docker-password="$AMP_REGISTRY_PASSWORD" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+```
+
+Evaluation monitors run in `workflows-default`, the workflow namespace of the `default` organization.
+
+</TabItem>
+</Tabs>
+
+---
+
+### Core Components
+
+Install these in order — each depends on the one before it.
+
+:::warning Upgrading an existing installation? Reverse Steps 2 and 4
+The order above is for a fresh install, where no agents exist yet and the order is harmless. When upgrading an already-running platform, upgrade `wso2-amp-platform-resources-extension` (Step 4) at or before `wso2-agent-manager` (Step 2), not after: the service writes component parameters that the chart must already know how to read, so an agent created in the window between the two upgrades can have its live invoke URL change on the later chart upgrade.
+:::
+
+#### Step 1: Gateway Operator
+
+Manages API Gateway resources and enables secure, authenticated trace ingestion into the Observability Plane.
+
+The gateway controller encrypts stored credentials at rest and will not start without a key, so create one before installing the operator:
+
+```bash
+kubectl create namespace ${DATA_PLANE_NS} --dry-run=client -o yaml | kubectl apply -f -
+
+openssl rand 32 > gateway-aesgcm.key
+kubectl create secret generic gateway-encryption-keys \
+  --namespace ${DATA_PLANE_NS} \
+  --from-file=default-aesgcm256-v1.bin=gateway-aesgcm.key
+rm -f gateway-aesgcm.key
+```
+
+:::warning The key is required, and the file name is fixed
+The controller looks for a specific path, `/app/data/aesgcm-keys/default-aesgcm256-v1.bin`, so the Secret key must be exactly `default-aesgcm256-v1.bin`. Without it the controller crash-loops on `failed to initialize key manager: encryption key file not found for version aesgcm256-v1`, and the gateway never programs — the rest of the platform stays healthy, so the only symptom is that agents cannot be invoked.
+
+This applies whatever `developmentMode` is set to. Earlier gateway releases auto-generated a key in development mode; from `1.2.0-beta` they do not.
+
+Store the key with the rest of your platform secrets. It encrypts credentials the gateway holds, and losing it means those entries cannot be decrypted.
+:::
+
+<Dev production={props.production}>
+
+```bash
+helm install gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version 0.11.0 \
+  --namespace ${DATA_PLANE_NS} \
+  --set logging.level=debug \
+  --set gatewayApi.installStandardCRDs=false \
+  --set gateway.helm.chartVersion=1.2.2 \
+  --set gateway.values.gateway.controller.image.repository=ghcr.io/wso2/api-platform/gateway-controller \
+  --set gateway.values.gateway.controller.image.tag=1.2.1 \
+  --set gateway.values.gateway.gatewayRuntime.image.repository=ghcr.io/wso2/api-platform/gateway-runtime \
+  --set gateway.values.gateway.gatewayRuntime.image.tag=1.2.1 \
+  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
+  --timeout 600s
+```
+
+</Dev>
+
+<Prod production={props.production}>
+
+```bash
+helm install gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version 0.11.0 \
+  --namespace ${DATA_PLANE_NS} \
+  --set logging.level=info \
+  --set gatewayApi.installStandardCRDs=false \
+  --set gateway.helm.chartVersion=1.2.2 \
+  --set gateway.values.gateway.controller.image.repository=ghcr.io/wso2/api-platform/gateway-controller \
+  --set gateway.values.gateway.controller.image.tag=1.2.1 \
+  --set gateway.values.gateway.gatewayRuntime.image.repository=ghcr.io/wso2/api-platform/gateway-runtime \
+  --set gateway.values.gateway.gatewayRuntime.image.tag=1.2.1 \
+  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
+  --timeout 600s
+```
+
+</Prod>
+
+:::note Pin the gateway chart, do not inherit it
+`gateway.helm.chartVersion` decides which gateway chart the operator deploys, and it is the only thing that decides it — the `APIGateway` resource carries no chart version. Inheriting the operator's default has historically produced a chart whose templates do not render the controller's control-plane address, giving a gateway that installs, programs, and serves traffic while never registering with Agent Manager — so it never appears in the gateway list. Pin the chart explicitly, as above.
+
+Pin the container images too. The chart version and the image tags move independently: `1.2.2` is the newest published gateway chart and its defaults point at `1.2.0` images, while `1.2.1` controller and runtime images are published without a matching chart. Setting `chartVersion` alone would therefore leave you on `1.2.0` images, so the four `image.repository`/`image.tag` values above carry the runtime to `1.2.1`. Check the pod images after installing rather than trusting the chart version alone.
+
+`gateway.values` is the operator's passthrough into that chart: anything set under it is merged into the values the gateway is deployed with, which is how the encryption keys above are wired.
+:::
+
+Wait for the operator to be ready:
+
+```bash
+kubectl wait --for=condition=Available \
+  deployment -l app.kubernetes.io/name=gateway-operator \
+  -n ${DATA_PLANE_NS} --timeout=300s
+```
+
+Grant RBAC for WSO2 API Platform CRDs to the Data Plane cluster-agent:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: wso2-api-platform-gateway-module
+rules:
+  - apiGroups: ["gateway.api-platform.wso2.com"]
+    resources: ["restapis", "apigateways"]
+    verbs: ["*"]
+  - apiGroups: ["gateway.kgateway.dev"]
+    resources: ["backends"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wso2-api-platform-gateway-module
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wso2-api-platform-gateway-module
+subjects:
+  - kind: ServiceAccount
+    name: cluster-agent-dataplane
+    namespace: ${DATA_PLANE_NS}
+EOF
+```
+
+:::info
+The API Platform Gateway is deployed as an extension after Agent Manager is running — see Step 7 below.
+:::
+
+#### Step 2: Agent Manager (API + Console + PostgreSQL)
+
+The core platform: a Go API server, a React web console, and a database.
+
+<Dev production={props.production}>
+
+```bash
+helm install amp \
+  oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --create-namespace \
+  --set console.config.instrumentationUrl="${INSTRUMENTATION_URL}" \
+  --set console.config.auth.baseUrl="${THUNDER_PUBLIC_URL}" \
+  --set console.config.auth.signInRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.auth.signOutRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.apiBaseUrl="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.amObserverPublicURL="${OBS_API_PUBLIC_URL}" \
+  --set console.ocIngress.hostname="${CONSOLE_PUBLIC_HOST}" \
+  --set agentManagerService.ocIngress.hostname="${API_PUBLIC_HOST}" \
+  --set agentManagerService.config.serverPublicURL="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.issuer="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.jwksUrl="${THUNDER_INTERNAL_URL}/oauth2/jwks" \
+  --set agentManagerService.config.oidc.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set agentManagerService.config.thunder.baseURL="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.thunder.resolveToHost="${THUNDER_INTERNAL_URL#http://}" \
+  --set agentManagerService.config.openChoreo.baseURL="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --timeout 1800s
+```
+
+Wait for all components:
+
+```bash
+# PostgreSQL
+kubectl wait --for=jsonpath='{.status.readyReplicas}'=1 \
+  statefulset/amp-postgresql -n ${AMP_NS} --timeout=600s
+
+# API server
+kubectl wait --for=condition=Available \
+  deployment/amp-api -n ${AMP_NS} --timeout=600s
+
+# Console
+kubectl wait --for=condition=Available \
+  deployment/amp-console -n ${AMP_NS} --timeout=600s
+```
+
+</Dev>
+
+<Prod production={props.production}>
+
+The chart deploys an in-cluster PostgreSQL with a default password unless you point it at an external database. Use a managed service — sizing, backups, failover, and patching then come from your database platform. Create the database and a credentials Secret first:
+
+```bash
+kubectl create namespace ${AMP_NS} --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic amp-db-credentials \
+  --namespace ${AMP_NS} \
+  --from-literal=password='<AMP_DB_PASSWORD>'
+```
+
+Then install, wiring the external database and the platform client secrets generated earlier:
+
+```bash
+helm install amp \
+  oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --create-namespace \
+  --set console.config.instrumentationUrl="${INSTRUMENTATION_URL}" \
+  --set console.config.auth.baseUrl="${THUNDER_PUBLIC_URL}" \
+  --set console.config.auth.signInRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.auth.signOutRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.apiBaseUrl="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.amObserverPublicURL="${OBS_API_PUBLIC_URL}" \
+  --set console.ocIngress.hostname="${CONSOLE_PUBLIC_HOST}" \
+  --set agentManagerService.ocIngress.hostname="${API_PUBLIC_HOST}" \
+  --set agentManagerService.config.serverPublicURL="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.issuer="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.jwksUrl="${THUNDER_INTERNAL_URL}/oauth2/jwks" \
+  --set agentManagerService.config.oidc.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set agentManagerService.config.oidc.clientSecret="${AMP_API_CLIENT_SECRET}" \
+  --set agentManagerService.config.thunder.baseURL="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.thunder.resolveToHost="${THUNDER_INTERNAL_URL#http://}" \
+  --set agentManagerService.config.thunder.clientSecret="${AMP_SYSTEM_CLIENT_SECRET}" \
+  --set agentManagerService.config.openChoreo.baseURL="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --set agentManagerService.config.tlsEnabled=true \
+  --set agentManagerService.replicaCount=2 \
+  --set agentManagerService.autoscaling.minReplicas=2 \
+  --set console.replicaCount=2 \
+  --set agentManagerService.config.openbao.existingSecret=amp-openbao-token \
+  --set agentManagerService.config.workflowPlaneOpenbao.existingSecret=amp-openbao-token \
+  --set agentManagerService.config.workflowPlaneOpenbao.existingSecretKey=workflow-plane-openbao-token \
+  --set postgresql.enabled=false \
+  --set postgresql.external.host="your-db.example.com" \
+  --set postgresql.external.port=5432 \
+  --set postgresql.external.database=agentmanager \
+  --set postgresql.external.username=agentmanager \
+  --set postgresql.external.existingSecret=amp-db-credentials \
+  --set postgresql.external.existingSecretPasswordKey=password \
+  --set postgresql.external.sslMode=require \
+  --timeout 1800s
+```
+
+Wait for all components — with an external database no PostgreSQL StatefulSet is deployed, so there is nothing to wait for there:
+
+```bash
+# API server
+kubectl wait --for=condition=Available \
+  deployment/amp-api -n ${AMP_NS} --timeout=600s
+
+# Console
+kubectl wait --for=condition=Available \
+  deployment/amp-console -n ${AMP_NS} --timeout=600s
+```
+
+`agentManagerService.config.thunder.clientSecret` can instead be supplied through `agentManagerService.config.thunder.existingSecret` (key `thunder-client-secret`) if you prefer to keep it out of Helm release history.
+
+`agentManagerService.config.apiKey` (the `X-API-Key` header value some internal callers use) is left unset above deliberately: the chart generates a random 32-character value itself when empty, the same way `encryptionKey` already does. Set `agentManagerService.config.apiKey.value` or `.existingSecret` explicitly only if something outside the platform needs to know this value in advance.
+
+:::warning `tlsEnabled` decides which agent invoke URL the console publishes
+`agentManagerService.config.tlsEnabled` defaults to `false`, and it is what selects between an Environment's `http` and `https` endpoint variants when the API builds an agent's invoke URL. Left at the default on an HTTPS platform, the console publishes an `http://` URL — which the browser then refuses to call from an HTTPS page, showing the request as `blocked:mixed-content` with no error anywhere in the platform. The agent itself is healthy and reachable; only the published URL is wrong.
+:::
+
+:::warning Two values that look redundant but are not
+`agentManagerService.autoscaling.minReplicas=2` is what actually gives the API two replicas. Autoscaling is **on by default** for this component with `minReplicas: 1`, so the HPA takes ownership of the replica count and scales `replicaCount=2` straight back down to one — silently, within seconds. The console has autoscaling off by default, which is why `replicaCount` alone appears to work there.
+
+{/* No step link below on purpose: this partial is shared between installation paths
+whose step numbering differs (secret stores are Step 2 on one page, Step 4 on the
+other), so a step anchor here resolves on one page and dangles on the other. */}
+
+The two `openbao.existingSecret` values point at the Secret minted when you set up the secret stores. Without them the chart falls back to the dev-mode token `root`, which a sealed OpenBao rejects. `workflowPlaneOpenbao` is the one that bites: it is what Agent Manager uses to read Git credentials, so the repository and branch pickers fail and no agent can be created from a private repository, while the platform otherwise looks healthy.
+:::
+
+:::warning Require TLS on the database connection
+`postgresql.external.sslMode=require` above makes the connection **fail closed**. Left unset, the driver's default of `prefer` applies: it negotiates TLS when the server offers it but silently falls back to an unencrypted connection when it does not, so a misconfigured or replaced instance downgrades without any error.
+
+`require` encrypts but does **not** verify the server's identity. To also authenticate the database, use `sslMode=verify-full` with `postgresql.external.sslRootCert`. Set it to `system` only when the certificate chains to a **public** CA; otherwise mount the provider's CA PEM through the chart's `volumes`/`volumeMounts` values and point `sslRootCert` at that path. Managed services differ here — Cloud SQL, for example, issues its server certificate from a Google-managed private CA in either CA mode, so `system` fails with `certificate verify failed` and the CA must be mounted.
+
+Check the hostname too: `verify-full` matches the certificate's SAN exactly, so `postgresql.external.host` has to be a name the certificate actually covers rather than an IP. Cloud SQL's SAN carries a trailing dot, which means the host value needs one as well.
+
+Enforce it on the server as well, where the client cannot downgrade it: *Require SSL* on Cloud SQL, `rds.force_ssl=1` on RDS, or *require secure transport* on Azure Database for PostgreSQL. Keep the database on a private network so it is never reachable from outside the VPC.
+:::
+
+</Prod>
+
+:::info
+`keyManager.issuer` must be the public Thunder URL — the chart default is the k3d
+hostname. The authorization server the API advertises in its RFC 9728 protected
+resource metadata is derived from it, so
+`agentManagerService.config.oauthAuthorizationServers` only needs setting if it
+must differ. Likewise the MCP audience entry is derived from
+`serverPublicURL` above, so `keyManager.audience` only needs setting to change
+the accepted client IDs.
+
+`thunder.baseURL` must also be the public Thunder URL, for a related but
+separate reason: every admin identity call (users, roles, groups) requests a
+token scoped to Thunder's System resource server via an RFC 8707 `resource`
+parameter derived from this value, and Thunder only recognizes the public URL
+as that resource server's registered identifier — anything else fails with
+`invalid_target`. Since the API runs in-cluster and the public hostname often
+doesn't resolve there, `thunder.resolveToHost` tells it which address to
+actually connect to while still presenting `thunder.baseURL` on the wire; set
+it to the in-cluster Thunder service (as above) whenever the public hostname
+isn't directly dialable from this cluster. Leaving `thunder.baseURL` at the
+chart default (or omitting `resolveToHost` when the public hostname can't
+resolve in-cluster) breaks every admin identity call with `invalid_target` or
+a DNS lookup failure, while the rest of the platform looks healthy.
+:::
+
+:::tip Verify
+```bash
+kubectl get pods -n ${AMP_NS}
+# Expected: amp-api-xxx (Running), amp-console-xxx (Running), plus
+# amp-postgresql-0 (Running) only when using the in-cluster database
+```
+:::
+
+#### Step 3: Agent Sandbox Module
+
+Agents run as **sandboxed pods** managed by the [Agent Sandbox](https://agent-sandbox.sigs.k8s.io/) controller (`SandboxTemplate` / `SandboxWarmPool` resources) instead of plain Deployments. This module is **required** — without it, agent deployments cannot be rendered.
+
+```bash
+helm upgrade --install agent-sandbox \
+  oci://ghcr.io/openchoreo/helm-charts/agent-sandbox \
+  --version 0.1.1 \
+  --namespace ${DATA_PLANE_NS} \
+  --create-namespace \
+  --wait \
+  --timeout 10m \
+  --set namespace=openchoreo-control-plane \
+  --set dataPlaneNamespace=${DATA_PLANE_NS} \
+  --set dataPlaneServiceAccount=cluster-agent-dataplane \
+  --set upstream.version=v0.4.6
+```
+
+Wait for the controller:
+
+```bash
+kubectl wait -n agent-sandbox-system \
+  --for=condition=available \
+  --timeout=180s \
+  deployment/agent-sandbox-controller
+```
+
+:::tip Verify
+```bash
+kubectl get crd \
+  sandboxtemplates.extensions.agents.x-k8s.io \
+  sandboxwarmpools.extensions.agents.x-k8s.io \
+  sandboxclaims.extensions.agents.x-k8s.io
+# All three CRDs should be listed
+
+kubectl get clusterrole openchoreo-agent-sandbox-access
+# RBAC granting the data-plane agent access to sandbox resources
+```
+:::
+
+:::info Stronger isolation tiers
+With this module, agents run sandboxed under the standard **runc** runtime. Optionally, individual environments can run agents under **gVisor** or **Kata Containers** for stronger isolation — these have hardware/OS requirements and need a dedicated node. See the [gVisor](../isolation-tiers/gvisor.mdx) and [Kata Containers](../isolation-tiers/kata.mdx) isolation tier guides.
+:::
+
+#### Step 4: Platform Resources
+
+Creates the default Organization, Project, Environment, DeploymentPipeline, and workflow template resources that the console needs on first login. This chart also configures the **container registry endpoint** used by build workflows to push agent images.
+
+<Dev production={props.production}>
+
+```bash
+helm install amp-platform-resources \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
+  --version ${VERSION} \
+  --namespace ${DEFAULT_NS} \
+  --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
+  --timeout 1800s
+```
+
+</Dev>
+
+<Prod production={props.production}>
+
+```bash
+helm install amp-platform-resources \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
+  --version ${VERSION} \
+  --namespace ${DEFAULT_NS} \
+  --set global.oauth.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set global.oauth.hostHeader="amp-thunder-extension-service.${THUNDER_NS}.svc.cluster.local" \
+  --set global.apiServer.url="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --set global.apiServer.hostHeader="openchoreo-api.openchoreo-control-plane.svc.cluster.local" \
+  --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
+  --timeout 1800s
+```
+
+:::warning These four values default to k3d addresses
+`global.oauth.tokenUrl` and `global.apiServer.url` default to `http://host.k3d.internal:8080`, which the single-cluster k3d layout reaches through the Docker host and routes by `Host` header. On any other cluster that name does not resolve, and the failure surfaces only when an agent is built: the workflow's `generate-workload` step prints `Failed to get access token:` with an empty body — a connection failure, not an authentication one — and the build ends with `cannot save parameter /mnt/vol/workload-cr.yaml`.
+
+Nothing earlier in the install touches these values, so a platform that installs and verifies cleanly still cannot complete a single build until they are set. Point them at the in-cluster services as above.
+:::
+
+</Prod>
+
+:::warning Point the traits at the namespace the gateway is actually in
+Deployed agents reach the gateway runtime by DNS name, and both the trace-export endpoint and the route agent traffic is forwarded through are built from `apiPlatformGateway.namespace`. Leaving it empty derives the per-org-env convention `<org>-<env>`, which is what `add-environment.sh` creates — but [Step 7](#step-7-api-platform-gateway-extension) installs the gateway extension into `${DATA_PLANE_NS}`, matching that chart's own `apiGateway.namespace` default. Set this to the same namespace, as above.
+
+Get it wrong and nothing reports an error. The agent starts and serves requests while every span batch fails inside it with `Failed to resolve '…-gw-gateway-gateway-runtime.default-default' ([Errno -2] Name or service not known)`, so the Traces view stays empty; and the backend agent routes forward to has no reachable host, so invocation never reaches the gateway. The only evidence is a `Transient error` warning in the agent's own log.
+
+If you install the gateway extension into `<org>-<env>` instead, leave this unset.
+:::
+
+export const RegistryConfig = ({expanded}) => {
+  const content = (
+    <>
+      <p>The chart defaults are configured for a local k3d cluster with an in-cluster registry at <code>host.k3d.internal:10082</code>. For other environments, override the registry settings:</p>
+      <pre><code className="language-bash">{`# Example: external registry with a base domain
+helm install amp-platform-resources \\
+  oci://\${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \\
+  --version \${VERSION} \\
+  --namespace \${DEFAULT_NS} \\
+  --set global.baseDomain="yourdomain.com" \\
+  --set global.defaultResources.registry.tlsVerify=true \\
+  --timeout 1800s
+# Registry endpoint will be: registry.yourdomain.com
+
+# Example: explicit registry endpoint
+helm install amp-platform-resources \\
+  oci://\${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \\
+  --version \${VERSION} \\
+  --namespace \${DEFAULT_NS} \\
+  --set global.registry.endpoint="your-registry.example.com:5000" \\
+  --set global.defaultResources.registry.tlsVerify=true \\
+  --timeout 1800s`}</code></pre>
+      <table>
+        <thead><tr><th>Value</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>global.registry.endpoint</code></td><td><code>host.k3d.internal:10082</code></td><td>Registry endpoint for pushing images</td></tr>
+          <tr><td><code>global.baseDomain</code></td><td><code>""</code></td><td>When set, registry endpoint becomes <code>registry.&lt;baseDomain&gt;</code></td></tr>
+          <tr><td><code>global.defaultResources.registry.tlsVerify</code></td><td><code>false</code></td><td>Enable TLS verification for registry connections</td></tr>
+        </tbody>
+      </table>
+    </>
+  );
+  if (expanded) {
+    return (<><h5>Container registry configuration</h5>{content}</>);
+  }
+  return (<details><summary>Container registry configuration</summary>{content}</details>);
+};
+
+<RegistryConfig expanded={props.expandRegistryConfig} />
+
+:::warning Not every registry can back build workflows
+Two properties are required, and the failure surfaces only on the first agent build, long after the platform installs and verifies cleanly:
+
+- **Push-to-create.** Each build pushes its image as `<workflow-run-name>-image` — a repository name that is different on every run, so repositories cannot be pre-created. The registry must create them on push. **Amazon ECR does not** and fails every build with `repository ... not found`; the same applies to any registry that requires repositories to be provisioned first.
+- **Static credentials.** The push step reads a fixed `.dockerconfigjson` from the `registry-push-secret` Secret (or pushes unauthenticated if it is absent). Registries whose credentials expire — ECR again, with its 12-hour tokens — cannot be refreshed by anything in the build pipeline.
+
+[CNCF Distribution](https://distribution.github.io/distribution/), Harbor (with a project set to auto-create), and GitLab's registry satisfy both. If you have no registry yet, running Distribution in-cluster behind an internal LoadBalancer with a cert-manager certificate is a few resources — but it ships with **no authentication**; put htpasswd in front of it before it carries anything real.
+:::
+
+---
+
+### Extensions
+
+These can be installed in any order after Core is ready.
+
+#### Step 5: Observability Extension (Agent Manager Observer)
+
+Deploys the observer service that queries and serves trace, log, and metrics data to the console and CLI.
+
+<Dev production={props.production}>
+
+```bash
+helm install amp-observability-traces \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-observability-extension \
+  --version ${VERSION} \
+  --namespace ${OBSERVABILITY_NS} \
+  --set amObserver.ocIngress.hostname="${OBS_API_PUBLIC_HOST}" \
+  --set amObserver.publicUrl="${OBS_API_PUBLIC_URL}" \
+  --set amObserver.auth.issuer="${THUNDER_PUBLIC_URL}" \
+  --timeout 1800s
+
+kubectl wait --for=condition=Available \
+  deployment/amp-observer -n ${OBSERVABILITY_NS} --timeout=600s
+```
+
+</Dev>
+
+<Prod production={props.production}>
+
+`amObserver.observer.idpClientSecret` is the observer's own outbound identity for calls to the OpenChoreo observer, and must match the `am-observer-client` secret seeded into Thunder. It can instead be supplied through `amObserver.observer.existingSecret` (keys `existingSecretClientIdKey`/`existingSecretClientSecretKey`, default `idpClientId`/`idpClientSecret`) if you prefer to keep it out of Helm release history, the same option `thunder.clientSecret` has above:
+
+```bash
+helm install amp-observability-traces \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-observability-extension \
+  --version ${VERSION} \
+  --namespace ${OBSERVABILITY_NS} \
+  --set amObserver.ocIngress.hostname="${OBS_API_PUBLIC_HOST}" \
+  --set amObserver.publicUrl="${OBS_API_PUBLIC_URL}" \
+  --set amObserver.auth.issuer="${THUNDER_PUBLIC_URL}" \
+  --set amObserver.observer.idpClientSecret="${AM_OBSERVER_CLIENT_SECRET}" \
+  --set amObserver.replicaCount=2 \
+  --timeout 1800s
+
+kubectl wait --for=condition=Available \
+  deployment/amp-observer -n ${OBSERVABILITY_NS} --timeout=600s
+```
+
+</Prod>
+
+:::warning
+`amObserver.auth.issuer` must be the **public** Thunder URL, not the in-cluster
+service URL. The observer validates the same user token the console and `amctl`
+send to the Agent Manager API, so its issuer has to match
+`agentManagerService.config.keyManager.issuer` from Step 2. Leave it at the
+chart default on a custom-domain install and the traces page stays empty while
+the observer logs `JWT validation failed ... invalid issuer`.
+
+The chart derives `amObserver.oauth.authorizationServers` and the MCP audience
+entry from the values above; set them explicitly only if they must differ.
+:::
+
+#### Step 6: Evaluation Extension
+
+Installs workflow templates for running automated evaluations (accuracy, safety, reasoning, tool usage) against agent traces.
+
+```bash
+helm install amp-evaluation-extension \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
+  --version ${VERSION} \
+  --namespace ${BUILD_CI_NS} \
+  --timeout 1800s
+```
+
+:::info
+Evaluation jobs publish scores using the `amp-publisher-client` OAuth2 credentials bootstrapped by the Thunder extension. The client secret is fetched from OpenBao at workflow runtime (`secret/amp-publisher-client-secret`) and must match the value set on `thunder.bootstrap.ampPublisherClient.clientSecret`.
+:::
+
+:::caution
+The eval job needs egress to your API server, and the NetworkPolicy matches it by address range after kube-proxy DNAT — the endpoint address, never the `kubernetes` Service ClusterIP. Check what that address is:
+
+```bash
+kubectl -n default get endpoints kubernetes
+```
+
+`networkPolicy.evaluationJob.apiServer.cidrs` defaults to all of RFC1918, which covers that address on most private clusters but also spans your pod and service CIDRs. Add this to the command above to narrow it to your control-plane subnet:
+
+```bash
+helm install amp-evaluation-extension \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
+  --version ${VERSION} \
+  --namespace ${BUILD_CI_NS} \
+  --timeout 1800s \
+  --set "networkPolicy.evaluationJob.apiServer.cidrs[0]=<control-plane-subnet>"
+```
+
+Setting it is required if `kubernetes` resolves to a **public** endpoint (public GKE/AKS control planes) or to `100.64.0.0/10`. The default will not match those, and every evaluation will publish its scores and then report FAILED.
+:::
+
+#### Step 7: API Platform Gateway Extension
+
+Registers the API Platform Gateway with the Agent Manager and deploys the gateway stack. **Install this last** — it requires the Agent Manager API to be healthy and Thunder to be ready for token exchange.
+
+<Dev production={props.production}>
+
+```bash
+helm install api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --set agentManager.orgName=default \
+  --set gateway.environment=default \
+  --timeout 1800s
+
+kubectl wait --for=condition=complete job/api-platform-default-default-bootstrap \
+  -n ${DATA_PLANE_NS} --timeout=300s
+```
+
+</Dev>
+
+<Prod production={props.production}>
+
+The bootstrap job authenticates to the Agent Manager API as `amp-api-client`, so it needs the secret you seeded into Thunder. Keep it out of Helm release history with a Secret reference:
+
+```bash
+kubectl create secret generic gateway-idp-credentials \
+  --namespace ${DATA_PLANE_NS} \
+  --from-literal=client-id=amp-api-client \
+  --from-literal=client-secret="${AMP_API_CLIENT_SECRET}"
+
+helm install api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --set agentManager.orgName=default \
+  --set gateway.environment=default \
+  --set gateway.type=BOTH \
+  --set developmentMode=false \
+  --set gateway.vhost="https://default-default.${AGENTS_DOMAIN}" \
+  --set gateway.hostname="default-default.${AGENTS_DOMAIN}" \
+  --set agentManager.idp.existingSecret=gateway-idp-credentials \
+  --timeout 1800s
+
+kubectl wait --for=condition=complete job/api-platform-default-default-bootstrap \
+  -n ${DATA_PLANE_NS} --timeout=300s
+```
+
+:::warning Set the vhost now — it cannot be changed later
+`gateway.vhost` and `gateway.hostname` default to the local k3d addresses (`http://default-default.gateway.localhost:19080`). The bootstrap job writes them into Agent Manager at **first registration only**: on every later run it finds the gateway already present, logs `already exists`, and exits without reconciling the record. A `helm upgrade` with corrected values changes nothing, and there is no error to notice — the console simply keeps showing the `.localhost:19080` virtual host, which is what an operator would copy when wiring an external caller.
+
+Correcting it after the fact means deleting the gateway registration and re-registering, so get these right on the first install.
+:::
+
+`gateway.type=BOTH` registers this gateway to serve both inbound and outbound traffic, which is what a single-gateway environment needs. It matches the chart default and is set explicitly here because the role is written once at registration and never rewritten — see [Gateway roles and topology](#gateway-roles-and-topology) for the split alternative and its constraints.
+
+`developmentMode=false` turns off the relaxed security checks the chart enables by default. It depends on the encryption key from [Step 1](#step-1-gateway-operator): without one the install fails immediately with `encryptionKeys must be enabled: at-rest encryption is mandatory`. Set it here rather than hardening afterwards, so the gateway is never registered in a relaxed state.
+
+</Prod>
+
+The extension already renders an OTLP ingest route for its own gateway (`<release>-otel-restapi` in the data-plane namespace), so nothing further is needed for the default environment. The standalone manifest below targets the per-environment namespace `<org>-<env>`, which does not exist until the first agent is deployed there — apply it only if you need that variant, and only after a deployment has created the namespace:
+
+```bash
+kubectl apply -f "${AMP_DIST}/deployments/values/otel-collector-rest-api.yaml"
+```
+
+:::tip Verify
+```bash
+kubectl get apigateway api-platform-default-default -n ${DATA_PLANE_NS}
+# STATUS should show "Programmed"
+
+kubectl get jobs -n ${DATA_PLANE_NS} | grep api-platform-default-default-bootstrap
+# STATUS should show "Complete"
+```
+:::

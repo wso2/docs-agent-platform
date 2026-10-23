@@ -1,0 +1,379 @@
+---
+sidebar_position: 1
+---
+
+# gVisor Isolation Tier
+
+Run agents in an environment under [gVisor](https://gvisor.dev/) (`runsc`) — a userspace kernel that intercepts syscalls before they reach the host kernel — for stronger isolation than the default runc sandbox, without any special hardware.
+
+By default, every agent already runs as a sandboxed pod (hardened security context, network policy, warm pool) under **runc**, the standard container runtime that shares the host kernel. The gVisor tier adds a second layer: the agent's syscalls are served by gVisor's own userspace kernel, so a compromised or misbehaving agent never talks to the host kernel directly.
+
+:::info Isolation tier is an environment-level setting
+You choose the tier once, when [creating an environment](../environment-management.mdx). Every agent deployed or promoted to that environment runs under that tier. Existing runc environments are never affected by adding a gVisor node — the setup below only touches the new node.
+:::
+
+## How It Works
+
+1. An environment is created with isolation tier `gvisor`.
+2. On deploy or promote, Agent Manager sets `runtimeClassName: gvisor` on the agent's pod spec.
+3. The `gvisor` RuntimeClass's scheduling stanza automatically injects a nodeSelector and toleration, so the pod lands on your dedicated gVisor node and runs under `runsc`.
+
+```
+Environment (isolation tier: gvisor)
+  └─ deploy / promote → runtimeClassName: gvisor
+       └─ RuntimeClass "gvisor" scheduling → pod on the gVisor node, runsc kernel
+```
+
+The tier uses a **dedicated node**: installing `runsc` reconfigures and restarts containerd, which must never be done on a node serving live workloads. Adding a new, empty node means zero downtime for existing agents.
+
+## Requirements
+
+| Requirement | Details |
+|-------------|---------|
+| A new (empty) Linux node | Joined to the same Kubernetes cluster; dedicated to gVisor agents |
+| Architecture | **x86_64** (see warning below) |
+| OS | Ubuntu 20.04+, Debian 11+, RHEL 8+, Amazon Linux 2023, or any Linux with systemd |
+| Container runtime | containerd|
+| Access | Root on the node; outbound access to `storage.googleapis.com` |
+| Tools on the node | `curl`, `sha512sum`, and `zstd` or `bzip2`|
+
+:::warning x86_64 nodes only
+Agent Manager builds agent images for **amd64**, and gVisor cannot emulate a foreign architecture (there is no QEMU-style binary emulation under `runsc`). ARM nodes — including Apple-silicon Macs, where amd64 images normally run via emulation — cannot run Agent Manager agents under gVisor, even though gVisor itself ships arm64 binaries. Use an x86_64 node for the gVisor tier.
+:::
+
+## Set Up a gVisor Node
+
+:::note `${AMP_DIST}`
+The commands below run scripts and manifests from the release bundle. If you do
+not already have it extracted, fetch it first and point `AMP_DIST` at it — the
+same bundle the install guides use:
+
+```bash
+export VERSION="2026.10.0"
+curl -fsSL -O "https://github.com/wso2/agent-manager/releases/download/amp/v${VERSION}/wso2-agent-manager-${VERSION}.tar.gz"
+tar xzf "wso2-agent-manager-${VERSION}.tar.gz"
+export AMP_DIST="$PWD"
+```
+
+Step 2 runs on the node itself, so it downloads the bundle there separately.
+:::
+
+### Step 1: Add a new node to the cluster
+
+Provision a new Linux node matching the requirements above and join it to your cluster using your platform's standard mechanism (node pool / node group / `kubeadm join` / k3s agent). Leave it empty and do not schedule workloads on it yet.
+
+:::tip Taint the node as early as possible
+If your platform lets you set taints at node-pool creation, apply `gvisor=true:NoSchedule` there. An untainted node starts accepting regular platform pods immediately, and you will have to drain them all off before installing the runtime (a runtime install restarts containerd, which restarts every pod on the node). If the node has already picked up workloads, `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data` it before Step 2.
+:::
+
+:::info Managed gVisor on GKE
+Google Kubernetes Engine offers gVisor as a built-in option (**GKE Sandbox**): create the node pool with `--sandbox type=gvisor` and skip Step 2 entirely — GKE registers the `gvisor` RuntimeClass for you. Continue from Step 3 (label, taint, Fluent Bit toleration).
+:::
+
+### Step 2: Install runsc on the node
+
+**runsc** is the specific Open Container Initiative (OCI) runtime command-line tool that implements gVisor to launch those sandboxed containers
+This step runs **on the node**, not on your workstation.
+
+1. From your workstation, find the node's name and open a debug pod on it:
+
+    ```bash
+    kubectl get nodes
+    kubectl debug node/<node-name> -it --profile=sysadmin --image=ubuntu
+    ```
+
+    The debug pod is pinned to that node, so the `gvisor=true:NoSchedule` taint
+    does not block it. The `sysadmin` profile makes it privileged and mounts the
+    node's root filesystem at `/host`. It needs `kubectl` 1.27 or later.
+
+2. Switch into the node's filesystem, so the commands that follow run against the
+   node's own binaries, containerd configuration, and systemd:
+
+    ```bash
+    chroot /host
+    ```
+
+    You now have a root shell on the node. If you have SSH access to the node,
+    you can use that instead of steps 1 and 2 (run the remaining commands with
+    `sudo`).
+
+3. Download and extract the release bundle on the node:
+
+    ```bash
+    cd /root
+    export VERSION="2026.10.0"
+    curl -fsSL -O "https://github.com/wso2/agent-manager/releases/download/amp/v${VERSION}/wso2-agent-manager-${VERSION}.tar.gz"
+    tar xzf "wso2-agent-manager-${VERSION}.tar.gz"
+    export AMP_DIST="$PWD"
+    ```
+
+4. Run the installer as a systemd unit, and follow its output:
+
+    ```bash
+    systemd-run --unit=install-gvisor bash "${AMP_DIST}/deployments/setup/install-gvisor.sh"
+    journalctl -u install-gvisor -f
+    ```
+
+    The installer restarts containerd, which can disconnect a `kubectl debug`
+    session. Running it under `systemd-run` keeps it going if that happens. To
+    check the result after a disconnect, open a new debug pod on the node and run
+    `chroot /host journalctl -u install-gvisor`.
+
+5. When the installer reports success, press `Ctrl+C`, type `exit` twice to
+   leave the chroot and the debug pod, and delete the debug pod:
+
+    ```bash
+    kubectl get pods -o name | grep node-debugger
+    kubectl delete <pod-name>
+    ```
+
+The remaining steps run from your workstation.
+
+The installer does the following:
+
+- Downloads the latest gVisor release tarball (`gvisor.tar.zstd`, or `gvisor.tar.bz2` when `zstd` is not installed) and verifies its SHA-512 checksum.
+- Installs `runsc`, the `containerd-shim-runsc-v1` shim, and the `gvisor-bin/` directory of sidecar binaries into `/usr/local/bin`.
+- Adds a `runsc` runtime to `/etc/containerd/config.toml`, under the plugin table that matches the file's `version` header: `io.containerd.cri.v1.runtime` for `version = 3` (containerd 2.x), or `io.containerd.grpc.v1.cri` for `version = 2`. If the file has any other header, the installer stops without changing it.
+- Restarts containerd (only containerd restarts; the kubelet is unaffected) and checks that containerd registered the `runsc` runtime. If it did not, the installer exits with an error instead of reporting success.
+
+The installer is idempotent, so you can re-run it safely. Re-running it also repairs a node set up by an earlier version of the script: it reinstalls gVisor when `gvisor-bin/` is missing, and adds the runtime under the correct plugin table when an older block sits under the wrong one.
+
+<details>
+<summary>Amazon EKS nodes (Amazon Linux 2023)</summary>
+
+On EKS-optimized Amazon Linux 2023 AMIs, `nodeadm` writes `/etc/containerd/config.toml` before the node's user data runs, and starts containerd after it. The installer accepts a containerd that has not started yet, so you can run it from user data. In that case it installs gVisor and adds the runtime, then skips the containerd restart and the registration check: containerd loads the runtime when `nodeadm` starts it.
+
+:::warning The runtime entry does not survive a reboot on its own
+`nodeadm` rewrites `/etc/containerd/config.toml` on every boot, but user data runs only on the first boot by default. After a reboot, the gVisor binaries remain in `/usr/local/bin`, the `runsc` runtime entry is gone, and gVisor pods fail with `no runtime for "runsc" is configured`. Run the installer on every boot, or re-run it on the node after a reboot. It skips the download when gVisor is already installed.
+:::
+
+</details>
+
+<details>
+<summary>RKE2 nodes (bundled containerd)</summary>
+
+RKE2 bundles its own containerd. There is no standalone `containerd` binary or systemd service for the installer to configure, so it stops before making any changes. Install gVisor and register the runtime by hand instead.
+
+1. Download the gVisor release, verify it, and extract it into `/usr/local/bin`:
+
+    ```bash
+    ARCH="$(uname -m)"
+    curl -fsSLO "https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}/gvisor.tar.zstd"
+    curl -fsSLO "https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}/gvisor.tar.zstd.sha512"
+    sha512sum -c gvisor.tar.zstd.sha512
+    sudo tar --zstd -xf gvisor.tar.zstd -C /usr/local/bin
+    ```
+
+    This places `runsc`, `containerd-shim-runsc-v1`, and `gvisor-bin/` in `/usr/local/bin`.
+
+2. Register the runtime through RKE2's containerd template, then restart RKE2:
+
+    ```bash
+    sudo tee /var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl > /dev/null <<'EOF'
+    {{ template "base" . }}
+
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
+      runtime_type = "io.containerd.runsc.v1"
+    EOF
+    sudo systemctl restart rke2-agent
+    ```
+
+:::warning Rewrite, never append
+The template must contain `{{ template "base" . }}` exactly once. If the file already exists, merge your runtime block into it and rewrite the whole file (`tee`/`cat >`); appending a second copy of the template line produces an invalid containerd config, and the node's kubelet will not come back after the restart. Recovery then requires SSH/console access to the node — `kubectl` cannot reach it.
+:::
+
+The same pattern applies to k3s nodes at `/var/lib/rancher/k3s/agent/etc/containerd/config.toml.tmpl` (restart `k3s-agent`), which the local-development script below handles automatically.
+
+</details>
+
+### Step 3: Register the node for the gVisor tier
+
+Back on your workstation, or any machine with `kubectl` access to the cluster:
+
+```bash
+# 1. Apply the RuntimeClass (once per cluster)
+kubectl apply -f "${AMP_DIST}/deployments/k8s/gvisor-runtimeclass.yaml"
+
+# 2. Label and taint the node (find the name with: kubectl get nodes)
+kubectl label node <node-name> gvisor=true --overwrite
+kubectl taint node <node-name> gvisor=true:NoSchedule --overwrite
+```
+
+The label is what the RuntimeClass schedules onto; the taint keeps regular runc pods off the node.
+
+The taint also keeps the Fluent Bit log collector off the node, and without it agents there produce no runtime logs. Fluent Bit is a DaemonSet rendered by the `observability-logs-opensearch` Helm chart, so its toleration is a chart value. Check whether the release stores it:
+
+```bash
+helm get values observability-logs-opensearch -n openchoreo-observability-plane
+```
+
+Check the release values rather than the live DaemonSet: a toleration patched onto the DaemonSet (as earlier versions of the setup scripts did) shows up on the live object, but is lost when the DaemonSet is recreated.
+
+If `fluent-bit.tolerations` does not list `- operator: Exists` with no `key` or `effect`, set the value on the release:
+
+```bash
+helm upgrade observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --reuse-values \
+  --set "fluent-bit.tolerations[0].operator=Exists"
+```
+
+Pass the chart version that is already installed (the `CHART` column of `helm list -n openchoreo-observability-plane`): combining `--reuse-values` with a chart version change can carry over values the new chart does not expect.
+
+:::warning Keep the toleration on later upgrades
+The toleration is stored in the release's values, so it must be present on every upgrade that re-renders the DaemonSet. An upgrade of `observability-logs-opensearch` with `--reset-values`, or one that passes new `--set`/`-f` values without `--reuse-values`, drops it unless you pass `--set "fluent-bit.tolerations[0].operator=Exists"` again. Agents on the gVisor node then stop producing logs with no error.
+:::
+
+<details>
+<summary>Logs module not installed as a Helm release</summary>
+
+Only if `observability-logs-opensearch` is not a Helm release in your cluster, patch the DaemonSet directly:
+
+```bash
+kubectl patch daemonset fluent-bit -n openchoreo-observability-plane --type=json \
+  -p='[{"op":"add","path":"/spec/template/spec/tolerations","value":[{"operator":"Exists"}]}]'
+```
+
+This replaces the DaemonSet's whole tolerations list, and is lost whenever the DaemonSet is recreated (a reinstall of the logs module or a namespace teardown), so re-check the toleration after any such change.
+
+</details>
+
+:::tip Verify
+```bash
+kubectl get runtimeclass gvisor
+kubectl get node <node-name> --show-labels   # gvisor=true
+```
+:::
+
+### Local development (k3d)
+
+On a local k3d cluster created from this repository's dev setup, one command adds a gVisor agent node, installs runsc into it, and registers everything:
+
+```bash
+make setup-gvisor
+```
+
+If your cluster was created by the [installation guides](../on-k3d.mdx) (cluster name `amp-local`) rather than the dev Makefile, point the script at it:
+
+```bash
+CLUSTER_NAME=amp-local ./deployments/setup/setup-gvisor-node.sh
+```
+
+## Create a gVisor Environment
+
+Isolation tier is set at environment creation time. Open the **Create Environment** drawer in the console (Environments → Create Environment), select **Sandboxing T2 (gVisor)** from the **Isolation Tier** dropdown, and run the generated command — it includes `ISOLATION_TIER=gvisor` automatically.
+
+If you script environment creation directly, set the variable yourself:
+
+```bash
+ISOLATION_TIER=gvisor \
+  ENV_NAME=secure-dev \
+  DISPLAY_NAME="Secure Dev" \
+  AGENT_MANAGER_TOKEN=<token> \
+  bash "${AMP_DIST}/deployments/scripts/add-environment.sh"
+```
+
+The tier appears as a **Sandboxing T2** shield chip in the environment list, and as a shield icon next to the environment name on the agent's Deploy and Overview pages — hover over it to confirm *Sandboxing Tier 2 — gVisor*. Deploy or promote an agent to the environment as usual — no agent-side changes are needed.
+
+## Verify
+
+```bash
+# The pod runs on the gVisor node under the gvisor RuntimeClass
+kubectl get pod <agent-pod> -n <namespace> -o wide
+kubectl get pod <agent-pod> -n <namespace> -o jsonpath='{.spec.runtimeClassName}'   # gvisor
+
+# gVisor's kernel is visible from inside the pod
+kubectl exec <agent-pod> -n <namespace> -- dmesg | head -3   # gVisor boot lines
+```
+
+## Troubleshooting
+
+<details>
+<summary>Agent pod stuck in Pending</summary>
+
+The pod can't be scheduled onto the gVisor node. Check, in order:
+
+```bash
+kubectl get runtimeclass gvisor                       # must exist
+kubectl get node <node-name> --show-labels            # must include gvisor=true
+kubectl describe pod <pod> -n <ns>                    # scheduling events
+```
+
+If the RuntimeClass, label, and taint are all present, confirm the node is Ready.
+
+</details>
+
+<details>
+<summary>Agent pod fails with <code>no runtime for "runsc" is configured</code></summary>
+
+The pod reached the gVisor node, but containerd on that node has no `runsc` runtime. Check on the node:
+
+```bash
+sudo crictl --runtime-endpoint unix:///run/containerd/containerd.sock info | grep -c runsc   # 0 means not registered
+grep -B1 -A2 runsc /etc/containerd/config.toml
+```
+
+Re-run the installer on the node. If the node was set up by an earlier version of the script, the runsc block may sit under a plugin table that containerd ignores for the file's `version` header; the installer adds it under the correct one. On Amazon EKS, a reboot removes the runtime entry (see [Amazon EKS nodes](#step-2-install-runsc-on-the-node)).
+
+</details>
+
+<details>
+<summary>Agent pod fails with <code>sidecar "gvisor_sentry" not usable</code></summary>
+
+`runsc` is installed, but its sidecar binaries are not in `/usr/local/bin/gvisor-bin/`. Current gVisor releases need them to start a sandbox. Re-run the installer on the node: it reinstalls gVisor when `gvisor-bin/` is missing.
+
+</details>
+
+<details>
+<summary>Pod runs, but no traces / metrics / try-it (DNS or cross-node failures)</summary>
+
+Telemetry and gateway traffic ride the cross-node path between the gVisor node and the rest of the cluster. gVisor's default userspace network stack (netstack) does not work on every CNI/overlay. Test it with a throwaway runsc pod on the node:
+
+```bash
+kubectl run nc-runsc --image=busybox:1.36 --restart=Never \
+  --overrides='{"spec":{"runtimeClassName":"gvisor"}}' \
+  -- sh -c 'nslookup kubernetes.default && echo OK; sleep 1'
+kubectl logs nc-runsc; kubectl delete pod nc-runsc
+```
+
+If DNS or connectivity fails, re-run the installer in host-network passthrough mode — runsc keeps full syscall isolation but uses the host network stack inside the pod's network namespace:
+
+```bash
+# on the node
+GVISOR_NETWORK_HOST=true sudo -E bash "${AMP_DIST}/deployments/setup/install-gvisor.sh"
+# local k3d
+GVISOR_NETWORK_HOST=true make setup-gvisor
+```
+
+Then redeploy the agent.
+
+</details>
+
+<details>
+<summary>No runtime logs from agents on the gVisor node</summary>
+
+The Fluent Bit DaemonSet must run on the tainted node. Check it covers the gVisor node:
+
+```bash
+kubectl get pods -n openchoreo-observability-plane -o wide | grep fluent-bit
+```
+
+If no Fluent Bit pod is on the gVisor node, set the Fluent Bit toleration as described in [Step 3](#step-3-register-the-node-for-the-gvisor-tier).
+
+</details>
+
+<details>
+<summary>Known gVisor limitations</summary>
+
+- `kubectl port-forward` to a gVisor pod is not supported — reach agents through their Service/gateway endpoint (which is how agent traffic flows anyway).
+- `/proc` inside the pod is synthetic; eBPF tooling is unavailable.
+- Per-container usage metrics are attributed to the sandbox as a whole (reported under a `sandbox` container label), since the workload runs inside gVisor's kernel rather than a host cgroup per container.
+
+</details>
+
+## Next Steps
+
+- Need even stronger, VM-level isolation? See the [Kata Containers isolation tier](./kata.mdx).
+- [Environment management](../environment-management.mdx) — pipelines, promotion, and environment settings.

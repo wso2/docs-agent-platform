@@ -1,0 +1,1031 @@
+---
+sidebar_position: 2
+---
+
+import AmpInstallation from './_partials/_amp-installation.mdx';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# On k3d (Locally)
+
+Install the Agent Manager on a local Kubernetes cluster using [k3d](https://k3d.io/) — a lightweight tool that runs Kubernetes inside Docker.
+
+:::tip Just want it running?
+Use the **Run One Command** tab under [Install](#install): one script creates the cluster and installs everything. Use the **Guided Install** tab when you want to understand the full setup or need to customize it. The [Quick Start Guide](../get-started/quick-start.mdx) runs the same installer inside a dev container, if you'd rather not install k3d, kubectl and Helm on your machine.
+:::
+
+:::info WSO2 subscription
+With a WSO2 subscription or evaluation, you install the WSO2-supported build from `registry.wso2.com`. Select the **WSO2 Subscription** tab wherever this guide shows one, and see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx) for your credentials and registry project.
+:::
+
+:::info Stronger agent isolation tiers
+Agents run sandboxed under the standard **runc** runtime by default. Agent Manager also supports stronger per-environment isolation tiers — **gVisor** (userspace kernel) and **Kata Containers** (per-agent VM) — but they have hardware/OS requirements and need a dedicated node. For more information, see the [gVisor](./isolation-tiers/gvisor.mdx) and [Kata Containers](./isolation-tiers/kata.mdx) setup guides.
+:::
+
+## What You Will Get
+
+Agent Manager is a two-layer system installed in two phases:
+
+- **Phase 1 — OpenChoreo (base layer):** [OpenChoreo](https://openchoreo.dev) is an open-source platform that provides the Kubernetes infrastructure Agent Manager runs on. It consists of four planes: a **Control Plane** for API and configuration, a **Data Plane** for running workloads and gateways, a **Workflow Plane** for builds and CI pipelines, and an **Observability Plane** for traces, logs, and metrics via OpenSearch.
+
+- **Phase 2 — Agent Manager :** The AI agent management platform installed on top of OpenChoreo. It includes **Thunder** (identity provider — installed with OpenChoreo since it provides JWT validation for all planes), the **Console** (web UI), **AMP API** (backend), **AI Gateway**, **PostgreSQL** (database), **Secrets Extension** (OpenBao for runtime secret injection), **Agent Manager Observer** (traces, logs, and metrics), and **Evaluation Engine** (automated agent evaluations).
+
+This guide installs both layers on a single-node k3d cluster on your local machine.
+
+:::info
+This setup is for **development and exploration**. For production deployments, see the [Production Considerations](#production-considerations) section.
+:::
+
+## Prerequisites
+
+### Hardware
+
+| Resource | Minimum |
+|----------|---------|
+| RAM | 8 GB |
+| CPU | 4 cores |
+| Disk | ~10 GB free |
+
+### Required Tools
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Docker](https://docs.docker.com/get-docker/) | v26.0+ | Container runtime |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.32+ | Kubernetes CLI |
+| [Helm](https://helm.sh/docs/intro/install/) | v3.12+ | Kubernetes package manager |
+| [k3d](https://k3d.io/#installation) | v5.8+ | Local Kubernetes clusters |
+
+Verify all tools:
+
+```bash
+docker --version && kubectl version --client && helm version && k3d version
+```
+
+:::tip macOS with Colima
+If you use Colima instead of Docker Desktop, start a dedicated `agent-manager` profile so the install does not interfere with your default Colima instance:
+```bash
+colima start --profile agent-manager \
+  --vm-type=vz --vz-rosetta --network-address \
+  --cpu 4 --memory 8
+```
+`--network-address` assigns the VM a stable IP so the cluster keeps working after network changes.
+
+Choose `--cpu` and `--memory` now rather than adjusting them later. Changing either requires restarting the VM, which can leave an already-created k3d cluster unable to start. [Troubleshooting](#troubleshooting) covers the recovery if you hit this.
+
+On Apple silicon, install Rosetta 2 first (`softwareupdate --install-rosetta`). Without it, Colima runs amd64 images, including the images built for platform-hosted agents, under QEMU emulation, and a Python agent can take longer to start than its startup probe allows.
+
+For the guided install, prefix the cluster creation command in Step 1 with `K3D_FIX_DNS=0`. The one-command installer sets it for you.
+:::
+
+### Required Ports
+
+The following host ports must be free before installation. The Agent Manager services do not need host ports of their own: the Console and API are served through the Control Plane gateway (8080), the Agent Manager Observer through the Observability Plane gateway (11080), and trace ingestion through the Data Plane gateway (19080).
+
+| Port | Purpose |
+|------|---------|
+| 6550 | Kubernetes API |
+| 8080 | Control Plane Gateway (HTTP) — Console, API, Thunder, OpenChoreo API, external AI gateway control plane |
+| 8443 | Control Plane Gateway (HTTPS) |
+| 19080 | Data Plane Gateway (HTTP) — deployed agents, OTLP `/otel` ingest |
+| 19443 | Data Plane Gateway (HTTPS) |
+| 10082 | Container Registry (Workflow Plane) |
+| 11080 | Observability Plane Gateway (HTTP) — Agent Manager Observer, Observer API |
+| 11082 | OpenSearch API |
+| 11085 | OpenSearch HTTPS |
+
+---
+
+## Install
+
+Pick how you want to install it:
+
+<Tabs groupId="k3d-installer" queryString>
+<TabItem value="one-command" label="Run One Command" default>
+
+One script creates the cluster and installs every plane, plus Agent Manager:
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v2026.10.0/k3d-install.sh | bash
+```
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v2026.10.0/k3d-install-subscription.sh | bash -s -- --project <project>
+```
+
+Replace `<project>` with your registry project: `wso2-agent-manager-evaluations` for an evaluation, or `wso2-agent-manager` for a subscription. The script asks for your registry credentials and installs the newest version published to that project. To install a particular version, add `--version`, for example `--version 2026.10.0-u2`. See [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx#one-command) for its options.
+
+</TabItem>
+</Tabs>
+
+The script:
+
+1. Checks that Docker is running and that k3d, kubectl, Helm, curl and lsof are installed.
+2. Downloads the `2026.10.0` release bundle into `~/.wso2-agent-manager/2026.10.0/`.
+3. Creates the `amp-local` k3d cluster and installs the four OpenChoreo planes and Agent Manager. These are the same steps as the **Guided Install** tab.
+4. Prints the console URL and the `admin` login when it finishes.
+
+The install takes about 15-20 minutes, and it is safe to rerun if it stops part way. On Colima, the script sets `K3D_FIX_DNS=0` for you.
+
+When it completes, continue with [Verify and Access the Platform](#verify-and-access-the-platform).
+
+</TabItem>
+<TabItem value="guided" label="Guided Install">
+
+Install each plane step by step.
+
+## Phase 1: OpenChoreo Platform
+
+OpenChoreo organises its infrastructure into four planes, each handling a different concern:
+
+- **Control Plane** — API server and configuration management for the platform
+- **Data Plane** — runs deployed workloads and API gateways
+- **Workflow Plane** — builds and CI pipelines for agent deployments
+- **Observability Plane** — trace, log, and metrics collection via OpenSearch
+
+This phase installs all four with Agent Manager-specific configuration. **Estimated time: ~15-20 minutes.**
+
+### Step 0: Download the Release Bundle
+
+Download the release bundle once. Every manifest, values file and script this
+guide applies comes from it, so the install needs no further network access to
+GitHub — which also sidesteps the per-IP rate limiting that makes
+`helm --values <url>` fail with HTTP 429 behind shared or corporate NAT.
+
+```bash
+export VERSION="2026.10.0"
+curl -fsSL -O "https://github.com/wso2/agent-manager/releases/download/amp/v${VERSION}/wso2-agent-manager-${VERSION}.tar.gz"
+tar xzf "wso2-agent-manager-${VERSION}.tar.gz"
+export AMP_DIST="$PWD"
+```
+
+### Step 1: Create k3d Cluster
+
+Create the cluster using the Agent Manager cluster configuration, which includes all required port mappings:
+
+```bash
+k3d cluster create --config="${AMP_DIST}/deployments/quick-start/k3d-config.yaml"
+```
+
+Set the kubectl context:
+
+```bash
+k3d kubeconfig merge amp-local --kubeconfig-merge-default
+kubectl config use-context k3d-amp-local
+```
+
+Generate machine IDs for Fluent Bit log collection:
+
+```bash
+for NODE in $(k3d node list -o json | grep -o '"name":"[^"]*"' | sed 's/"name":"//;s/"//' | grep "^k3d-amp-local-"); do
+  docker exec ${NODE} sh -c "cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id"
+done
+```
+
+:::tip Verify
+```bash
+kubectl cluster-info --context k3d-amp-local
+# Should show cluster running at https://0.0.0.0:6550
+```
+:::
+
+### Step 2: Apply CoreDNS Configuration
+
+Enables `*.openchoreo.localhost`, `*.amp.localhost`, `*.agentmanager.localhost`, `*.am-gateway.localhost`, and `*.gateway.localhost` DNS resolution inside the cluster — required for in-cluster lookups of the Console/API/Thunder hostnames as well as agent-to-agent and AI gateway traffic:
+
+```bash
+kubectl apply -f "${AMP_DIST}/deployments/k8s/coredns-amp-custom.yaml"
+```
+
+CoreDNS's reload plugin can miss the override if the ConfigMap mounts after the pod's initial parse, so restart it to make sure the rewrite rules are active before anything depends on them:
+
+```bash
+kubectl rollout restart deployment/coredns -n kube-system
+kubectl rollout status deployment/coredns -n kube-system --timeout=60s
+```
+
+### Step 3: Install Cluster Prerequisites
+
+These are infrastructure components that OpenChoreo depends on. You only install them once per cluster.
+
+**Gateway API CRDs** — standard Kubernetes resources for managing network gateways and routing:
+
+```bash
+kubectl apply --server-side \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/experimental-install.yaml
+```
+
+**cert-manager (v1.19.2)** — automates TLS certificate issuance and renewal:
+
+```bash
+helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --version v1.19.2 \
+  --set crds.enabled=true \
+  --wait --timeout 180s
+```
+
+**External Secrets Operator (v1.3.2)** — syncs secrets from external stores (like OpenBao) into Kubernetes:
+
+```bash
+helm upgrade --install external-secrets oci://ghcr.io/external-secrets/charts/external-secrets \
+  --namespace external-secrets \
+  --create-namespace \
+  --version 1.3.2 \
+  --set installCRDs=true \
+  --wait --timeout 180s
+```
+
+**kgateway (v2.2.1)** — the network gateway for OpenChoreo planes:
+
+```bash
+helm upgrade --install kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
+  --create-namespace \
+  --namespace openchoreo-control-plane \
+  --version v2.2.1
+
+helm upgrade --install kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+  --namespace openchoreo-control-plane \
+  --create-namespace \
+  --version v2.2.1 \
+  --set controller.extraEnv.KGW_ENABLE_GATEWAY_API_EXPERIMENTAL_FEATURES=true
+```
+
+### Step 4: Setup Secrets Store (OpenBao)
+
+OpenBao provides secret management for the Workflow Plane and deployed agents:
+
+```bash
+helm upgrade --install openbao oci://ghcr.io/openbao/charts/openbao \
+  --namespace openbao \
+  --create-namespace \
+  --version 0.25.6 \
+  --values "${AMP_DIST}/deployments/single-cluster/values-openbao.yaml" \
+  --timeout 180s
+
+kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=openbao -n openbao --timeout=120s
+```
+
+Configure the External Secrets ClusterSecretStore:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-secrets-openbao
+  namespace: openbao
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: default
+spec:
+  provider:
+    vault:
+      server: "http://openbao.openbao.svc:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "openchoreo-secret-writer-role"
+          serviceAccountRef:
+            name: "external-secrets-openbao"
+            namespace: "openbao"
+EOF
+```
+
+### Step 5: Configuration Variables
+
+Set these variables before continuing. They are used by the remaining Phase 1 steps and all of Phase 2.
+
+```bash
+export VERSION="2026.10.0"
+export HELM_CHART_REGISTRY="ghcr.io/wso2"
+export AMP_NS="wso2-amp"
+export BUILD_CI_NS="openchoreo-workflow-plane"
+export OBSERVABILITY_NS="openchoreo-observability-plane"
+export DEFAULT_NS="default"
+export DATA_PLANE_NS="openchoreo-data-plane"
+export THUNDER_NS="amp-thunder"
+export OPENCHOREO_INTERNAL_URL="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080"
+export THUNDER_PUBLIC_URL="http://thunder.amp.localhost:8080"
+export THUNDER_INTERNAL_URL="http://amp-thunder-extension-service.${THUNDER_NS}.svc.cluster.local:8090"
+export CONSOLE_PUBLIC_URL="http://console.amp.localhost:8080"
+export API_PUBLIC_URL="http://api.amp.localhost:8080"
+export OBS_API_PUBLIC_URL="http://traces.amp.localhost:11080"
+# Bare hostnames (no scheme/port) — used as the HTTPRoute hostnames on the plane gateways
+export CONSOLE_PUBLIC_HOST="console.amp.localhost"
+export API_PUBLIC_HOST="api.amp.localhost"
+export OBS_API_PUBLIC_HOST="traces.amp.localhost"
+export INSTRUMENTATION_URL="http://default-default.gateway.localhost:19080/otel"
+```
+
+:::info
+In k3d, every management endpoint is accessed through a plane gateway using a hostname: Thunder, the Console, and the API via the Control Plane kgateway on port 8080 (`thunder.amp.localhost`, `console.amp.localhost`, `api.amp.localhost`), and the Agent Manager Observer via the Observability Plane kgateway on port 11080 (`traces.amp.localhost`). These match the chart defaults and the Control Plane / Observability Plane OIDC configuration. No port-forwarding is needed; `*.localhost` names resolve to the loopback address in browsers and curl.
+:::
+
+With a WSO2 subscription or evaluation, also point the charts at your registry project and sign Helm in to `registry.wso2.com`:
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+Nothing to change. The charts come from `ghcr.io/wso2`.
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `2026.10.0` for the release, or `2026.10.0-u<N>` for update N. Phase 2 uses the same username and token to create the image pull secret.
+
+```bash
+export VERSION="<version>"
+export HELM_CHART_REGISTRY="registry.wso2.com/<project>/helm-charts"
+printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
+printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
+```
+
+</TabItem>
+</Tabs>
+
+### Step 6: Install Thunder Extension (Identity Provider)
+
+Thunder provides authentication and user management for the entire platform — login, API keys, and OAuth token exchange. It must be installed before the Control Plane because the Control Plane, Observability Plane, and Agent Manager all validate JWTs issued by Thunder.
+
+```bash
+helm install amp-thunder-extension \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-thunder-extension \
+  --version ${VERSION} \
+  --namespace ${THUNDER_NS} \
+  --create-namespace \
+  --timeout 1800s
+
+kubectl wait --for=condition=Available \
+  deployment -l app.kubernetes.io/instance=amp-thunder-extension \
+  -n ${THUNDER_NS} --timeout=300s
+```
+
+:::info Console admin password
+This install also generated the console's `admin` password. Retrieve it with:
+
+```bash
+kubectl get secret amp-admin-credentials -n ${THUNDER_NS} -o jsonpath='{.data.password}' | base64 -d
+```
+:::
+
+:::info
+No MCP overrides are needed here: `thunder.bootstrap.agentManagerMcpBaseUrl` and
+`observerMcpBaseUrl` become the OAuth resource-server identifiers Thunder
+registers for the `/mcp` endpoints, and their chart defaults are already the k3d
+gateway URLs used throughout this guide. If you deviate from those hostnames,
+override both to match `agentManagerService.config.serverPublicURL` and
+`amObserver.publicUrl` — Thunder answers `invalid_target` unless an MCP client's
+requested `resource` matches a registered identifier exactly. Both are seeded by
+the pre-install bootstrap job only, so a `helm upgrade` will not re-seed them.
+:::
+
+:::warning
+Thunder persists its configuration (including the issuer URL) in a database on first boot. If you need to change `THUNDER_PUBLIC_URL` after installation, you must **uninstall the chart, delete its PVC, and reinstall** — a `helm upgrade` alone will not change the issuer in issued tokens.
+:::
+
+:::tip Verify
+```bash
+kubectl exec -n ${THUNDER_NS} deploy/amp-thunder-extension-deployment -- \
+  wget -qO- http://localhost:8090/.well-known/openid-configuration 2>/dev/null \
+  | grep -o '"issuer":"[^"]*"'
+# Expected: "issuer":"http://thunder.amp.localhost:8080"
+```
+:::
+
+### Step 7: Install OpenChoreo Control Plane
+
+The Control Plane is configured with Backstage disabled (Agent Manager provides its own console) and OIDC pointing to the AMP Thunder Extension:
+
+```bash
+helm install openchoreo-control-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-control-plane \
+  --create-namespace \
+  --timeout 600s \
+  --values "${AMP_DIST}/deployments/single-cluster/values-cp.yaml"
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-control-plane --timeout=600s
+```
+
+:::note Webhook race condition
+If the install fails with `no endpoints available for service "controller-manager-webhook-service"`, this is a known transient race in the OpenChoreo control-plane install. Wait for the control plane deployments to become ready, then rerun the `helm install` command.
+```bash
+kubectl wait --for=condition=Available deployment --all \
+  -n openchoreo-control-plane --timeout=300s
+```
+:::
+
+<details>
+<summary>What the values file configures</summary>
+
+- Backstage disabled (AMP provides its own console)
+- OIDC pointing to AMP Thunder Extension (`thunder.amp.localhost:8080`)
+- OpenChoreo API hostname: `api.openchoreo.localhost`
+- Gateway on HTTP port 8080 / HTTPS port 8443, TLS disabled
+
+</details>
+
+#### Patch the service-account entitlement claim (required with Thunder ≥ 0.45)
+
+Thunder 0.45+ puts the client name in the `client_id` claim (its `sub` is an opaque UUID), but OpenChoreo 1.2.0 extracts service-account entitlements from `sub`, and the chart does not expose the setting. Without this patch, every service-to-service call is **silently unauthorized** — the API returns `200` with empty lists and `403`s while all pods look healthy, and the gateway bootstrap later fails with `Environment 'default' not found`.
+
+```bash
+patched_yaml=$(kubectl get configmap openchoreo-api-config -n openchoreo-control-plane -o yaml \
+  | sed -E "s/claim:[[:space:]]*['\"]?sub['\"]?/claim: client_id/g")
+echo "$patched_yaml" | kubectl apply --server-side --field-manager=helm --force-conflicts -f -
+
+kubectl rollout restart deployment/openchoreo-api -n openchoreo-control-plane
+kubectl rollout status deployment/openchoreo-api -n openchoreo-control-plane --timeout=120s
+
+for binding in $(kubectl get clusterauthzrolebindings.openchoreo.dev -o jsonpath='{.items[*].metadata.name}'); do
+  claim=$(kubectl get clusterauthzrolebinding.openchoreo.dev "$binding" -o jsonpath='{.spec.entitlement.claim}')
+  if [ "$claim" = "sub" ]; then
+    kubectl patch clusterauthzrolebinding.openchoreo.dev "$binding" --type=merge \
+      -p '{"spec":{"entitlement":{"claim":"client_id"}}}'
+  fi
+done
+```
+
+:::note
+Re-apply this patch after any `helm upgrade` of the Control Plane chart — the upgrade reverts both the ConfigMap and the bindings. The same patch is needed a second time for the Observability Plane's `observer-auth-config` in Step 10.
+:::
+
+### Step 8: Setup Data Plane
+
+Each plane needs the Control Plane's CA certificate to establish trusted communication. Copy it to the Data Plane namespace:
+
+```bash
+kubectl create namespace openchoreo-data-plane --dry-run=client -o yaml | kubectl apply -f -
+
+CA_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+kubectl create configmap cluster-gateway-ca \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-data-plane --dry-run=client -o yaml | kubectl apply -f -
+```
+
+```bash
+helm install openchoreo-data-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-data-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-data-plane \
+  --create-namespace \
+  --timeout 600s \
+  --values "${AMP_DIST}/deployments/single-cluster/values-dp.yaml"
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-data-plane --timeout=600s
+```
+
+Register the Data Plane with the Control Plane. The command below automatically extracts the CA certificate and inserts it into the YAML — run the entire block as-is:
+
+```bash
+CA_CERT=$(kubectl get secret cluster-agent-tls \
+  -n openchoreo-data-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+
+kubectl apply -f - <<EOF
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterDataPlane
+metadata:
+  name: default
+  namespace: default
+spec:
+  planeID: "default"
+  clusterAgent:
+    clientCA:
+      value: |
+$(echo "$CA_CERT" | sed 's/^/        /')
+  gateway:
+    ingress:
+      external:
+        name: gateway-default
+        namespace: openchoreo-data-plane
+        http:
+          host: "openchoreoapis.localhost"
+          listenerName: http
+          port: 19080
+        https:
+          host: "openchoreoapis.localhost"
+          listenerName: https
+          port: 19443
+  secretStoreRef:
+    name: default
+EOF
+```
+
+### Step 9: Setup Workflow Plane
+
+Copy the CA certificate:
+
+```bash
+kubectl create namespace openchoreo-workflow-plane --dry-run=client -o yaml | kubectl apply -f -
+
+CA_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+kubectl create configmap cluster-gateway-ca \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-workflow-plane --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Install the container registry and the Workflow Plane:
+
+```bash
+helm upgrade --install registry docker-registry \
+  --repo https://twuni.github.io/docker-registry.helm \
+  --namespace openchoreo-workflow-plane \
+  --create-namespace \
+  --values https://raw.githubusercontent.com/openchoreo/openchoreo/v1.2.0/install/k3d/single-cluster/values-registry.yaml \
+  --timeout 120s
+
+helm install openchoreo-workflow-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-workflow-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-workflow-plane \
+  --create-namespace \
+  --set argo-workflows.controller.resources.requests.cpu=50m \
+  --set argo-workflows.controller.resources.requests.memory=64Mi \
+  --set argo-workflows.controller.resources.limits.cpu=200m \
+  --set argo-workflows.controller.resources.limits.memory=128Mi \
+  --timeout 600s
+```
+
+Register the Workflow Plane:
+
+```bash
+BP_CA_CERT=$(kubectl get secret cluster-agent-tls \
+  -n openchoreo-workflow-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+
+kubectl apply -f - <<EOF
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterWorkflowPlane
+metadata:
+  name: default
+  namespace: default
+spec:
+  planeID: "default"
+  secretStoreRef:
+    name: default
+  clusterAgent:
+    clientCA:
+      value: |
+$(echo "$BP_CA_CERT" | sed 's/^/        /')
+EOF
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-workflow-plane --timeout=600s
+```
+
+### Step 10: Setup Observability Plane
+
+Copy the CA certificate:
+
+```bash
+kubectl create namespace openchoreo-observability-plane --dry-run=client -o yaml | kubectl apply -f -
+
+CA_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+kubectl create configmap cluster-gateway-ca \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-observability-plane --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Create the ExternalSecrets for OpenSearch and Observer credentials:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: opensearch-admin-credentials
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: default
+  target:
+    name: opensearch-admin-credentials
+  data:
+  - secretKey: username
+    remoteRef:
+      key: opensearch-username
+      property: value
+  - secretKey: password
+    remoteRef:
+      key: opensearch-password
+      property: value
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: observer-secret
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: default
+  target:
+    name: observer-secret
+  data:
+  - secretKey: OPENSEARCH_USERNAME
+    remoteRef:
+      key: opensearch-username
+      property: value
+  - secretKey: OPENSEARCH_PASSWORD
+    remoteRef:
+      key: opensearch-password
+      property: value
+  - secretKey: UID_RESOLVER_OAUTH_CLIENT_SECRET
+    remoteRef:
+      key: observer-oauth-client-secret
+      property: value
+EOF
+```
+
+Wait for the ExternalSecrets to sync:
+
+```bash
+kubectl wait -n openchoreo-observability-plane \
+  --for=condition=Ready externalsecret/opensearch-admin-credentials \
+  externalsecret/observer-secret --timeout=60s
+```
+
+Apply the custom OpenTelemetry Collector ConfigMap (required for trace ingestion):
+
+```bash
+kubectl apply -f "${AMP_DIST}/deployments/values/oc-collector-configmap.yaml" \
+  -n openchoreo-observability-plane
+```
+
+Install the Observability Plane:
+
+```bash
+helm install openchoreo-observability-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-observability-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-observability-plane \
+  --create-namespace \
+  --timeout 25m \
+  --values "${AMP_DIST}/deployments/single-cluster/values-op.yaml"
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-observability-plane --timeout=300s
+```
+
+With Thunder ≥ 0.45, apply the same entitlement-claim patch used for the Control Plane to the observer (without it, log and trace queries return `403 Access denied`):
+
+```bash
+patched_yaml=$(kubectl get configmap observer-auth-config -n openchoreo-observability-plane -o yaml \
+  | sed -E "s/claim:[[:space:]]*['\"]?sub['\"]?/claim: client_id/g")
+echo "$patched_yaml" | kubectl apply --server-side --field-manager=helm --force-conflicts -f -
+kubectl rollout restart deployment/observer -n openchoreo-observability-plane
+kubectl rollout status deployment/observer -n openchoreo-observability-plane --timeout=120s
+```
+
+Install observability modules (logs, metrics, tracing):
+
+```bash
+# Logs module
+helm upgrade --install observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --create-namespace \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
+  --set adapter.openSearchSecretName="opensearch-admin-credentials" \
+  --timeout 10m
+
+# Enable Fluent Bit log collection
+helm upgrade observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --reuse-values \
+  --set fluent-bit.enabled=true \
+  --timeout 10m
+
+# Metrics module
+helm upgrade --install observability-metrics-prometheus \
+  oci://ghcr.io/openchoreo/helm-charts/observability-metrics-prometheus \
+  --create-namespace \
+  --namespace openchoreo-observability-plane \
+  --version 0.6.1 \
+  --timeout 10m
+
+# Tracing module (uses the custom OTel Collector ConfigMap)
+helm upgrade --install observability-traces-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-tracing-opensearch \
+  --create-namespace \
+  --namespace openchoreo-observability-plane \
+  --version 0.6.0 \
+  --set openSearch.enabled=false \
+  --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
+  --set opentelemetry-collector.configMap.existingName="amp-opentelemetry-collector-config" \
+  --timeout 10m
+```
+
+:::warning Pin the tracing module to 0.6.0 or later
+The OpenChoreo 1.2.0 observer returns a span's status as an object
+(`{code, message}`), but the tracing adapter at 0.5.0 and 0.5.1 still expects a
+string. With those versions the span-details endpoint returns `500` and traces are
+silently dropped. Upstream's own install script still pins 0.5.0; do not follow it
+here.
+:::
+
+Register the Observability Plane and link it to other planes:
+
+```bash
+OP_CA_CERT=$(kubectl get secret cluster-agent-tls \
+  -n openchoreo-observability-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+
+kubectl apply -f - <<EOF
+apiVersion: openchoreo.dev/v1alpha1
+kind: ObservabilityPlane
+metadata:
+  name: default
+  namespace: default
+spec:
+  planeID: "default"
+  clusterAgent:
+    clientCA:
+      value: |
+$(echo "$OP_CA_CERT" | sed 's/^/        /')
+  observerURL: http://observer.openchoreo.localhost:11080
+EOF
+
+# Link Data Plane to Observability Plane
+kubectl patch clusterdataplane default -n default --type merge \
+  -p '{"spec":{"observabilityPlaneRef":{"kind":"ClusterObservabilityPlane","name":"default"}}}'
+
+# Link Workflow Plane to Observability Plane
+kubectl patch clusterworkflowplane default -n default --type merge \
+  -p '{"spec":{"observabilityPlaneRef":{"kind":"ClusterObservabilityPlane","name":"default"}}}'
+```
+
+### Step 11: Verify OpenChoreo Installation
+
+Before proceeding to Phase 2, confirm all planes and Thunder are running:
+
+```bash
+echo "--- Thunder ---"
+kubectl get pods -n amp-thunder
+echo "--- Control Plane ---"
+kubectl get pods -n openchoreo-control-plane
+echo "--- Data Plane ---"
+kubectl get pods -n openchoreo-data-plane
+echo "--- Workflow Plane ---"
+kubectl get pods -n openchoreo-workflow-plane
+echo "--- Observability Plane ---"
+kubectl get pods -n openchoreo-observability-plane
+echo "--- Plane Registrations ---"
+kubectl get clusterdataplane,clusterworkflowplane,observabilityplane -n default
+```
+
+All pods should be in `Running` or `Completed` state.
+
+---
+
+## Phase 2: Agent Manager Installation
+
+With OpenChoreo running, you can now install the Agent Manager components — the API, console, identity provider, and extensions that provide the AI agent management capabilities.
+
+<AmpInstallation version="${VERSION}" rewriteJwksForK3d={true} />
+
+### Provision Thunder Identity Provider for the Default Environment
+
+Every Environment needs its own dedicated Thunder ID instance. This is separate from the platform Thunder installed in Phase 1, which only handles console and API login. This instance is what issues each agent its own OAuth2 credential (AgentID) in that Environment. Agents can still be created without it, but they will never get an AgentID there — Agent Manager keeps retrying and failing in the background, and the API Platform Gateway Extension silently skips registering its ThunderKeyManager identity provider, so the Identity Providers page stays empty with no error anywhere in the platform. Run this once the Agent Manager API is reachable at `${API_PUBLIC_URL}`:
+
+```bash
+ENV_NAME=default \
+DISPLAY_NAME="Default" \
+ORG_NAME=default \
+THUNDER_HANDLE=default-idp \
+AMP_API_URL="${API_PUBLIC_URL}/api/v1" \
+IDP_TOKEN_URL="${THUNDER_PUBLIC_URL}/oauth2/token" \
+THUNDER_HOST_BASE_DOMAIN="amp.localhost" \
+bash "${AMP_DIST}/deployments/scripts/add-environment-thunder.sh"
+```
+
+The script registers an unguessable handle with Agent Manager before it creates
+the environment's ThunderID instance. `THUNDER_HANDLE` is optional (3-63
+characters); omit it to have Agent Manager generate one instead. The script
+prints the resulting issuer as `http://<handle>.amp.localhost:8080`. Do not
+derive it from the organization and environment names. The existing
+`*.amp.localhost` routing covers each handle, generated or chosen.
+
+:::tip Verify
+```bash
+kubectl get pods -n amp-thunder-default-default
+# All pods should be Running
+```
+:::
+
+</TabItem>
+</Tabs>
+
+---
+
+## Verify and Access the Platform
+
+Run a full status check to confirm everything is running:
+
+```bash
+# All pods across key namespaces
+kubectl get pods -n openchoreo-control-plane
+kubectl get pods -n openchoreo-data-plane
+kubectl get pods -n openchoreo-workflow-plane
+kubectl get pods -n openchoreo-observability-plane
+kubectl get pods -n wso2-amp
+kubectl get pods -n amp-thunder
+# Helm releases
+helm list -A | grep -E 'openchoreo|amp|gateway'
+```
+
+| Service | URL |
+|---------|-----|
+| **Agent Manager Console** | [http://console.amp.localhost:8080](http://console.amp.localhost:8080) |
+| **Agent Manager API** | [http://api.amp.localhost:8080](http://api.amp.localhost:8080) |
+| **Agent Manager Observer** | [http://traces.amp.localhost:11080](http://traces.amp.localhost:11080) |
+| **OTLP trace ingest (HTTP)** | http://default-default.gateway.localhost:19080/otel |
+
+**Console login:** the username is `admin`; the password was generated at install time. Retrieve it with:
+
+```bash
+kubectl get secret amp-admin-credentials -n amp-thunder -o jsonpath='{.data.password}' | base64 -d
+```
+
+:::note HTTPS ingest is disabled by default on this setup, and enabling it doesn't cover the documented hosts
+[values-dp.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/single-cluster/values-dp.yaml), installed in Step 8 of the guided install (the one-command installer applies the same file), sets `gateway.tls.enabled: false` even though it already configures `httpsPort: 19443` and a `certificateRefs` entry pointing at the `gateway-tls` Secret (created earlier by cert-manager). With TLS disabled, the Data Plane's `gateway-default` Gateway/Service only get an `http` listener — there is no 19443 listener to connect to, so an HTTPS OTLP endpoint is not reachable on a default install.
+
+Turning `gateway.tls.enabled` on would not make the OTLP host above reachable over HTTPS anyway: `gateway-tls`'s certificate only covers `*.agentmanager.localhost` and `*.am-gateway.localhost` (its configured `hostname` and SANs), not `*.gateway.localhost` — the domain `default-default.gateway.localhost` above actually uses. Reaching HTTPS on that specific host would additionally require reissuing the certificate with `*.gateway.localhost` in its `dnsNames` and pointing `gateway.tls.hostname` at it.
+
+Given that, this setup keeps TLS disabled and uses the HTTP endpoint above for trace ingestion.
+:::
+
+---
+
+## Cleanup
+
+Delete the entire k3d cluster and all resources:
+
+```bash
+k3d cluster delete amp-local
+```
+
+If you used the one-command installer and want to remove Agent Manager and OpenChoreo but keep the cluster, run the uninstall script it left behind instead:
+
+```bash
+bash ~/.wso2-agent-manager/2026.10.0/deployments/quick-start/uninstall.sh
+```
+
+---
+
+## Production Considerations
+
+This installation is designed for development and exploration. For production:
+
+1. **Identity provider** — Replace Thunder dev mode with a proper IdP (Asgardeo, Auth0, Okta)
+2. **JWT authentication** — Set `IS_LOCAL_DEV_ENV=false` and configure `KEY_MANAGER_JWKS_URL` for `agent-manager-service` and `agent-manager-observer` before exposing either service; when unset, JWT signature verification is skipped and only the token payload is decoded
+3. **TLS** — Replace self-signed certificates with CA-signed certificates
+4. **Secrets backend** — Disable OpenBao dev mode; configure persistent storage and proper auth
+5. **Observability storage** — Configure persistent volumes for OpenSearch
+6. **Resource sizing** — Adjust requests/limits based on workload
+7. **High availability** — Deploy multiple replicas of critical components
+8. **Security hardening** — Apply network policies, RBAC, pod security standards
+
+---
+
+## Troubleshooting
+
+<details>
+<summary>Pods stuck in Pending</summary>
+
+Usually a resource constraint. Check node capacity:
+
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+kubectl top nodes
+```
+
+Increase Colima/Docker Desktop resources if needed.
+
+:::warning On Colima, resizing is not a free action
+Changing `--cpu` or `--memory` requires stopping and restarting the VM, which rebuilds Docker's networks underneath the cluster. An already-created k3d cluster may not come back. Read the next entry before you resize.
+:::
+
+</details>
+
+<details>
+<summary>k3d server container crash-loops after restarting or resizing Colima</summary>
+
+This does not present as a Kubernetes error. `kubectl` stops responding altogether, because the API server never starts:
+
+```bash
+kubectl cluster-info --context k3d-amp-local
+# Hangs, or reports the connection was refused
+
+docker ps -a --filter name=k3d-amp-local
+# k3d-amp-local-server-0 shows STATUS "Restarting", or repeated "Exited"
+
+docker logs k3d-amp-local-server-0
+```
+
+The server node's log ends with:
+
+```text
+level=fatal msg="Failed to start networking: unable to initialize network policy controller: error getting node subnet: failed to find interface with specified node ip"
+```
+
+Stopping and starting the Colima VM recreates the `k3d-amp-local` bridge network, and the containers rejoin it in a different order than before. The load balancer can take the address the server node previously held. k3s still has the old address in its persisted node record, so its network policy controller finds no interface matching it and the process exits. Restarting again does not help, because the mismatch is stored in the node's own state rather than recalculated at boot.
+
+Recreate the cluster. Nothing in this install is persistent across a cluster delete, so recovery is the same work as a fresh install:
+
+```bash
+k3d cluster delete amp-local
+docker network rm k3d-amp-local 2>/dev/null || true
+
+colima stop --profile agent-manager
+colima start --profile agent-manager \
+  --vm-type=vz --vz-rosetta --network-address \
+  --cpu <cpus> --memory <gb>
+```
+
+Then rerun the one-command installer, or the guided install from Step 1: Create k3d Cluster onward.
+
+</details>
+
+<details>
+<summary>Gateway not becoming Programmed</summary>
+
+```bash
+kubectl logs -n openchoreo-data-plane -l app.kubernetes.io/name=gateway-operator
+kubectl describe apigateway api-platform-default-default -n openchoreo-data-plane
+```
+
+</details>
+
+<details>
+<summary>Plane registration issues</summary>
+
+```bash
+kubectl get clusterdataplane default -n default -o yaml
+kubectl logs -n openchoreo-control-plane -l app.kubernetes.io/name=openchoreo-control-plane
+```
+
+</details>
+
+<details>
+<summary>OpenSearch connectivity issues</summary>
+
+```bash
+kubectl get pods -n openchoreo-observability-plane -l app=opensearch
+kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
+  curl -v http://opensearch.openchoreo-observability-plane.svc.cluster.local:9200
+```
+
+</details>
+
+<details>
+<summary>Port already in use</summary>
+
+Find the process occupying the port and stop it:
+
+```bash
+lsof -i :<port>
+```
+
+</details>
+
+---
+
+## Reference: Configuration Files
+
+All Agent Manager-specific configuration files used in this guide:
+
+| File | Purpose |
+|------|---------|
+| [k3d-config.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/quick-start/k3d-config.yaml) | k3d cluster with all required port mappings |
+| [coredns-amp-custom.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/k8s/coredns-amp-custom.yaml) | CoreDNS rewrites for `*.openchoreo.localhost`, `*.amp.localhost`, `*.agentmanager.localhost`, `*.am-gateway.localhost`, `*.gateway.localhost` |
+| [add-environment-thunder.sh](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/scripts/add-environment-thunder.sh) | Provisions the per-environment Thunder identity provider |
+| [values-cp.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/single-cluster/values-cp.yaml) | Control Plane — Backstage disabled, AMP Thunder OIDC |
+| [values-dp.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/single-cluster/values-dp.yaml) | Data Plane — gateway ports, Fluent Bit config |
+| [values-op.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/single-cluster/values-op.yaml) | Observability Plane — standalone OpenSearch, AMP Thunder OIDC |
+| [values-openbao.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/single-cluster/values-openbao.yaml) | OpenBao — dev mode, Kubernetes auth, pre-seeded secrets |
+| [oc-collector-configmap.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/values/oc-collector-configmap.yaml) | Custom OTel Collector ConfigMap for trace ingestion |
+| [wso2-amp-api-platform-gateway-extension](https://github.com/wso2/agent-manager/tree/amp/v2026.10.0/deployments/helm-charts/wso2-amp-api-platform-gateway-extension) | API Platform Gateway Helm chart (includes gateway config, bootstrap, CR) |
+| [otel-collector-rest-api.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v2026.10.0/deployments/values/otel-collector-rest-api.yaml) | OTel Collector REST API resource |

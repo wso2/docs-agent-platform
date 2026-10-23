@@ -1,0 +1,198 @@
+{
+  "docsSidebar": [
+    {
+      "type": "category",
+      "label": "Get Started",
+      "className": "sidebar-section-icon-get-started",
+      "collapsed": false,
+      "items": [
+        "get-started/what-is-amp",
+        "get-started/quick-start"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Concepts",
+      "className": "sidebar-section-icon-concepts",
+      "collapsed": false,
+      "items": [
+        "concepts/organization",
+        "concepts/environment",
+        "concepts/project",
+        "concepts/agent-lifecycle",
+        "concepts/internal-and-external-agent",
+        "concepts/agent-kind-and-catalog",
+        "concepts/observability",
+        "concepts/evaluation",
+        "concepts/agentid",
+        "concepts/gateway",
+        "concepts/guardrails-and-policies",
+        "concepts/deployment-pipeline",
+        "concepts/agent-sandboxing",
+        "concepts/llm-service-provider",
+        "concepts/mcp-proxy"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Guides",
+      "className": "sidebar-section-icon-guides",
+      "collapsed": false,
+      "items": [
+        {
+          "type": "category",
+          "label": "Installation",
+          "collapsed": false,
+          "items": [
+            "guides/on-k3d",
+            "guides/on-your-environment",
+            "guides/on-a-vm",
+            "guides/install-with-a-wso2-subscription",
+            "guides/cli-installation"
+          ]
+        },
+        "guides/deploy-an-a2a-agent",
+        "guides/register-an-external-a2a-agent",
+        {
+          "type": "category",
+          "label": "Evaluation & Observability",
+          "collapsed": true,
+          "items": [
+            "guides/custom-evaluators",
+            "guides/evaluation-monitors",
+            "guides/configure-trace-sampling",
+            "guides/observe-openclaw-agents"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Securing Agent Endpoints",
+          "collapsed": true,
+          "items": [
+            "guides/configure-identity-providers-at-the-gateway",
+            {
+              "type": "category",
+              "label": "Configure Sandboxing",
+              "collapsed": true,
+              "items": [
+                "guides/isolation-tiers/gvisor",
+                "guides/isolation-tiers/kata"
+              ]
+            },
+            "guides/secure-agent-endpoints-with-api-keys",
+            "guides/secure-agents-with-jwt-authentication",
+            "guides/configure-cors-for-agent-endpoints"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Platform Administration",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "doc",
+              "id": "guides/register-llm-service-provider",
+              "label": "LLM Service Providers"
+            },
+            "guides/configure-agent-llm-configuration",
+            {
+              "type": "doc",
+              "id": "guides/register-mcp-proxy",
+              "label": "MCP Proxies"
+            },
+            "guides/environment-management",
+            "guides/instrumentation-catalog",
+            "guides/amp-instrumentation",
+            "guides/configure-guardrail-system-parameters",
+            "guides/use-a-custom-gateway-image"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Agent Identity and Access Management",
+          "collapsed": true,
+          "items": [
+            "guides/authorize-agent-access-to-mcp-tools",
+            "guides/configure-agent-mcp-proxies",
+            "guides/use-agentid-in-platform-hosted-agents",
+            "guides/retrieve-agentid-for-externally-hosted-agents"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Tutorials",
+      "className": "sidebar-section-icon-tutorials",
+      "collapsed": false,
+      "items": [
+        "tutorials/create-your-first-agent",
+        "tutorials/govern-the-model",
+        "tutorials/give-the-agent-real-tools",
+        "tutorials/observe-first-agent",
+        "tutorials/promote-your-agent",
+        {
+          "type": "doc",
+          "id": "tutorials/build-a-ballerina-agent",
+          "label": "Deploy the Ballerina Leave Assistant Sample"
+        },
+        "tutorials/deploy-the-a2a-notes-agent-sample"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "References",
+      "className": "sidebar-section-icon-references",
+      "collapsed": false,
+      "items": [
+        {
+          "type": "category",
+          "label": "CLI",
+          "collapsed": true,
+          "link": {
+            "type": "doc",
+            "id": "reference/cli/overview"
+          },
+          "items": [
+            "reference/cli/login",
+            "reference/cli/context",
+            "reference/cli/project",
+            "reference/cli/agent",
+            "reference/cli/llm-provider",
+            "reference/cli/gateway",
+            "reference/cli/skills",
+            "reference/cli/version",
+            "reference/cli/api"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Helm Charts",
+          "collapsed": true,
+          "link": {
+            "type": "doc",
+            "id": "reference/helm-charts/index"
+          },
+          "items": [
+            "reference/helm-charts/wso2-agent-manager",
+            "reference/helm-charts/wso2-amp-api-platform-gateway-extension",
+            "reference/helm-charts/wso2-amp-thunder-extension",
+            "reference/helm-charts/wso2-amp-evaluation-extension",
+            "reference/helm-charts/wso2-amp-observability-extension",
+            "reference/helm-charts/wso2-amp-platform-resources-extension"
+          ]
+        },
+        "reference/sample-agents",
+        "reference/mcp-server",
+        "reference/observer-mcp-server",
+        "reference/authorization"
+      ]
+    },
+    {
+      "type": "doc",
+      "id": "contributing",
+      "label": "Contributing",
+      "className": "sidebar-section-icon-contributing"
+    }
+  ]
+}

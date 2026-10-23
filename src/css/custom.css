@@ -411,12 +411,30 @@
   opacity: 1;
 }
 
-/* Cloud version — distinct entry in the version dropdown */
-.dropdown__link[href*="/docs/cloud"] {
-  color: #fa7b3f;
-  border-left: 3px solid #fa7b3f;
-  padding-left: calc(var(--ifm-menu-link-padding-horizontal) - 3px);
+/* Group headings and dividers in the version dropdown */
+.dropdown__group-label {
+  padding: 0.25rem 0.5rem 0;
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ifm-color-emphasis-600);
+  cursor: default;
+}
+
+.dropdown__group-label:not(:first-child) {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.dropdown__link--grouped {
+  padding-left: 1.25rem;
+}
+
+.dropdown__group-divider {
+  margin: 0.4rem 0;
+  background-color: var(--ifm-color-emphasis-300);
 }
 
 /*

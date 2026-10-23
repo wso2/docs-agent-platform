@@ -1,0 +1,2637 @@
+---
+sidebar_position: 3
+---
+
+import AmpInstallation from './_partials/_amp-installation.mdx';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# On Your Environment
+
+Set up a production-grade, single-cluster Agent Manager deployment on an existing Kubernetes cluster — AWS EKS, Google GKE, Azure AKS, or any distribution with LoadBalancer support. Each step carries its production configuration inline, so following the guide top to bottom produces a deployment you can put in front of real users. The [Production Reference](#production-reference) at the end is the checklist to audit against, plus the operational concerns that belong to no single step.
+
+:::tip Just want to evaluate?
+The [Quick Start Guide](../get-started/quick-start.mdx) installs everything in a single command using a dev container with k3d, the [k3d guide](./on-k3d.mdx) covers a local cluster install, and the [VM guide](./on-a-vm.mdx) covers a single-machine install. Use this page when you are deploying to a real cluster.
+:::
+
+:::info WSO2 subscription
+With a WSO2 subscription or evaluation, you install the WSO2-supported build from `registry.wso2.com`. Select the **WSO2 Subscription** tab wherever this guide shows one, and see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx) for your credentials and registry project.
+:::
+
+:::info Stronger agent isolation tiers
+Agents run sandboxed under the standard **runc** runtime by default. Agent Manager also supports stronger per-environment isolation tiers — **gVisor** (userspace kernel) and **Kata Containers** (per-agent VM) — but they have hardware/OS requirements and need a dedicated node. For more information, see the [gVisor](./isolation-tiers/gvisor.mdx) and [Kata Containers](./isolation-tiers/kata.mdx) setup guides.
+:::
+
+## What You Will Get
+
+Agent Manager is a two-layer system installed in two phases:
+
+- **Phase 1 — OpenChoreo (base layer):** [OpenChoreo](https://openchoreo.dev) is an open-source platform that provides the Kubernetes infrastructure Agent Manager runs on. It consists of four planes: a **Control Plane** for API and configuration, a **Data Plane** for running workloads and gateways, a **Workflow Plane** for builds and CI pipelines, and an **Observability Plane** for traces, logs, and metrics via OpenSearch.
+
+- **Phase 2 — Agent Manager :** The AI agent management platform installed on top of OpenChoreo. It includes the **Console** (web UI), **AMP API** (backend), **AI Gateway**, **PostgreSQL** (database), **Secrets Extension** (OpenBao for runtime secret injection), **Agent Manager Observer** (traces, logs, and metrics), and **Evaluation Engine** (automated agent evaluations).
+
+This guide installs both layers on your existing Kubernetes cluster, production-first: a real domain, trusted TLS certificates issued automatically by cert-manager, and every management surface served through the three OpenChoreo plane gateways — the only LoadBalancers the platform needs. The OpenChoreo API itself is not exposed outside the cluster; Agent Manager reaches it over cluster DNS.
+
+Where a step has a development-grade default and a production one — the databases, secret storage, observability retention — it offers both as tabs. Pick **Production** throughout unless you are deliberately evaluating, and pay attention to [the decisions you cannot change later](#3-decisions-you-cannot-change-later).
+
+:::tip No domain yet?
+The main flow assumes you control a DNS zone. If you are evaluating on a cluster without one, follow the [nip.io appendix](#appendix-installing-without-a-domain-nipio) instead — same steps, with hostnames derived from LoadBalancer IPs and self-signed certificates.
+:::
+
+## Prerequisites
+
+### Cluster Requirements
+
+| Requirement | Minimum |
+|-------------|---------|
+| Kubernetes version | 1.32+ |
+| Nodes | 3 |
+| CPU per node | 4 cores |
+| RAM per node | 8 GB |
+| LoadBalancer support | Required |
+| Default StorageClass | Required, and it must actually provision volumes. On EKS check both halves: clusters created at 1.30+ ship **no default class at all**, and the stock `gp2` class (default on upgraded clusters) references the in-tree provisioner removed in Kubernetes 1.27, so without the EBS CSI driver its PVCs are accepted and stay `Pending` forever. Install the EBS CSI driver and mark a CSI-backed class (e.g. `gp3`) as default |
+| Node kernel (build nodes) | Linux **6.3+** for user-namespaced agent builds (idmapped-mount support). On older kernels (Ubuntu 22.04's 5.15, Amazon Linux 2's 5.10) set `buildWorkflows.userNamespaces=false` on the Platform Resources chart — see [Troubleshooting](#build-pods-fail-with-mount_attr_idmap--idmap-mounts-errors) |
+| NetworkPolicy-enforcing CNI | Recommended. The Observability and Evaluation extension charts each ship a `NetworkPolicy` (collector ingress, evaluation-job egress) — inert on a CNI that doesn't implement the NetworkPolicy API. EKS's default VPC CNI, AKS, and legacy GKE don't enforce it out of the box; enable your provider's policy add-on (or install Calico/Cilium) if you want these to actually take effect. k3s (local/CI) enforces it by default. |
+
+### Supported Providers
+
+- **Amazon Web Services** (EKS)
+- **Google Cloud Platform** (GKE)
+- **Microsoft Azure** (AKS)
+- **Red Hat OpenShift** (including Azure Red Hat OpenShift) — see [Appendix: Red Hat OpenShift](#appendix-red-hat-openshift) for the OpenShift-specific settings
+- Any Kubernetes distribution with LoadBalancer support
+
+### Required Tools
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | v1.32+ | Kubernetes CLI |
+| [Helm](https://helm.sh/docs/intro/install/) | v3.12+, **v3 only** | Kubernetes package manager |
+| curl / dig | — | DNS resolution of LoadBalancer hostnames |
+
+```bash
+kubectl version --client && helm version
+```
+
+:::caution Helm 4 is not supported by this guide
+Helm 4 applies charts with Kubernetes server-side apply, where every field has an owner. Several charts below (OpenBao, cert-manager) have controllers that rewrite their own webhook `caBundle` at runtime under a different field manager, so any **re-run** of an install command — including the retries this guide's own troubleshooting recommends — fails with `Apply failed with 1 conflict`. Use Helm 3, or append `--server-side=false` to every `helm install`/`helm upgrade` in this guide.
+:::
+
+Verify LoadBalancer provisioning works before starting — the alternative is discovering it an hour into the install, when the first plane gateway hangs `<pending>`:
+
+```bash
+kubectl create deploy lbtest --image=nginx && kubectl expose deploy lbtest --port=80 --type=LoadBalancer
+kubectl wait --for=jsonpath='{.status.loadBalancer.ingress}' svc/lbtest --timeout=5m && echo "LoadBalancer OK"
+kubectl delete svc/lbtest deploy/lbtest
+```
+
+### Permissions
+
+You need sufficient privileges to:
+- Create namespaces, deploy Helm charts
+- Create LoadBalancer services (only the OpenChoreo plane gateways need them — the Agent Manager services are ClusterIP and are served through those gateways)
+- Manage cert-manager Issuers and Certificates
+- Create CRDs and ClusterRoles
+
+---
+
+## Plan Your Deployment
+
+Three decisions shape the installation. Make them now — everything below is driven by the variables you export here.
+
+### 1. Hostnames
+
+Pick a base domain you control (a delegated subdomain like `amp.yourdomain.com` works well). Every management surface is a hostname on one of the three plane gateway LoadBalancers — after the platform installs, you publish DNS records against just those three targets:
+
+| Hostname | Serves | DNS record → |
+|---|---|---|
+| `console.<base>` | Agent Manager Console | control-plane gateway LB |
+| `api-amp.<base>` | Agent Manager API (browser, `amctl`, MCP) | control-plane gateway LB |
+| `thunder.<base>` | Thunder OAuth login (+ per-environment `<handle>.<base>`, one unguessable host per environment) | control-plane gateway LB |
+| `cp.<base>` | Gateway control plane (external AI gateways, optional) | control-plane gateway LB |
+| `traces.<base>` | Agent Manager Observer | observability-plane gateway LB |
+| `*.agents.<base>` | Deployed-agent invocation endpoints (wildcard) | data-plane gateway LB |
+
+Concretely: `console`/`api-amp`/`thunder`/`cp` all point at the control-plane gateway — via a single required `*.<base>` wildcard, not four separate records (per-environment Thunder hostnames are created after install and are only reachable through that wildcard) — `traces` points at the observability-plane gateway, and `*.agents.<base>` plus the `agents.<base>` apex point at the data-plane gateway. [Step 10](#step-10-publish-dns-records) lists the exact records once the LoadBalancer addresses exist.
+
+Download the release bundle first. Every manifest, values file and script this
+guide applies comes from it, so the install needs no further network access to
+GitHub — which also sidesteps the per-IP rate limiting that makes
+`helm --values <url>` fail with HTTP 429 behind shared or corporate NAT.
+
+```bash
+export VERSION="2026.10.0"
+curl -fsSL -O "https://github.com/wso2/agent-manager/releases/download/amp/v${VERSION}/wso2-agent-manager-${VERSION}.tar.gz"
+tar xzf "wso2-agent-manager-${VERSION}.tar.gz"
+export AMP_DIST="$PWD"
+```
+
+Then the rest of the configuration:
+
+```bash
+export HELM_CHART_REGISTRY="ghcr.io/wso2"
+export AMP_NS="wso2-amp"
+export BUILD_CI_NS="openchoreo-workflow-plane"
+export OBSERVABILITY_NS="openchoreo-observability-plane"
+export DEFAULT_NS="default"
+export DATA_PLANE_NS="openchoreo-data-plane"
+export THUNDER_NS="amp-thunder"
+
+# Your base domain — everything below derives from it
+export BASE_DOMAIN="amp.yourdomain.com"
+
+export CONSOLE_PUBLIC_HOST="console.${BASE_DOMAIN}"
+export API_PUBLIC_HOST="api-amp.${BASE_DOMAIN}"
+export THUNDER_PUBLIC_HOST="thunder.${BASE_DOMAIN}"
+export CP_GW_PUBLIC_HOST="cp.${BASE_DOMAIN}"
+export OBS_API_PUBLIC_HOST="traces.${BASE_DOMAIN}"
+export AGENTS_DOMAIN="agents.${BASE_DOMAIN}"
+
+export CONSOLE_PUBLIC_URL="https://${CONSOLE_PUBLIC_HOST}"
+export API_PUBLIC_URL="https://${API_PUBLIC_HOST}"
+export THUNDER_PUBLIC_URL="https://${THUNDER_PUBLIC_HOST}"
+export OBS_API_PUBLIC_URL="https://${OBS_API_PUBLIC_HOST}"
+
+# In-cluster URL backend services use for Thunder JWKS/token calls
+export THUNDER_INTERNAL_URL="http://amp-thunder-extension-service.${THUNDER_NS}.svc.cluster.local:8090"
+
+# Trace-export endpoint shown to agent developers (see the OTLP note below)
+export INSTRUMENTATION_URL="http://default-default.gateway.localhost:19080/otel"
+```
+
+With a WSO2 subscription or evaluation, also point the charts at your registry project and sign Helm in to `registry.wso2.com`:
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+Nothing to change. The charts come from `ghcr.io/wso2`.
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `2026.10.0` for the release, or `2026.10.0-u<N>` for update N. Phase 2 uses the same username and token to create the image pull secret.
+
+```bash
+export VERSION="<version>"
+export HELM_CHART_REGISTRY="registry.wso2.com/<project>/helm-charts"
+printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
+printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
+```
+
+</TabItem>
+</Tabs>
+
+:::note Hostname shape
+The certificates below are single-level wildcards (`*.<base>`), so every management hostname must sit directly under the base domain — no second-level names like `api.amp.<base>`.
+:::
+
+### 2. TLS certificates
+
+The main flow uses **cert-manager with Let's Encrypt (DNS-01)**: publicly trusted certificates, automatic renewal, and wildcard support — you only need API credentials for the DNS provider hosting your zone. Step 3 also shows a corporate-CA alternative. Certificate issuance needs only the DNS zone, so it works before the DNS records for the gateways exist.
+
+### 3. Decisions you cannot change later
+
+Each install step below carries its production configuration inline, so you can follow the guide top to bottom and end up with a production deployment. Most of those settings can also be applied later against a running platform. **These cannot** — they are written to a database or a certificate on first boot, and changing them afterwards means an uninstall and reinstall of that component:
+
+| Decision | Fixed at | Why it is frozen |
+|---|---|---|
+| Thunder's database (in-pod SQLite vs external PostgreSQL) | [Step 4](#step-4-install-thunder-extension-identity-provider) | Thunder's OAuth clients are seeded into its database by a `pre-install` hook. Pointing Thunder at a different database later gives you an empty one — no clients, no logins — and `helm upgrade` does not re-seed it |
+| Thunder's platform client secrets | [Step 4](#step-4-install-thunder-extension-identity-provider) | Same seeding job; changing a secret afterwards means re-running the bootstrap and updating every consumer in one window |
+| `THUNDER_PUBLIC_URL` and `CONSOLE_PUBLIC_URL` | [Step 4](#step-4-install-thunder-extension-identity-provider) | The issuer URL and the console's OAuth redirect URIs are persisted on first boot |
+| The MCP resource identifiers (`API_PUBLIC_URL`, `OBS_API_PUBLIC_URL`) | [Step 4](#step-4-install-thunder-extension-identity-provider) | Registered as OAuth resource servers by the same seeding job; an identifier is matched exactly, so a later change makes MCP logins fail with `invalid_target` |
+| Thunder replica count > 1 | [Step 4](#step-4-install-thunder-extension-identity-provider) | Requires external PostgreSQL **and** a shared Redis cache — the default in-pod SQLite cannot be shared across pods |
+| Agent Manager's database | [Phase 2](#phase-2-agent-manager-installation) | Switching later is a data migration, not a configuration change |
+| Each environment's gateway topology | [Phase 2](#phase-2-agent-manager-installation) | A gateway's ingress/egress role is written at first registration and never rewritten, so a single-gateway environment cannot be split later — the environment has to be deleted and recreated |
+
+Everything else — OpenSearch sizing, the container registry, gateway hardening, resource quotas, replica counts, isolation tiers — can be changed on a running platform. The [Production Reference](#production-reference) at the end summarises all of it.
+
+### 4. Platform secrets
+
+The charts ship well-known placeholder secrets for the platform's internal OAuth clients and the OpenSearch admin user. Generate real ones now — several are consumed by more than one chart, and the steps below reference these variables by name:
+
+```bash
+export AMP_API_CLIENT_SECRET="$(openssl rand -hex 32)"
+export AMP_SYSTEM_CLIENT_SECRET="$(openssl rand -hex 32)"
+export AMP_PUBLISHER_CLIENT_SECRET="$(openssl rand -hex 32)"
+export AM_OBSERVER_CLIENT_SECRET="$(openssl rand -hex 32)"
+export WORKFLOW_PUBLISHER_SECRET="$(openssl rand -hex 32)"
+export OBSERVER_READER_SECRET="$(openssl rand -hex 32)"
+export OPENSEARCH_USERNAME="admin"
+export OPENSEARCH_PASSWORD="$(openssl rand -base64 24)"
+```
+
+| Variable | Set on | Also consumed by |
+|---|---|---|
+| `AMP_API_CLIENT_SECRET` | Thunder ([Step 4](#step-4-install-thunder-extension-identity-provider)) | Agent Manager, API Platform Gateway extension (Phase 2) |
+| `AMP_SYSTEM_CLIENT_SECRET` | Thunder ([Step 4](#step-4-install-thunder-extension-identity-provider)) | Agent Manager (Phase 2), OpenBao seed ([Step 2](#step-2-set-up-the-secret-stores)) |
+| `AMP_PUBLISHER_CLIENT_SECRET` | Thunder ([Step 4](#step-4-install-thunder-extension-identity-provider)) | OpenBao seed — read by evaluation workflows at runtime |
+| `AM_OBSERVER_CLIENT_SECRET` | Thunder ([Step 4](#step-4-install-thunder-extension-identity-provider)) | Observability extension (Phase 2) |
+| `WORKFLOW_PUBLISHER_SECRET`, `OBSERVER_READER_SECRET` | Thunder ([Step 4](#step-4-install-thunder-extension-identity-provider)) **and** OpenBao seed ([Step 2](#step-2-set-up-the-secret-stores)) | OpenChoreo workflow plane and observer |
+| `OPENSEARCH_USERNAME` / `OPENSEARCH_PASSWORD` | OpenBao seed ([Step 2](#step-2-set-up-the-secret-stores)) | Observability Plane and logs module ([Step 8](#step-8-setup-observability-plane)) |
+
+Keep this shell session for the whole install, and store the values in your secret manager — Thunder's are frozen after [Step 4](#step-4-install-thunder-extension-identity-provider).
+
+:::info OTLP trace ingest
+
+`INSTRUMENTATION_URL` is the trace-export endpoint shown to agent developers; the traffic rides the data-plane gateway's `/otel` route. Agents running inside the cluster can use the default route hostname `http://default-default.gateway.localhost:19080/otel` (resolvable in-cluster). For agents running outside the cluster, install the API Platform Gateway extension with a public hostname whose DNS points at the data-plane gateway LoadBalancer — `--set gateway.vhost=https://otel.${BASE_DOMAIN}` and `--set gateway.hostname=otel.${BASE_DOMAIN}` — and set `INSTRUMENTATION_URL=https://otel.${BASE_DOMAIN}/otel`.
+
+:::
+
+---
+
+## Phase 1: OpenChoreo Platform
+
+OpenChoreo organises its infrastructure into four planes, each handling a different concern:
+
+- **Control Plane** — API server and configuration management for the platform
+- **Data Plane** — runs deployed workloads and API gateways
+- **Workflow Plane** — builds and CI pipelines for agent deployments
+- **Observability Plane** — trace, log, and metrics collection via OpenSearch
+
+This phase also installs Thunder (the identity provider) as a prerequisite, since the Control Plane and Observability Plane require Thunder's OIDC endpoints for JWT validation. **Estimated time: ~20-30 minutes** (varies by cluster and network).
+
+### Step 1: Install Cluster Prerequisites
+
+**Gateway API CRDs (v1.4.1)** — standard Kubernetes resources for managing network gateways and routing:
+
+```bash
+kubectl apply --server-side --force-conflicts \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/experimental-install.yaml
+```
+
+:::info
+The `--force-conflicts` flag is needed if your cluster already has Gateway API CRDs managed by another controller (e.g., Traefik on k3s/Rancher Desktop).
+:::
+
+**cert-manager (v1.19.2)** — automates TLS certificate issuance and renewal:
+
+```bash
+helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --version v1.19.2 \
+  --set crds.enabled=true \
+  --set startupapicheck.timeout=5m \
+  --wait --timeout 360s
+```
+
+**External Secrets Operator (v1.3.2)** — syncs secrets from external stores (like OpenBao) into Kubernetes:
+
+```bash
+helm upgrade --install external-secrets oci://ghcr.io/external-secrets/charts/external-secrets \
+  --namespace external-secrets \
+  --create-namespace \
+  --version 1.3.2 \
+  --set installCRDs=true \
+  --wait --timeout 180s
+```
+
+**kgateway (v2.2.1)** — the network gateway for OpenChoreo planes:
+
+```bash
+helm upgrade --install kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
+  --create-namespace \
+  --namespace openchoreo-control-plane \
+  --version v2.2.1
+
+helm upgrade --install kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+  --namespace openchoreo-control-plane \
+  --create-namespace \
+  --version v2.2.1 \
+  --set controller.extraEnv.KGW_ENABLE_GATEWAY_API_EXPERIMENTAL_FEATURES=true
+```
+
+:::note
+Evaluating on Rancher Desktop / k3s? See the [Rancher Desktop / k3s appendix](#appendix-rancher-desktop--k3s) — Traefik must be removed before this step.
+:::
+
+### Step 2: Set Up the Secret Stores
+
+Every secret the platform stores is reached through the External Secrets Operator, so the backend behind it is a deployment choice rather than something the platform hardcodes. Each OpenChoreo plane names its own store in `secretStoreRef`, which is what lets one plane use a different backend from another.
+
+**OpenBao is required, and this guide installs it.** Agent Manager reads Git credentials for private repositories from OpenBao directly over the Vault API, not through External Secrets, so a store that does not speak that API cannot serve them. That read is what backs the repository and branch pickers in the console.
+
+**The data-plane store is yours to choose.** Deployed agents' environment variables are pushed and pulled entirely through External Secrets, so the data plane can name whichever store you prefer. Both of these are supported:
+
+- **One store for everything.** The data plane also uses `default`, so OpenBao holds every secret on the platform. This is what the rest of this guide assumes, and it is a perfectly good production answer — nothing below is required.
+- **A separate store for the data plane.** Point it at any [provider External Secrets supports](https://external-secrets.io/latest/provider/aws-secrets-manager/) — a cloud provider's secret manager, a separate Vault or OpenBao instance, or anything else in that list. See [using a different secret store for deployed agents](#using-a-different-secret-store-for-deployed-agents) below.
+
+Worth being precise about one thing: OpenBao is itself an External Secrets provider, reached through ESO's `vault` provider like any other backend. The Git-credential read described above is the *only* path on the platform that bypasses External Secrets — so "OpenBao" and "an External Secrets provider" are not alternatives, and choosing a different data-plane store changes the backend, not the mechanism.
+
+| Secrets | Stored for | Backend |
+|---|---|---|
+| Platform OAuth client secrets, OpenSearch credentials | Control, workflow and observability planes | OpenBao (seeded below) |
+| Git credentials for private repositories | Workflow plane, and read directly by Agent Manager | **OpenBao — required** |
+| Build-time secrets (registry push, workload publisher) | Workflow plane | OpenBao |
+| Deployed agents' environment variables | Data plane | OpenBao, or any External Secrets provider |
+
+<Tabs groupId="deployment-mode">
+  <TabItem value="production" label="Production" default>
+
+Install with the chart defaults — persistent file storage on a PVC, sealed at rest:
+
+```bash
+helm upgrade --install openbao oci://ghcr.io/openbao/charts/openbao \
+  --namespace openbao \
+  --create-namespace \
+  --version 0.25.6 \
+  --set server.dataStorage.size=10Gi \
+  --timeout 180s
+
+# A sealed OpenBao never reports Ready, and there is no pod condition that
+# means "running but sealed" — conditions are set before the container starts,
+# so waiting on one races the exec below ('container not found ("openbao")').
+# Poll bao itself: exit 2 = sealed but responding (the state we want here);
+# exit 0 = already unsealed (a re-run); anything else = not up yet.
+until kubectl exec -n openbao openbao-0 -- bao status >/dev/null 2>&1; do
+  [ $? -eq 2 ] && break
+  sleep 5
+done
+```
+
+Initialize and unseal. **Store the unseal keys and root token in your secret manager immediately** — they are displayed once, and without them the data on that PVC is unrecoverable:
+
+```bash
+kubectl exec -n openbao openbao-0 -- bao operator init -key-shares=5 -key-threshold=3
+# Record the 5 unseal keys and the initial root token, then unseal with any 3:
+kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-1>
+kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-2>
+kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-3>
+```
+
+A sealed OpenBao must be unsealed again after every pod restart. For unattended restarts, configure [auto-unseal](https://openbao.org/docs/concepts/seal/) against your cloud KMS through the `server.standalone.config` seal stanza.
+
+Create the KV v2 mount, the Kubernetes auth role the platform expects, and the seeded secrets (dev mode does this automatically; a sealed installation does not):
+
+```bash
+kubectl exec -n openbao openbao-0 -- sh -c "
+export BAO_ADDR=http://127.0.0.1:8200
+export BAO_TOKEN='<root-token>'
+
+bao secrets enable -path=secret -version=2 kv
+bao auth enable kubernetes
+bao write auth/kubernetes/config kubernetes_host=\"https://\$KUBERNETES_PORT_443_TCP_ADDR:443\"
+
+bao policy write openchoreo-secret-reader-policy - <<POLICY
+path \"secret/data/*\" { capabilities = [\"read\"] }
+path \"secret/metadata/*\" { capabilities = [\"list\", \"read\"] }
+POLICY
+
+bao policy write openchoreo-secret-writer-policy - <<POLICY
+path \"secret/data/*\" { capabilities = [\"create\", \"read\", \"update\", \"delete\"] }
+path \"secret/metadata/*\" { capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"] }
+POLICY
+
+bao write auth/kubernetes/role/openchoreo-secret-reader-role \
+  bound_service_account_names=default \
+  bound_service_account_namespaces='dp*' \
+  policies=openchoreo-secret-reader-policy ttl=20m
+
+bao write auth/kubernetes/role/openchoreo-secret-writer-role \
+  bound_service_account_names='*' \
+  bound_service_account_namespaces='openbao,openchoreo-workflow-plane,wso2-amp' \
+  policies=openchoreo-secret-writer-policy ttl=20m
+
+bao kv put secret/workflow-plane-oauth-client-secret value='${WORKFLOW_PUBLISHER_SECRET}'
+bao kv put secret/amp-publisher-client-secret value='${AMP_PUBLISHER_CLIENT_SECRET}'
+bao kv put secret/amp-system-client-secret value='${AMP_SYSTEM_CLIENT_SECRET}'
+bao kv put secret/observer-oauth-client-secret value='${OBSERVER_READER_SECRET}'
+bao kv put secret/opensearch-username value='${OPENSEARCH_USERNAME}'
+bao kv put secret/opensearch-password value='${OPENSEARCH_PASSWORD}'
+"
+```
+
+Finally, mint the token the Agent Manager uses to store agent secrets, and put it in a Secret for [Phase 2](#phase-2-agent-manager-installation):
+
+```bash
+AMP_BAO_TOKEN=$(kubectl exec -n openbao openbao-0 -- sh -c "
+export BAO_ADDR=http://127.0.0.1:8200
+export BAO_TOKEN='<root-token>'
+bao token create -policy=openchoreo-secret-writer-policy -period=768h -format=json" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['auth']['client_token'])")
+
+kubectl create namespace ${AMP_NS} --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic amp-openbao-token -n ${AMP_NS} \
+  --from-literal=openbao-token="${AMP_BAO_TOKEN}" \
+  --from-literal=workflow-plane-openbao-token="${AMP_BAO_TOKEN}"
+```
+
+:::danger The chart defaults to the dev-mode token
+`agentManagerService.config.workflowPlaneOpenbao.token` defaults to **`root`**, which only exists in dev mode. Against a sealed OpenBao that token is rejected, and the platform installs cleanly, passes every health check, and then fails on any operation that reads a Git credential — the repository and branch pickers return an error instead of a list, so an agent cannot be created from a private repository. Phase 2 must reference the Secret created above, and the periodic token needs renewing before its period lapses or those reads start failing again.
+
+The sibling `agentManagerService.config.openbao.*` values are wired into the deployment but read by nothing; deployment secrets travel through the OpenChoreo secret API, which addresses the plane's store rather than OpenBao directly. Set them consistently anyway — they are the obvious lever to reach for, and a future release may put them back to work.
+:::
+
+:::tip Tighten the policies
+The writer policy above grants the whole `secret/*` tree to every service account in three namespaces, matching what the platform expects out of the box. If your security posture requires it, split the platform secrets onto dedicated mounts with per-service-account policies — the paths are referenced by the ExternalSecrets in [Step 8](#step-8-setup-observability-plane) and by the evaluation workflows.
+:::
+
+  </TabItem>
+  <TabItem value="evaluation" label="Evaluation only">
+
+The single-cluster values file runs OpenBao in **dev mode** — in-memory backend, auto-unseal, well-known root token — and seeds the placeholder secrets automatically:
+
+```bash
+helm upgrade --install openbao oci://ghcr.io/openbao/charts/openbao \
+  --namespace openbao \
+  --create-namespace \
+  --version 0.25.6 \
+  --values "${AMP_DIST}/deployments/single-cluster/values-openbao.yaml" \
+  --timeout 180s
+
+kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=openbao -n openbao --timeout=120s
+```
+
+Every secret is lost when the pod restarts, including on node drains: already-running agents keep working, but new deployments fail with `Secret does not exist` until the values are re-entered. Do not use this beyond evaluation.
+
+  </TabItem>
+</Tabs>
+
+Configure the External Secrets ClusterSecretStore (identical either way). It must be named `default` — the build workflow templates reference that name directly, so a store under any other name leaves every build unable to read its Git and registry credentials:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: external-secrets-openbao
+  namespace: openbao
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: default
+spec:
+  provider:
+    vault:
+      server: "http://openbao.openbao.svc:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "openchoreo-secret-writer-role"
+          serviceAccountRef:
+            name: "external-secrets-openbao"
+            namespace: "openbao"
+EOF
+```
+
+#### Using a different secret store for deployed agents
+
+**Optional.** Skip this entire subsection if OpenBao is holding everything — that is the guide's default and needs no extra configuration.
+
+Deployed agents' environment variables are the one class of secret that never passes through the Vault API: Agent Manager hands them to the OpenChoreo secret API, which pushes them into whatever store the **data plane** names and generates the ExternalSecret that reads them back. Both halves go through External Secrets, so this plane can point at [any provider External Secrets supports](https://external-secrets.io/latest/provider/aws-secrets-manager/) — AWS Secrets Manager, GCP Secret Manager and Azure Key Vault are the common choices, but a separate Vault or OpenBao instance works the same way.
+
+The example below uses Google Cloud Secret Manager. Add a second store alongside `default`, using your provider's own authentication:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: dataplane-secrets
+spec:
+  provider:
+    # Replace with your provider's stanza — see the External Secrets provider docs.
+    gcpsm:
+      projectID: "your-project"
+      auth:
+        workloadIdentity:
+          clusterLocation: us-central1
+          clusterName: your-cluster
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets
+EOF
+```
+
+Then name it on the ClusterDataPlane in [Step 6](#step-6-setup-data-plane) — `secretStoreRef.name: dataplane-secrets` in place of `default`. Leave the ClusterWorkflowPlane in [Step 7](#step-7-setup-workflow-plane) on `default`.
+
+:::warning Leave `default` pointing at OpenBao
+It is tempting to repoint `default` at the cloud provider and be done with one store. Two things break, both quietly.
+
+Agent Manager reads Git credentials over the Vault API, so private-repository builds lose the repository and branch pickers in the console — the platform stays healthy and the agent-creation form simply cannot list anything. There is no override; the read has no External Secrets path to fall back to.
+
+The platform's own seeded secrets are also read with remote keys shaped for a KV v2 store — `opensearch-password` and the OAuth client secrets are fetched with `property: value`, while `registry-push-secret` is fetched whole. Reproducing those shapes in another provider is possible but undocumented, and a mismatch surfaces as an ExternalSecret stuck in `SecretSyncedError` rather than as a clear failure.
+:::
+
+### Step 3: Setup TLS Issuer
+
+Every gateway certificate below references one ClusterIssuer named `openchoreo-ca`. Create it from your chosen certificate authority — the rest of the guide is identical regardless of which tab you pick.
+
+<Tabs groupId="tls-issuer">
+  <TabItem value="letsencrypt" label="Let's Encrypt (DNS-01)" default>
+
+DNS-01 validation issues publicly trusted certificates (including the wildcards this guide needs) by writing a TXT record to your DNS zone — the CA never connects to your cluster. Create a credentials Secret for your DNS provider, then the issuer. The example below uses AWS Route 53; cert-manager supports [Cloudflare, Google Cloud DNS, Azure DNS, and others](https://cert-manager.io/docs/configuration/acme/dns01/) with the same structure.
+
+First confirm the zone is actually **delegated** — that the public DNS tree hands queries for it to your provider's nameservers. If it is not (a freshly created zone, or nameservers not yet changed at the registrar or parent zone), cert-manager writes its challenge records into a zone no resolver consults, and every certificate below hangs unissued with no obvious error. Query a public resolver, never the zone's own nameservers — those are authoritative the moment the zone exists, delegated or not:
+
+```bash
+dig +short NS <your-zone> @1.1.1.1   # must return your DNS provider's nameservers
+```
+
+```bash
+kubectl create secret generic route53-credentials \
+  --namespace cert-manager \
+  --from-literal=secret-access-key='<AWS_SECRET_ACCESS_KEY>'
+
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openchoreo-ca
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: ops@yourdomain.com
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-1
+            accessKeyID: <AWS_ACCESS_KEY_ID>
+            secretAccessKeySecretRef:
+              name: route53-credentials
+              key: secret-access-key
+        selector:
+          dnsZones:
+            - "${BASE_DOMAIN}"
+EOF
+```
+
+:::tip
+Test with the Let's Encrypt staging server (`https://acme-staging-v02.api.letsencrypt.org/directory`) first if you expect to iterate — the production server rate-limits duplicate certificates to 5 per week.
+:::
+
+:::note Prefer ambient credentials over a static access key
+On EKS, cert-manager picks up IAM Roles for Service Accounts or Pod Identity credentials automatically — no long-lived access key in a cluster Secret. Bind a role scoped to `route53:ChangeResourceRecordSets`/`ListResourceRecordSets` on your one hosted zone (plus `route53:GetChange` and `ListHostedZonesByName`) to the cert-manager ServiceAccount, and reduce the solver to just `region` and `hostedZoneID`. See [cert-manager's Route 53 documentation](https://cert-manager.io/docs/configuration/acme/dns01/route53/) for the equivalent on other setups.
+:::
+
+  </TabItem>
+  <TabItem value="corporate" label="Corporate CA">
+
+If your organization runs an internal PKI, store its intermediate CA certificate and key as a Secret and create a CA issuer. Clients inside your network trust the certificates via your existing root-CA distribution.
+
+```bash
+kubectl create secret tls corporate-ca-secret \
+  --namespace cert-manager \
+  --cert=/path/to/intermediate-ca.crt \
+  --key=/path/to/intermediate-ca.key
+
+kubectl apply -f - <<'EOF'
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openchoreo-ca
+spec:
+  ca:
+    secretName: corporate-ca-secret
+EOF
+```
+
+  </TabItem>
+  <TabItem value="selfsigned" label="Self-signed (evaluation only)">
+
+For evaluation without a domain, the [nip.io appendix](#appendix-installing-without-a-domain-nipio) creates a self-signed chain under the same `openchoreo-ca` name. Browsers will warn on every hostname and backend components need TLS-verification overrides — do not use this beyond evaluation.
+
+  </TabItem>
+</Tabs>
+
+### Step 4: Install Thunder Extension (Identity Provider)
+
+Thunder provides authentication and user management for the entire platform — login, API keys, and OAuth token exchange. It must be installed before the Control Plane because the Control Plane, Observability Plane, and Agent Manager all validate JWTs issued by Thunder. The browser reaches it at `https://${THUNDER_PUBLIC_HOST}` through the control-plane gateway.
+
+:::danger This step's settings are permanent
+Thunder writes its issuer URL, the console client's redirect URIs, and every platform OAuth client into its database on **first boot**, seeded by a `pre-install` hook that `helm upgrade` never re-runs. The database, the secrets, and the hostnames below are all effectively frozen once this command completes — getting any of them wrong means uninstalling, discarding Thunder's data, and reinstalling. Confirm your values against [Plan Your Deployment](#plan-your-deployment) before running it.
+:::
+
+**Database.** Production installations use an external PostgreSQL. Thunder keeps four logical databases — `configdb`, `entitydb`, `runtime_transient`, and `runtime_persistent` — which can live on one server; create them and a role that owns all four before installing, then **load Thunder's schema into each one**. Nothing in the chart creates the tables for PostgreSQL: the init container only initialises the bundled SQLite files, so an empty database makes the pre-install hook fail.
+
+On a managed service (RDS, Cloud SQL, Azure Database) the admin user is **not a superuser**, and PostgreSQL 16+ only lets it create a database *owned by another role* if it holds membership in that role. Grant it first, or `CREATE DATABASE ... OWNER thunder` fails with `must be able to SET ROLE "thunder"`:
+
+```sql
+CREATE ROLE thunder LOGIN PASSWORD '...';
+GRANT thunder TO CURRENT_USER;  -- required on managed PostgreSQL; harmless elsewhere
+CREATE DATABASE configdb OWNER thunder;  -- likewise entitydb, runtime_transient, runtime_persistent
+```
+
+The same applies to the Agent Manager database role in [Phase 2](#phase-2-agent-manager-installation).
+
+<Tabs groupId="deployment-mode">
+  <TabItem value="production" label="External PostgreSQL" default>
+
+Load the schema first. The scripts ship inside the Thunder image, so copy them out of the version the chart pins and apply each to its database as the owning role:
+
+```bash
+THUNDER_IMAGE="ghcr.io/thunder-id/thunderid:1.0.0"
+docker create --name thunder-schema "${THUNDER_IMAGE}"
+for db in configdb entitydb runtime_transient runtime_persistent; do
+  docker cp "thunder-schema:/opt/thunderid/dbscripts/${db}/postgres.sql" "./thunder-${db}.sql"
+  psql "postgresql://thunder@your-db.example.com:5432/${db}" -v ON_ERROR_STOP=1 -f "./thunder-${db}.sql"
+done
+docker rm thunder-schema
+```
+
+Expect 20 tables in `configdb`, 5 in `entitydb`, 13 in `runtime_transient`, and 7 in `runtime_persistent`. If the databases are empty when you install, the `amp-thunder-extension-setup` hook fails with `Server failed to start within 60 seconds` and its pod is deleted, so `kubectl logs` shows nothing — the real error, visible only by running the binary by hand, is `relation "INBOUND_CLIENT" does not exist`.
+
+Then store the database password in a Secret and reference it, so it never enters Helm release history:
+
+```bash
+kubectl create namespace ${THUNDER_NS} --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic thunder-db-credentials \
+  --namespace ${THUNDER_NS} \
+  --from-literal=password='<THUNDER_DB_PASSWORD>'
+
+export THUNDER_DB_HOST="your-db.example.com"
+
+cat > thunder-db-values.yaml <<EOF
+thunder:
+  configuration:
+    database:
+      config:
+        type: postgres
+        postgres:
+          hostname: "${THUNDER_DB_HOST}"
+          port: "5432"
+          name: configdb
+          username: thunder
+          sslmode: require
+          passwordRef:
+            name: thunder-db-credentials
+            key: password
+      entity:
+        type: postgres
+        postgres:
+          hostname: "${THUNDER_DB_HOST}"
+          port: "5432"
+          name: entitydb
+          username: thunder
+          sslmode: require
+          passwordRef:
+            name: thunder-db-credentials
+            key: password
+      runtime_transient:
+        type: postgres
+        postgres:
+          hostname: "${THUNDER_DB_HOST}"
+          port: "5432"
+          name: runtime_transient
+          username: thunder
+          sslmode: require
+          passwordRef:
+            name: thunder-db-credentials
+            key: password
+      runtime_persistent:
+        type: postgres
+        postgres:
+          hostname: "${THUNDER_DB_HOST}"
+          port: "5432"
+          name: runtime_persistent
+          username: thunder
+          sslmode: require
+          passwordRef:
+            name: thunder-db-credentials
+            key: password
+EOF
+```
+
+Set `sslmode` to `verify-full` instead if your provider gives you a CA to pin.
+
+  </TabItem>
+  <TabItem value="evaluation" label="In-pod SQLite (evaluation only)">
+
+The chart's default keeps all four databases as SQLite files on a 1Gi PVC. It cannot be shared across pods, so Thunder is permanently limited to a single replica, and the data lives and dies with that volume. Write an empty overrides file so the install command below stays the same:
+
+```bash
+echo '{}' > thunder-db-values.yaml
+```
+
+  </TabItem>
+</Tabs>
+
+Install Thunder with the hostnames, the database, and the platform client secrets generated in [Platform secrets](#4-platform-secrets):
+
+```bash
+helm install amp-thunder-extension \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-thunder-extension \
+  --version ${VERSION} \
+  --namespace ${THUNDER_NS} \
+  --create-namespace \
+  --set thunder.ocIngress.hostname="${THUNDER_PUBLIC_HOST}" \
+  --set thunder.configuration.server.publicUrl="${THUNDER_PUBLIC_URL}" \
+  --set thunder.configuration.jwt.issuer="${THUNDER_PUBLIC_URL}" \
+  --set thunder.configuration.gateClient.hostname="${THUNDER_PUBLIC_HOST}" \
+  --set thunder.configuration.gateClient.scheme=https \
+  --set thunder.configuration.gateClient.port=443 \
+  --set "thunder.configuration.cors.allowedOrigins={${CONSOLE_PUBLIC_URL}}" \
+  --set "thunder.bootstrap.ampConsoleClient.redirectUris={${CONSOLE_PUBLIC_URL}/login}" \
+  --set thunder.bootstrap.agentManagerMcpBaseUrl="${API_PUBLIC_URL}" \
+  --set thunder.bootstrap.observerMcpBaseUrl="${OBS_API_PUBLIC_URL}" \
+  --set thunder.bootstrap.ampApiClient.clientSecret="${AMP_API_CLIENT_SECRET}" \
+  --set thunder.bootstrap.ampSystemClient.clientSecret="${AMP_SYSTEM_CLIENT_SECRET}" \
+  --set thunder.bootstrap.ampPublisherClient.clientSecret="${AMP_PUBLISHER_CLIENT_SECRET}" \
+  --set thunder.bootstrap.amObserverClient.clientSecret="${AM_OBSERVER_CLIENT_SECRET}" \
+  --set thunder.bootstrap.workloadPublisherClient.clientSecret="${WORKFLOW_PUBLISHER_SECRET}" \
+  --set thunder.bootstrap.observerResourceReaderClient.clientSecret="${OBSERVER_READER_SECRET}" \
+  --set thunder.ocIngress.https.enabled=false \
+  --values thunder-db-values.yaml \
+  --timeout 1800s
+
+kubectl wait --for=condition=Available \
+  deployment -l app.kubernetes.io/instance=amp-thunder-extension \
+  -n ${THUNDER_NS} --timeout=300s
+```
+
+:::danger Override all six client secrets
+The chart bootstraps **six** OAuth clients, and every one it is not given keeps its shipped default. `workloadPublisherClient` and `observerResourceReaderClient` are easy to miss because their secrets are also seeded into OpenBao in [Step 2](#step-2-set-up-the-secret-stores) — but seeding OpenBao only tells the *consumer*; Thunder still registers the default unless the two `--set` lines above are present.
+
+Leaving them out breaks the platform in two ways at once. The defaults stay valid, so an install that looks hardened still accepts `openchoreo-workload-publisher-secret` and `openchoreo-observer-resource-reader-client-secret`. And because the consumers read the *generated* values from OpenBao, they present a secret Thunder does not have: every agent build fails at the workload-publish step with `Failed to get access token`, from a `401 invalid_client` that never reaches the build log.
+
+When verifying, note the two client families use different token-endpoint auth methods — the four `amp*` clients use HTTP Basic, these two use POST-body credentials. Testing with the wrong method returns `400`, not `401`, which is easy to misread as a rejected credential.
+:::
+
+:::warning Disable Thunder's own local-dev gateway
+`thunder.ocIngress.https.enabled` defaults to `true`. It exists so a local k3d install can reach Thunder over HTTPS without depending on the control plane's own gateway TLS — it stands up a second, dedicated Gateway plus a self-signed "AMP Local Dev CA" certificate, independent of the wildcard certificate this guide creates in [Step 5](#step-5-install-openchoreo-control-plane). On a real cluster this is redundant rather than harmful, since every other plane still gets its own LoadBalancer address — but it is still an unused Gateway and certificate with no purpose here, so turn it off with the `--set` above.
+:::
+
+:::info MCP resource identifiers
+`agentManagerMcpBaseUrl` and `observerMcpBaseUrl` become the OAuth resource-server identifiers Thunder registers for the `/mcp` endpoints. Point them at the externally reachable origins of the API and observer — the same values as `agentManagerService.config.serverPublicURL` and `amObserver.publicUrl` in Phase 2 — because Thunder rejects an authorize request with `invalid_target` unless the `resource` an MCP client asks for matches a registered identifier exactly. See the [MCP server reference](../reference/mcp-server.mdx) for the full set of settings that must move together.
+:::
+
+:::note Scaling Thunder
+`thunder.deployment.replicaCount` can only exceed 1 when Thunder runs on external PostgreSQL **and** a shared cache — the default in-memory cache would leave each replica with its own session state. Configure Redis via `thunder.configuration.cache` per the [Thunder caching guide](https://thunderid.dev/docs/v1.0.x/deployment/production-guidelines/#configure-caching), then raise the replica count on this same install.
+:::
+
+:::warning Changing these values later
+A `helm upgrade` will not change the issuer in issued tokens, the registered redirect URIs, the MCP resource identifiers, or any client secret — those live in Thunder's database, seeded by the pre-install bootstrap job. To change them you must uninstall the chart and discard its data: **delete the PVC** if you used SQLite, or **drop and recreate the four databases** if you used PostgreSQL, then reinstall. Anything already issued against the old issuer stops validating.
+
+Discarding Thunder's data also **re-creates the organization**, and Agent Manager keys its own tenant data on that organization's identifier. Every organization-scoped row it holds — agents, deployments, API keys, gateways, monitors, the per-environment Thunder registration — is left pointing at the previous identifier and becomes invisible. The platform stays up and gives no error: the console reports deployment failures, agent identity resolution fails with `env-thunder not provisioned for this environment`, and the gateway cannot re-register because the environment still holds its ingress slot while the organization's gateway list reads empty.
+
+Treat a Thunder reinstall as a platform-data reset, not a component restart. On anything but a fresh install, discard Agent Manager's database in the same operation and re-run [env-Thunder provisioning](#provision-thunder-identity-provider-for-the-default-environment) and the gateway extension afterwards.
+:::
+
+:::tip Verify
+```bash
+kubectl exec -n ${THUNDER_NS} deploy/amp-thunder-extension-deployment -- \
+  wget -qO- http://localhost:8090/.well-known/openid-configuration 2>/dev/null \
+  | grep -o '"issuer":"[^"]*"'
+# Expected: "issuer":"${THUNDER_PUBLIC_URL}"  (must match your THUNDER_PUBLIC_URL value)
+```
+:::
+
+:::info Console admin password
+This install also generated the console's `admin` password — it is never a shipped default (unlike a plain `admin`/`admin` login, that would be guessable from this chart's own public source), and it is not shown anywhere in this command's output. Retrieve it with:
+
+```bash
+kubectl get secret amp-admin-credentials -n ${THUNDER_NS} -o jsonpath='{.data.password}' | base64 -d
+```
+
+Reused across reinstalls rather than rotated, so this command keeps working later too. See [Identity and Access](#identity-and-access) for what to do with this login before exposing the platform.
+:::
+
+### Step 5: Install OpenChoreo Control Plane
+
+Because the hostnames are fixed up front, the Control Plane installs once with its final configuration. Create the gateway's wildcard certificate first (issuance needs only the DNS zone, not the DNS records):
+
+```bash
+kubectl create namespace openchoreo-control-plane --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: cp-gateway-tls
+  namespace: openchoreo-control-plane
+spec:
+  secretName: cp-gateway-tls
+  issuerRef:
+    name: openchoreo-ca
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.${BASE_DOMAIN}"
+    - "${BASE_DOMAIN}"
+  privateKey:
+    rotationPolicy: Always
+EOF
+
+kubectl wait --for=condition=Ready certificate/cp-gateway-tls \
+  -n openchoreo-control-plane --timeout=300s
+```
+
+The per-environment Thunder hostnames [Phase 2](#provision-thunder-identity-provider-for-the-default-environment) provisions (`<handle>.${BASE_DOMAIN}`) sit directly under `BASE_DOMAIN` with no fixed subdomain segment in between, so `*.${BASE_DOMAIN}` already covers them — no extra `dnsNames` entry is needed for them.
+
+Install the Control Plane with hostnames, TLS, and Thunder OIDC. The OpenChoreo API is deliberately **not** published on the gateway (`openchoreoApi.http.enabled=false`): Agent Manager and the observer call it over cluster DNS, so exposing it would only widen the platform's attack surface.
+
+```bash
+helm upgrade --install openchoreo-control-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-control-plane \
+  --create-namespace \
+  --values - <<EOF
+features:
+  secretManagement:
+    enabled: true
+openchoreoApi:
+  config:
+    server:
+      publicUrl: "http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080"
+  http:
+    enabled: false
+    hostnames:
+      - "api.${BASE_DOMAIN}"
+backstage:
+  enabled: false
+  baseUrl: ""
+  http:
+    hostnames:
+      - ""
+security:
+  oidc:
+    issuer: "${THUNDER_PUBLIC_URL}"
+    wellKnownEndpoint: "${THUNDER_INTERNAL_URL}/.well-known/openid-configuration"
+    jwksUrl: "${THUNDER_INTERNAL_URL}/oauth2/jwks"
+    authorizationUrl: "${THUNDER_PUBLIC_URL}/oauth2/authorize"
+    tokenUrl: "${THUNDER_INTERNAL_URL}/oauth2/token"
+gateway:
+  tls:
+    enabled: true
+    hostname: "*.${BASE_DOMAIN}"
+    certificateRefs:
+      - name: cp-gateway-tls
+EOF
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-control-plane --timeout=300s
+```
+
+:::note Webhook race condition
+If the install fails with `no endpoints available for service "controller-manager-webhook-service"`, this is a known transient race in the OpenChoreo control-plane install. Wait for the control plane deployments to become ready, then rerun the `helm upgrade --install` command.
+```bash
+kubectl wait --for=condition=Available deployment --all \
+  -n openchoreo-control-plane --timeout=300s
+```
+:::
+
+:::tip EKS Users
+EKS LoadBalancers return a hostname instead of an IP — resolve it with `dig` when you publish DNS records later. For internet-facing access, annotate the gateway Service with `service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing`.
+:::
+
+#### Patch the service-account entitlement claim (required with Thunder ≥ 0.45)
+
+Thunder 0.45+ puts the client name in the `client_id` claim (its `sub` is an opaque UUID), but OpenChoreo 1.2.0 extracts service-account entitlements from `sub`, and the chart does not expose the setting. Without this patch, every service-to-service call is **silently unauthorized** — the API returns `200` with empty lists and `403`s while all pods look healthy, and the gateway bootstrap later fails with `Environment 'default' not found`.
+
+```bash
+patched_yaml=$(kubectl get configmap openchoreo-api-config -n openchoreo-control-plane -o yaml   | sed -E "s/claim:[[:space:]]*['\"]?sub['\"]?/claim: client_id/g")
+echo "$patched_yaml" | kubectl apply --server-side --field-manager=helm --force-conflicts -f -
+
+kubectl rollout restart deployment/openchoreo-api -n openchoreo-control-plane
+kubectl rollout status deployment/openchoreo-api -n openchoreo-control-plane --timeout=120s
+
+for binding in $(kubectl get clusterauthzrolebindings.openchoreo.dev -o jsonpath='{.items[*].metadata.name}'); do
+  claim=$(kubectl get clusterauthzrolebinding.openchoreo.dev "$binding" -o jsonpath='{.spec.entitlement.claim}')
+  if [ "$claim" = "sub" ]; then
+    kubectl patch clusterauthzrolebinding.openchoreo.dev "$binding" --type=merge       -p '{"spec":{"entitlement":{"claim":"client_id"}}}'
+  fi
+done
+```
+
+:::note
+Re-apply this patch after any `helm upgrade` of the Control Plane chart — the upgrade reverts both the ConfigMap and the bindings. The same patch is needed a second time for the Observability Plane's `observer-auth-config` in Step 8.
+:::
+
+<details>
+<summary>What the configuration does</summary>
+
+- Backstage disabled (AMP provides its own console)
+- OIDC issuer set to `THUNDER_PUBLIC_URL` (matches the `iss` claim in Thunder-issued JWTs)
+- OIDC JWKS URL points to Thunder's in-cluster service (avoids external DNS dependency, and no TLS-verification overrides are needed since the in-cluster call is plain HTTP)
+- OpenChoreo API kept in-cluster only (`openchoreoApi.http.enabled=false`) — its `publicUrl` is set to the cluster-local service address, and no HTTPRoute is created on the gateway. `openchoreoApi.http.hostnames` is still set to a real hostname even though the route is disabled: the chart validates that value for its `.invalid` placeholder regardless of `enabled`, and refuses to render otherwise. No route is created, so the name is never served — confirm with `kubectl get httproute -A | grep openchoreo-api`
+- Secret management enabled (`features.secretManagement.enabled=true`) — off by default, and required by Agent Manager to store an agent's environment variables. Without it every agent creation fails with a `500`, from an OpenChoreo `501 Secret API is disabled on this server`
+- TLS enabled on the gateway with the wildcard certificate — Thunder, the Console, the Agent Manager API, and the gateway control plane all serve HTTPS under it
+
+</details>
+
+### Step 6: Setup Data Plane
+
+Copy the cluster-gateway CA certificate:
+
+```bash
+kubectl create namespace openchoreo-data-plane --dry-run=client -o yaml | kubectl apply -f -
+
+CA_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+kubectl create configmap cluster-gateway-ca \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-data-plane --dry-run=client -o yaml | kubectl apply -f -
+
+TLS_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.tls\.crt}' | base64 -d)
+TLS_KEY=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.tls\.key}' | base64 -d)
+kubectl create secret generic cluster-gateway-ca \
+  --from-literal=tls.crt="$TLS_CRT" \
+  --from-literal=tls.key="$TLS_KEY" \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-data-plane --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Create the deployed-agents wildcard certificate, then install the Data Plane with TLS in one pass:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dp-gateway-tls
+  namespace: openchoreo-data-plane
+spec:
+  secretName: dp-gateway-tls
+  issuerRef:
+    name: openchoreo-ca
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.${AGENTS_DOMAIN}"
+    - "${AGENTS_DOMAIN}"
+  privateKey:
+    rotationPolicy: Always
+EOF
+
+kubectl wait --for=condition=Ready certificate/dp-gateway-tls \
+  -n openchoreo-data-plane --timeout=300s
+
+helm install openchoreo-data-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-data-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-data-plane \
+  --create-namespace \
+  --set clusterAgent.tls.generateCerts=true \
+  --set gateway.tls.enabled=true \
+  --set "gateway.tls.hostname=*.${AGENTS_DOMAIN}" \
+  --set "gateway.tls.certificateRefs[0].name=dp-gateway-tls" \
+  --set gateway.httpPort=80 \
+  --set gateway.httpsPort=443 \
+  --values "${AMP_DIST}/deployments/single-cluster/values-dp.yaml"
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-data-plane --timeout=600s
+```
+
+:::warning Override the gateway ports
+`values-dp.yaml` and `values-op.yaml` come from the single-cluster **k3d** layout, where every plane shares one host load balancer and therefore cannot all own 443 — they pin the data plane to `19080`/`19443` and the observability plane to `11080`/`11085`. Here each plane has its **own** LoadBalancer address, so the standard ports apply and the `httpPort`/`httpsPort` overrides above are required.
+
+Without them the install still looks completely healthy — pods Running, certificates Ready, gateways `PROGRAMMED=True` — while every URL this guide publishes for those planes points at a port with nothing behind it. Agent invocation, OTLP trace ingest, and `${OBS_API_PUBLIC_URL}` all fail with connection timeouts rather than an error you can read. Verify after each plane install:
+
+```bash
+kubectl get svc gateway-default -n <plane-namespace> -o jsonpath='{.spec.ports[*].port}{"\n"}'
+# Expected: 80 443
+```
+:::
+
+Register the Data Plane:
+
+```bash
+CA_CERT=$(kubectl get secret cluster-agent-tls \
+  -n openchoreo-data-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+
+kubectl apply -f - <<EOF
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterDataPlane
+metadata:
+  name: default
+  namespace: default
+spec:
+  planeID: default
+  clusterAgent:
+    clientCA:
+      value: |
+$(echo "$CA_CERT" | sed 's/^/        /')
+  gateway:
+    ingress:
+      external:
+        name: gateway-default
+        namespace: openchoreo-data-plane
+        http:
+          host: "${AGENTS_DOMAIN}"
+          listenerName: http
+          port: 80
+        https:
+          host: "${AGENTS_DOMAIN}"
+          listenerName: https
+          port: 443
+  secretStoreRef:
+    name: default
+EOF
+```
+
+`secretStoreRef` is where deployed agents' environment variables are stored. Leave it as `default` to keep them in OpenBao, or name the separate store instead if you set one up in [Step 2](#using-a-different-secret-store-for-deployed-agents).
+
+### Step 7: Setup Workflow Plane
+
+Copy the cluster-gateway CA certificate:
+
+```bash
+kubectl create namespace openchoreo-workflow-plane --dry-run=client -o yaml | kubectl apply -f -
+
+CA_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+kubectl create configmap cluster-gateway-ca \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-workflow-plane --dry-run=client -o yaml | kubectl apply -f -
+
+TLS_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.tls\.crt}' | base64 -d)
+TLS_KEY=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.tls\.key}' | base64 -d)
+kubectl create secret generic cluster-gateway-ca \
+  --from-literal=tls.crt="$TLS_CRT" \
+  --from-literal=tls.key="$TLS_KEY" \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-workflow-plane --dry-run=client -o yaml | kubectl apply -f -
+```
+
+:::info Container Registry
+The Workflow Plane needs a container registry to store built agent images. The registry endpoint is configured in **Phase 2 Step 4 (Platform Resources)** via the `global.registry.endpoint` or `global.baseDomain` Helm values. Use a registry with access control — ECR, Artifact Registry, ACR, Harbor — and set `global.defaultResources.registry.tlsVerify=true`; [OpenChoreo's registry guide](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers) covers provider-specific authentication.
+:::
+
+Install the Workflow Plane:
+
+```bash
+helm install openchoreo-workflow-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-workflow-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-workflow-plane \
+  --create-namespace \
+  --set clusterAgent.tls.generateCerts=true \
+  --set argo-workflows.controller.resources.requests.cpu=50m \
+  --set argo-workflows.controller.resources.requests.memory=64Mi \
+  --set argo-workflows.controller.resources.limits.cpu=200m \
+  --set argo-workflows.controller.resources.limits.memory=128Mi \
+  --timeout 600s
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-workflow-plane --timeout=600s
+```
+
+Register the Workflow Plane:
+
+```bash
+BP_CA_CERT=$(kubectl get secret cluster-agent-tls \
+  -n openchoreo-workflow-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+
+kubectl apply -f - <<EOF
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterWorkflowPlane
+metadata:
+  name: default
+  namespace: default
+spec:
+  planeID: default
+  clusterAgent:
+    clientCA:
+      value: |
+$(echo "$BP_CA_CERT" | sed 's/^/        /')
+  secretStoreRef:
+    name: default
+EOF
+```
+
+This plane's `secretStoreRef` holds the Git credentials for private repositories and the build-time secrets, so it stays on `default` — the OpenBao-backed store. Agent Manager reads Git credentials from it over the Vault API rather than through External Secrets, which is why this one is not interchangeable.
+
+### Step 8: Setup Observability Plane
+
+Copy the cluster-gateway CA certificate:
+
+```bash
+kubectl create namespace openchoreo-observability-plane --dry-run=client -o yaml | kubectl apply -f -
+
+CA_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+kubectl create configmap cluster-gateway-ca \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-observability-plane --dry-run=client -o yaml | kubectl apply -f -
+
+TLS_CRT=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.tls\.crt}' | base64 -d)
+TLS_KEY=$(kubectl get secret cluster-gateway-ca \
+  -n openchoreo-control-plane -o jsonpath='{.data.tls\.key}' | base64 -d)
+kubectl create secret generic cluster-gateway-ca \
+  --from-literal=tls.crt="$TLS_CRT" \
+  --from-literal=tls.key="$TLS_KEY" \
+  --from-literal=ca.crt="$CA_CRT" \
+  -n openchoreo-observability-plane --dry-run=client -o yaml | kubectl apply -f -
+```
+
+Create the ExternalSecrets for OpenSearch and Observer credentials:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: opensearch-admin-credentials
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: default
+  target:
+    name: opensearch-admin-credentials
+  data:
+  - secretKey: username
+    remoteRef:
+      key: opensearch-username
+      property: value
+  - secretKey: password
+    remoteRef:
+      key: opensearch-password
+      property: value
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: observer-secret
+  namespace: openchoreo-observability-plane
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: default
+  target:
+    name: observer-secret
+  data:
+  - secretKey: OPENSEARCH_USERNAME
+    remoteRef:
+      key: opensearch-username
+      property: value
+  - secretKey: OPENSEARCH_PASSWORD
+    remoteRef:
+      key: opensearch-password
+      property: value
+  - secretKey: UID_RESOLVER_OAUTH_CLIENT_SECRET
+    remoteRef:
+      key: observer-oauth-client-secret
+      property: value
+EOF
+```
+
+Wait for the ExternalSecrets to sync:
+
+```bash
+kubectl wait -n openchoreo-observability-plane \
+  --for=condition=Ready externalsecret/opensearch-admin-credentials \
+  externalsecret/observer-secret --timeout=60s
+```
+
+Apply the custom OpenTelemetry Collector ConfigMap (required for trace ingestion):
+
+```bash
+kubectl apply -f "${AMP_DIST}/deployments/values/oc-collector-configmap.yaml" \
+  -n openchoreo-observability-plane
+```
+
+The collector reads its OpenSearch credentials from the `opensearch-admin-credentials` Secret through environment variables the tracing module injects, so the generated password flows through without any substitution here.
+
+Create the gateway certificate, then install the Observability Plane:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: obs-gateway-tls
+  namespace: openchoreo-observability-plane
+spec:
+  secretName: obs-gateway-tls
+  issuerRef:
+    name: openchoreo-ca
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.${BASE_DOMAIN}"
+    - "${BASE_DOMAIN}"
+  privateKey:
+    rotationPolicy: Always
+EOF
+
+kubectl wait --for=condition=Ready certificate/obs-gateway-tls \
+  -n openchoreo-observability-plane --timeout=300s
+
+helm install openchoreo-observability-plane \
+  oci://ghcr.io/openchoreo/helm-charts/openchoreo-observability-plane \
+  --version 1.2.0 \
+  --namespace openchoreo-observability-plane \
+  --create-namespace \
+  --set gateway.tls.enabled=true \
+  --set "gateway.tls.hostname=*.${BASE_DOMAIN}" \
+  --set "gateway.tls.certificateRefs[0].name=obs-gateway-tls" \
+  --set clusterAgent.tls.generateCerts=true \
+  --set gateway.httpPort=80 \
+  --set gateway.httpsPort=443 \
+  --set observer.controlPlaneApiUrl="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --set observer.extraEnv.AUTH_SERVER_BASE_URL="${THUNDER_PUBLIC_URL}" \
+  --set security.oidc.jwksUrl="${THUNDER_INTERNAL_URL}/oauth2/jwks" \
+  --set security.oidc.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --values "${AMP_DIST}/deployments/single-cluster/values-op.yaml" \
+  --timeout 25m
+
+kubectl wait --for=condition=Available \
+  deployment --all -n openchoreo-observability-plane --timeout=900s
+
+for sts in $(kubectl get statefulset -n openchoreo-observability-plane -o name 2>/dev/null); do
+  kubectl rollout status "${sts}" -n openchoreo-observability-plane --timeout=900s
+done
+```
+
+With Thunder ≥ 0.45, apply the same entitlement-claim patch from Step 5 to the observer (without it, build-log queries return `403 Access denied`):
+
+```bash
+patched_yaml=$(kubectl get configmap observer-auth-config -n openchoreo-observability-plane -o yaml   | sed -E "s/claim:[[:space:]]*['\"]?sub['\"]?/claim: client_id/g")
+echo "$patched_yaml" | kubectl apply --server-side --field-manager=helm --force-conflicts -f -
+kubectl rollout restart deployment/observer -n openchoreo-observability-plane
+kubectl rollout status deployment/observer -n openchoreo-observability-plane --timeout=120s
+```
+
+Install observability modules (logs, metrics, tracing). The logs module is the chart that deploys OpenSearch itself, so its values decide how much history the platform can hold:
+
+```bash
+# Logs module — deploys OpenSearch
+helm upgrade --install observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --create-namespace \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
+  --set adapter.openSearchSecretName="opensearch-admin-credentials" \
+  --set openSearch.persistence.size=100Gi \
+  --set-string "openSearch.extraEnvs[0].name=OPENSEARCH_INITIAL_ADMIN_PASSWORD" \
+  --set-string "openSearch.extraEnvs[0].value=${OPENSEARCH_PASSWORD}" \
+  --timeout 10m
+
+# Enable Fluent Bit log collection
+# On GKE, disable the managed logging agent first — see the note below
+helm upgrade observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --reuse-values \
+  --set fluent-bit.enabled=true \
+  --timeout 10m
+
+# Metrics module.
+#
+# The values file widens the kube-state-metrics label allowlist. Only labels on
+# that list reach the metrics store, and usage attribution needs them: without
+# it, build and evaluation pods are indistinguishable once collected and their
+# durations are summed into a single figure. It also keeps Prometheus on a
+# ClusterIP Service: the chart defaults to a LoadBalancer, which would put its
+# unauthenticated API on a public IP.
+helm upgrade --install observability-metrics-prometheus \
+  oci://ghcr.io/openchoreo/helm-charts/observability-metrics-prometheus \
+  --create-namespace \
+  --namespace openchoreo-observability-plane \
+  --version 0.6.1 \
+  --values "${AMP_DIST}/deployments/values/observability-metrics-prometheus.yaml" \
+  --timeout 10m
+
+# Tracing module (uses the custom OTel Collector ConfigMap)
+helm upgrade --install observability-traces-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-tracing-opensearch \
+  --create-namespace \
+  --namespace openchoreo-observability-plane \
+  --version 0.6.0 \
+  --set openSearch.enabled=false \
+  --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
+  --set opentelemetry-collector.configMap.existingName="amp-opentelemetry-collector-config" \
+  --timeout 10m
+```
+
+:::warning GKE: free port 2020 before enabling Fluent Bit
+Fluent Bit runs with `hostNetwork: true` (its Kubernetes filter reads from the node-local kubelet) and binds its monitoring server to **port 2020** on every node. GKE's built-in `fluentbit-gke` logging agent already occupies that port, so all Fluent Bit pods stay in `CrashLoopBackOff` with `Cannot listen on 0.0.0.0:2020` — and the only visible symptom is that logs never reach OpenSearch.
+
+The platform ships its own log pipeline, so disable GKE's redundant one before the upgrade above:
+
+```bash
+gcloud container clusters update <cluster> --zone <zone> --logging=NONE
+```
+
+Turning off `hostNetwork` instead is not a workaround — the filter then cannot reach the kubelet and logs fail with `kubelet upstream connection error`.
+:::
+
+:::note Sizing and the admin password
+Two values above differ from the chart defaults. `openSearch.persistence.size` raises the volume from its 8Gi default — size it to your retention needs, since this single-node instance holds every trace, log, and metric the platform stores. The `OPENSEARCH_INITIAL_ADMIN_PASSWORD` override makes OpenSearch's own admin password match the one seeded into OpenBao in [Step 2](#step-2-set-up-the-secret-stores); without it OpenSearch keeps the chart's published default while every client authenticates with yours, and all observability queries fail. Note the capital **S** in `openSearch` — it is the subchart alias, and lowercase `opensearch.*` values are silently ignored.
+
+Both are storage-layer choices you can revisit later: growing the volume needs a storage class with expansion enabled, and moving to a managed OpenSearch is a reindex. See [Production Reference](#observability-storage) for the external-OpenSearch route.
+:::
+
+Register the Observability Plane and link it to other planes:
+
+```bash
+OP_CA_CERT=$(kubectl get secret cluster-agent-tls \
+  -n openchoreo-observability-plane -o jsonpath='{.data.ca\.crt}' | base64 -d)
+
+kubectl apply -f - <<EOF
+apiVersion: openchoreo.dev/v1alpha1
+kind: ClusterObservabilityPlane
+metadata:
+  name: default
+spec:
+  planeID: default
+  clusterAgent:
+    clientCA:
+      value: |
+$(echo "$OP_CA_CERT" | sed 's/^/        /')
+  observerURL: http://observer.openchoreo-observability-plane.svc.cluster.local:8080
+EOF
+
+# Link Data Plane to Observability
+kubectl patch clusterdataplane default -n default --type merge \
+  -p '{"spec":{"observabilityPlaneRef":{"kind":"ClusterObservabilityPlane","name":"default"}}}'
+
+# Link Workflow Plane to Observability
+kubectl patch clusterworkflowplane default -n default --type merge \
+  -p '{"spec":{"observabilityPlaneRef":{"kind":"ClusterObservabilityPlane","name":"default"}}}'
+```
+
+### Step 9: Verify OpenChoreo Installation
+
+Before proceeding to Phase 2, confirm all planes are running:
+
+```bash
+echo "--- Control Plane ---"
+kubectl get pods -n openchoreo-control-plane
+echo "--- Data Plane ---"
+kubectl get pods -n openchoreo-data-plane
+echo "--- Workflow Plane ---"
+kubectl get pods -n openchoreo-workflow-plane
+echo "--- Observability Plane ---"
+kubectl get pods -n openchoreo-observability-plane
+echo "--- Thunder ---"
+kubectl get pods -n amp-thunder
+echo "--- Plane Registrations ---"
+kubectl get clusterdataplane,clusterworkflowplane,clusterobservabilityplane
+```
+
+All pods should be in `Running` or `Completed` state.
+
+### Step 10: Publish DNS Records
+
+The three plane gateways have LoadBalancers now — read their addresses and create the DNS records planned in [Plan Your Deployment](#plan-your-deployment):
+
+```bash
+for ns in openchoreo-control-plane openchoreo-observability-plane openchoreo-data-plane; do
+  printf '%-34s %s\n' "$ns:" \
+    "$(kubectl get svc gateway-default -n $ns \
+        -o jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}')"
+done
+```
+
+| Record | Type | Points to |
+|---|---|---|
+| `*.${BASE_DOMAIN}` | A / CNAME | control-plane gateway address |
+| `traces.${BASE_DOMAIN}` | A / CNAME | observability-plane gateway address |
+| `*.agents.${BASE_DOMAIN}` and `agents.${BASE_DOMAIN}` | A / CNAME | data-plane gateway address |
+
+The `*.${BASE_DOMAIN}` wildcard is **required**, not an alternative to four explicit `console`/`api-amp`/`thunder`/`cp` records. Per-environment Thunder hostnames (`<handle>.${BASE_DOMAIN}`) are created after install and are not known up front, so only the wildcard resolves them. Four explicit records leave every environment's Thunder unreachable while the console and API keep working.
+
+Use A records for IPs (GKE, AKS) and CNAME records for hostnames (EKS). Verify resolution before continuing:
+
+```bash
+dig +short thunder.${BASE_DOMAIN} traces.${BASE_DOMAIN} test.${AGENTS_DOMAIN}
+```
+
+---
+
+## Phase 2: Agent Manager Installation
+
+With OpenChoreo and Thunder running, you can now install the Agent Manager components — the API, console, and extensions that provide the AI agent management capabilities. The commands below are the production variants: an external database for the Agent Manager, the platform client secrets generated in [Platform secrets](#4-platform-secrets), and two replicas of each stateless service.
+
+:::info Have the database ready
+Step 2 expects an existing PostgreSQL database and role for the Agent Manager. Create them before starting — switching afterwards is a data migration rather than a configuration change.
+:::
+
+<AmpInstallation version="${VERSION}" expandRegistryConfig={true} production={true} />
+
+### Wire the Remaining Public Endpoints
+
+Two settings are not covered by the shared installation steps above — apply them once all Phase 2 charts are installed.
+
+**External AI gateway endpoint** — register the `cp.` hostname on the control-plane gateway route and let the console render the right setup commands:
+
+```bash
+helm upgrade amp oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --reuse-values \
+  --set "agentManagerService.ocIngress.gatewayMgmt.hostnames={${CP_GW_PUBLIC_HOST}}" \
+  --set console.config.gatewayControlPlaneUrl="https://${CP_GW_PUBLIC_HOST}"
+```
+
+**Deployed-agent endpoints** — point the default Environment's gateway at the public agents domain (the Environment's setting wholly replaces the data plane's, so without this override agent invoke URLs are built against a placeholder host) and route the workload publisher's token calls in-cluster:
+
+```bash
+helm upgrade amp-platform-resources oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
+  --version ${VERSION} \
+  --namespace ${DEFAULT_NS} \
+  --reuse-values \
+  --set global.oauth.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set environment.gateway.http.host="${AGENTS_DOMAIN}" \
+  --set environment.gateway.http.port=80 \
+  --set environment.gateway.https.host="${AGENTS_DOMAIN}" \
+  --set environment.gateway.https.port=443
+```
+
+:::warning Both variants, each on its own port
+The Environment's gateway binding **wholly replaces** the data plane's, so a partial override silently discards what [Step 6](#step-6-setup-data-plane) wrote rather than merging with it. Set both variants, and give each the port its listener actually serves — `80` for `http`, `443` for `https`, matching the plane gateway.
+
+Putting `443` on the `http` variant is the trap: the console then publishes `http://<host>:443`, an HTTP scheme on the TLS port, and a browser refuses to call it from the HTTPS console as mixed content. Nothing in the platform reports an error, because the gateway and the agent are both fine.
+:::
+
+**Environments you add later** — the override above applies to the default Environment only. Environments created afterwards with [`add-environment.sh`](./environment-management.mdx) read their hostnames from Agent Manager's own config, which still holds the chart's placeholder defaults. Record the same values there so an added environment resolves the way the default one does:
+
+```bash
+helm upgrade amp oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --reuse-values \
+  --set agentManagerService.config.agentsBaseDomain="${AGENTS_DOMAIN}" \
+  --set agentManagerService.config.agentsHttpPort=80 \
+  --set agentManagerService.config.agentsHttpsPort=443 \
+  --set agentManagerService.config.idpHostBaseDomain="${BASE_DOMAIN}" \
+  --set agentManagerService.config.tlsEnabled=true \
+  --set console.config.idpHostBaseDomain="${BASE_DOMAIN}" \
+  --set console.config.tlsEnabled=true
+```
+
+The two ports must match the `environment.gateway.http.port` and `https.port` you set above — the same one-port-per-listener rule, for the same reason. The four Thunder values are equally important: they make the API and Console agree that an environment's identity URL is `https://<handle>.${BASE_DOMAIN}`, rather than the local `amp.localhost` default.
+
+:::warning Creating later environments from the Console on custom TLS installations
+The current Console-generated command carries the Thunder base domain and TLS setting, but not the platform Thunder issuer, public JWKS URL, or CA-trust mode. Those values are required by `add-environment-thunder.sh` on a custom TLS installation. Do not use the Console-generated command for a later environment until the Console runtime configuration is extended to provide those values; this release does not yet provide a supported Console workflow for that case.
+:::
+
+Skip this and added environments still install, but their agents are published on `am-gateway.localhost`: the console shows an empty invoke URL and try-out returns `405` against its own host. The symptom appears only when you create a second environment, long after this step.
+
+:::note Publishing added environments' gateways
+Each added environment also gets its own API Platform Gateway at `<env>-<org>.<gatewayBaseDomain>`, which carries that environment's OTel ingest and LLM-proxy endpoints. Those stay in-cluster unless you gave the gateway a public hostname (see [`INSTRUMENTATION_URL`](#1-hostnames)) — deployed agents reach the runtime in-cluster either way, so this only matters for callers outside the cluster.
+
+If you did, record it too, so added environments publish a reachable URL rather than a `localhost` one. Run this instead of the command above — it carries the same three agent settings plus the gateway ones:
+
+```bash
+helm upgrade amp oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --reuse-values \
+  --set agentManagerService.config.agentsBaseDomain="${AGENTS_DOMAIN}" \
+  --set agentManagerService.config.agentsHttpPort=80 \
+  --set agentManagerService.config.agentsHttpsPort=443 \
+  --set agentManagerService.config.gatewayBaseDomain="otel.${BASE_DOMAIN}" \
+  --set agentManagerService.config.gatewayVhostScheme=https \
+  --set agentManagerService.config.gatewayVhostPort=443 \
+  --set agentManagerService.config.idpHostBaseDomain="${BASE_DOMAIN}" \
+  --set agentManagerService.config.tlsEnabled=true \
+  --set console.config.idpHostBaseDomain="${BASE_DOMAIN}" \
+  --set console.config.tlsEnabled=true
+```
+
+That needs a `*.otel.${BASE_DOMAIN}` DNS record and gateway certificate coverage — and, per [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592), adding that wildcard makes `otel.${BASE_DOMAIN}` an empty non-terminal that a broader `*.${BASE_DOMAIN}` stops covering, so keep an explicit record for it. Env-Thunder does not need a corresponding nested wildcard: each handle sits directly under `${BASE_DOMAIN}` and is already covered by `*.${BASE_DOMAIN}`.
+:::
+
+### Provision Thunder Identity Provider for the Default Environment
+
+Every Environment needs its own dedicated Thunder ID instance. This is separate from the platform Thunder installed in Phase 1, which only handles console and API login. This instance is what issues each agent its own OAuth2 credential (AgentID) in that Environment. Run this once for the default Environment: agents can still be created without it, but they will never get an AgentID there, since there is no Thunder instance to provision one against, and Agent Manager will keep retrying and failing in the background. Run it after Agent Manager (`amp`) is installed and reachable at `API_PUBLIC_URL`, since this step registers the generated credential with the Agent Manager API.
+
+Pick the tab matching your [Step 3](#step-3-setup-tls-issuer) issuer choice — the CA trust setting below only differs by that choice, nothing else changes.
+
+:::note Pass the platform client secret
+`IDP_CLIENT_SECRET` defaults to the **shipped** `amp-api-client-secret`, so the script fails with `Could not obtain an access token to call agent-manager-service` on any install that generated real secrets in [Platform secrets](#4-platform-secrets). Passing `${AMP_API_CLIENT_SECRET}` as below is what makes the two steps consistent. The script stores its own generated system-client secret before that call, so a failure here leaves work half-done — rerun it once the credentials are right.
+::: (Self-signed evaluation installs: see difference 5 in the [nip.io appendix](#appendix-installing-without-a-domain-nipio).)
+
+<Tabs groupId="tls-issuer">
+  <TabItem value="letsencrypt" label="Let's Encrypt (DNS-01)" default>
+
+Platform Thunder's certificate comes from a real, publicly-trusted CA, so env-Thunder's container trust store already trusts it — no custom CA bundle needs to be fetched or mounted.
+
+```bash
+ENV_NAME=default \
+DISPLAY_NAME="Default" \
+ORG_NAME=default \
+THUNDER_HANDLE=default-idp \
+WAIT_TIMEOUT=300s \
+AMP_API_URL="${API_PUBLIC_URL}/api/v1" \
+IDP_TOKEN_URL="${THUNDER_PUBLIC_URL}/oauth2/token" \
+IDP_CLIENT_ID=amp-api-client \
+IDP_CLIENT_SECRET="${AMP_API_CLIENT_SECRET}" \
+PLATFORM_THUNDER_ISSUER="${THUNDER_PUBLIC_URL}" \
+PLATFORM_THUNDER_JWKS_URL="${THUNDER_PUBLIC_URL}/oauth2/jwks" \
+THUNDER_HOST_BASE_DOMAIN="${BASE_DOMAIN}" \
+TLS_ENABLED=true \
+SKIP_CA_BUNDLE_TRUST=true \
+bash "${AMP_DIST}/deployments/scripts/add-environment-thunder.sh"
+```
+
+  </TabItem>
+  <TabItem value="corporate" label="Corporate CA">
+
+`SKIP_CA_BUNDLE_TRUST` does **not** apply here — that flag only skips the fetch when omitted, it doesn't mount your own CA. Pass your CA directly instead, extracted live from the running certificate rather than guessed from a secret name (the `corporate-ca-secret` you created in Step 3 stores only `tls.crt`/`tls.key`, not a separate `ca.crt` key):
+
+```bash
+PLATFORM_THUNDER_CA_PEM="$(echo | openssl s_client -connect "${THUNDER_PUBLIC_HOST}:443" \
+  -servername "${THUNDER_PUBLIC_HOST}" -showcerts 2>/dev/null \
+  | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/{print}')"
+```
+
+`PLATFORM_THUNDER_CA_PEM` only gets mounted into env-Thunder's own pod, for its in-cluster JWKS check. It does nothing for the `curl` call this script itself makes from **your** machine to `IDP_TOKEN_URL` a moment later, and that call is just as HTTPS as everything else here. Trust the CA locally too, or that call fails with the same "unable to get local issuer certificate" error a browser would show:
+
+```bash
+CURL_CA_BUNDLE="$(mktemp)"
+if [ -f /etc/ssl/cert.pem ]; then
+  SYSTEM_CA_BUNDLE=/etc/ssl/cert.pem                        # macOS
+elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+  SYSTEM_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt       # Debian/Ubuntu
+else
+  echo "Could not find a system CA bundle at /etc/ssl/cert.pem or /etc/ssl/certs/ca-certificates.crt. Find yours and set SYSTEM_CA_BUNDLE to it manually." >&2
+  exit 1
+fi
+cat "${SYSTEM_CA_BUNDLE}" > "${CURL_CA_BUNDLE}"
+echo "${PLATFORM_THUNDER_CA_PEM}" >> "${CURL_CA_BUNDLE}"
+export CURL_CA_BUNDLE
+```
+
+Keeping your system bundle in there too (rather than only the one CA) matters because this script also fetches a public CA bundle from `curl.se` over plain HTTPS, and pointing `CURL_CA_BUNDLE` at just your corporate CA would break that unrelated call.
+
+```bash
+ENV_NAME=default \
+DISPLAY_NAME="Default" \
+ORG_NAME=default \
+THUNDER_HANDLE=default-idp \
+WAIT_TIMEOUT=300s \
+AMP_API_URL="${API_PUBLIC_URL}/api/v1" \
+IDP_TOKEN_URL="${THUNDER_PUBLIC_URL}/oauth2/token" \
+IDP_CLIENT_ID=amp-api-client \
+IDP_CLIENT_SECRET="${AMP_API_CLIENT_SECRET}" \
+PLATFORM_THUNDER_ISSUER="${THUNDER_PUBLIC_URL}" \
+PLATFORM_THUNDER_JWKS_URL="${THUNDER_PUBLIC_URL}/oauth2/jwks" \
+PLATFORM_THUNDER_CA_PEM="${PLATFORM_THUNDER_CA_PEM}" \
+THUNDER_HOST_BASE_DOMAIN="${BASE_DOMAIN}" \
+TLS_ENABLED=true \
+bash "${AMP_DIST}/deployments/scripts/add-environment-thunder.sh"
+```
+
+  </TabItem>
+</Tabs>
+
+Both commands above register `default-idp` as this Environment's handle.
+`THUNDER_HANDLE` is optional (3-63 characters); change it or omit it to have
+Agent Manager generate one instead. The script prints the resulting issuer as
+`https://<handle>.${BASE_DOMAIN}`.
+
+:::info
+Only the Let's Encrypt path can use `SKIP_CA_BUNDLE_TRUST=true` — it's specifically for a certificate that's already backed by a CA every trust store already knows. For a Corporate CA, that flag doesn't help you: setting it to `true` skips the fetch outright, and simply omitting it falls back to the script's own auto-detect, which looks for a secret named `amp-local-root-ca-secret` — a name the Corporate CA tab in Step 3 never creates. `PLATFORM_THUNDER_CA_PEM` sidesteps that entirely by pulling whatever certificate is actually being served, live, regardless of what you named things, but it only solves trust *inside the cluster*. The `CURL_CA_BUNDLE` step above is a separate fix for trust on **your own machine**, where this script's own `curl` calls run. (Running with the self-signed evaluation chain? See the [nip.io appendix](#appendix-installing-without-a-domain-nipio).)
+:::
+
+:::tip Verify
+```bash
+kubectl get pods -n amp-thunder-default-default
+# All pods should be Running
+
+kubectl get secret amp-thunder-default-default-admin-credentials \
+  -n amp-thunder-default-default -o jsonpath='{.data.password}' | base64 -d
+# Prints the env-Thunder console admin password for this Environment — save it,
+# it is not shown again
+```
+:::
+
+Safe to re-run: the system-client secret and admin password are reused, never rotated.
+
+### Point the Gateway at the Environment's Thunder
+
+The gateway extension was installed before this Environment's Thunder existed, so it has no way to validate the tokens that Thunder issues. Wire it now that the issuer is known — this registers Thunder both as a gateway key manager (JWT validation for deployed agents) and as an identity provider visible in the console:
+
+```bash
+export ENV_THUNDER_RELEASE="amp-thunder-default-default"
+export ENV_THUNDER_ISSUER="<the Issuer URL printed by add-environment-thunder.sh above>"
+export ENV_THUNDER_JWKS="http://${ENV_THUNDER_RELEASE}-service.${ENV_THUNDER_RELEASE}.svc.cluster.local:8090/oauth2/jwks"
+
+helm upgrade api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --reuse-values \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[0].name=agent-manager-service" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[0].issuer=agent-manager-service" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[0].jwks.remote.uri=http://amp-api.${AMP_NS}.svc.cluster.local:9000/auth/external/jwks.json" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[0].jwks.remote.skipTlsVerify=true" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[1].name=ThunderKeyManager" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[1].issuer=${ENV_THUNDER_ISSUER}" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[1].jwks.remote.uri=${ENV_THUNDER_JWKS}" \
+  --set "apiGateway.config.policyConfigurations.jwtauth_v1.keymanagers[1].jwks.remote.skipTlsVerify=false" \
+  --set "bootstrap.identityProviders[0].name=ThunderKeyManager" \
+  --set "bootstrap.identityProviders[0].issuer=${ENV_THUNDER_ISSUER}" \
+  --set "bootstrap.identityProviders[0].jwksUri=${ENV_THUNDER_JWKS}" \
+  --set "bootstrap.identityProviders[0].skipTlsVerify=false" \
+  --timeout 900s
+```
+
+Both key managers must be listed. Helm's `--set` on an indexed array replaces the whole list, so re-stating `keymanagers[0]` is what keeps the internal `agent-manager-service` entry that API-key authentication relies on.
+
+:::warning Without this, agents cannot accept OAuth tokens
+Skipping this step leaves the gateway with only its internal key manager. Agents still work with API keys, so the platform looks complete — but no agent endpoint can validate a Thunder-issued OAuth token, and the console's gateway page shows *No identity providers configured* with nothing to explain why.
+:::
+
+:::note The controller restarts, and its volume is single-attach
+This upgrade rolls the gateway controller. Its data volume is `ReadWriteOnce`, so on a multi-node cluster the replacement pod may be scheduled to a different node and block with `Multi-Attach error for volume`, leaving the `APIGateway` at `Programmed=False` indefinitely. Delete the old controller pod to release the volume; the new one then starts and the gateway returns to `Ready`.
+
+```bash
+kubectl get pods -n ${DATA_PLANE_NS} | grep gateway-controller
+# If two are listed and one is stuck ContainerCreating, delete the older Running pod
+kubectl delete pod <old-gateway-controller-pod> -n ${DATA_PLANE_NS}
+```
+:::
+
+---
+
+## Verify and Access the Platform
+
+Run a full status check to confirm everything is running:
+
+```bash
+# All pods across key namespaces
+kubectl get pods -n openchoreo-control-plane
+kubectl get pods -n openchoreo-data-plane
+kubectl get pods -n openchoreo-workflow-plane
+kubectl get pods -n openchoreo-observability-plane
+kubectl get pods -n wso2-amp
+kubectl get pods -n amp-thunder
+# Helm releases
+helm list -A | grep -E 'openchoreo|amp|gateway'
+```
+
+### Via the Plane Gateways
+
+Everything is hostname-routed through the three plane gateway LoadBalancers, over TLS:
+
+| Service | URL |
+|---------|-----|
+| **Agent Manager Console** | `https://${CONSOLE_PUBLIC_HOST}` |
+| **Agent Manager API** | `https://${API_PUBLIC_HOST}` |
+| **Thunder (OAuth login)** | `https://${THUNDER_PUBLIC_HOST}` |
+| **Agent Manager Observer** | `https://${OBS_API_PUBLIC_HOST}` |
+| **Gateway control plane** | `https://${CP_GW_PUBLIC_HOST}` |
+
+Open the Console, log in, then create → build → deploy an agent; its invoke URL is published under `https://<org>-<project>.${AGENTS_DOMAIN}`.
+
+Port-forwarding remains available as a debugging fallback for any individual service (all Agent Manager services are ClusterIP), e.g. `kubectl port-forward -n wso2-amp svc/amp-console 3000:3000`.
+
+**Admin login:** username `admin`, with a generated password retrieved from the `amp-admin-credentials` Secret — bootstrap only; replace before exposing the platform (see [Identity and Access](#identity-and-access)).
+
+---
+
+## Cloud Provider Notes
+
+<details>
+<summary>AWS EKS</summary>
+
+- LoadBalancers return a **hostname** instead of an IP — use `dig` to resolve
+- For internet-facing access, annotate LoadBalancer services:
+  ```yaml
+  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+  ```
+- Ensure security groups allow HTTP/HTTPS traffic
+
+</details>
+
+<details>
+<summary>Google Cloud Platform (GKE)</summary>
+
+- LoadBalancers return IPs directly — no special handling needed
+- Ensure firewall rules allow HTTP/HTTPS traffic to LoadBalancers
+
+</details>
+
+<details>
+<summary>Microsoft Azure (AKS)</summary>
+
+- LoadBalancers return IPs directly — no special handling needed
+- Ensure Network Security Groups allow HTTP/HTTPS traffic
+
+</details>
+
+<details>
+<summary>Red Hat OpenShift (including ARO)</summary>
+
+- OpenShift's Security Context Constraints, built-in monitoring and DNS need extra settings at several steps — follow [Appendix: Red Hat OpenShift](#appendix-red-hat-openshift) alongside the main flow
+- On ARO, LoadBalancers return public IPs directly and `managed-csi` is the default StorageClass
+
+</details>
+
+---
+
+## Production Reference
+
+Following the steps above with the **Production** tab selected at each choice already gives you a production deployment: real hostnames, trusted wildcard TLS, every surface behind the three plane gateways, the OpenChoreo API kept in-cluster, generated platform secrets, external databases, and sealed secret storage.
+
+This section is the other half — the checklist to audit an install against, plus the operational concerns that belong to no single step. Agent Manager runs on [OpenChoreo](https://openchoreo.dev), and for the components OpenChoreo owns its documentation is the authoritative reference; its [production configuration index](https://openchoreo.dev/docs/getting-started/try-it-out/on-your-environment/#production-configuration) collects the relevant pages. This guide targets a **single-cluster** deployment — OpenChoreo's multi-cluster topology material is out of scope here.
+
+### Checklist
+
+Work down this table against an existing install. The **When** column matters: the first four rows cannot be corrected without reinstalling the component, so verify them before going live.
+
+| Item | Where | When it can be applied |
+|---|---|---|
+| Thunder on external PostgreSQL | [Step 4](#step-4-install-thunder-extension-identity-provider) | Install only |
+| Thunder platform client secrets are not the shipped defaults | [Step 4](#step-4-install-thunder-extension-identity-provider) | Install only |
+| Thunder issuer and console redirect URIs are the final hostnames | [Step 4](#step-4-install-thunder-extension-identity-provider) | Install only |
+| Agent Manager on external PostgreSQL | [Phase 2](#phase-2-agent-manager-installation) | Install (migration afterwards) |
+| OpenBao sealed, persistent, and unseal keys escrowed | [Step 2](#step-2-set-up-the-secret-stores) | Any time — re-seeding required |
+| OpenSearch volume sized to retention, admin password matches OpenBao | [Step 8](#step-8-setup-observability-plane) | Any time |
+| Container registry is yours, with `tlsVerify=true` | [Phase 2](#phase-2-agent-manager-installation) | Any time — affects new builds |
+| Console admin's generated bootstrap password replaced by real users or a connected IdP | [Identity](#identity-and-access) | Any time |
+| JWT signature verification active on the API and the observer | [Identity](#identity-and-access) | Any time |
+| Gateway development mode off with encryption keys configured | [Gateway hardening](#gateway-hardening) | Both are set during installation |
+| Post-upgrade patches re-applied | [After a chart upgrade](#after-a-chart-upgrade) | After every relevant `helm upgrade` |
+| Build workloads bounded by a node pool or ResourceQuota | [Build workflows](#build-workflows) | Any time |
+| Stateless services running multiple replicas | [High availability](#high-availability-and-scaling) | Any time |
+| NetworkPolicies, RBAC, and Pod Security Standards applied | [Cluster security](#certificates-and-cluster-security) | Any time |
+| Stronger isolation tier chosen where agents run untrusted code | [Agent isolation](#agent-isolation) | Any time, per environment |
+| Only the three plane gateways are LoadBalancer Services | [Step 8](#step-8-setup-observability-plane) | Any time |
+
+The only LoadBalancer Services should be the `gateway-default` Service of each of the three planes. Anything else in this list is reachable from outside the cluster, so convert it to `ClusterIP`:
+
+```bash
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+```
+
+### After a chart upgrade
+
+Three settings in this guide are applied with `kubectl` on top of what Helm renders, and **any** `helm upgrade` of the owning chart reverts them — including upgrades that have nothing to do with authentication. The symptoms are quiet: `200` responses with empty lists, or a `403` on build logs, while every pod stays healthy. After upgrading the Control Plane or the Observability Plane, re-apply:
+
+| Patch | Owning chart | Symptom when missing |
+|---|---|---|
+| `openchoreo-api-config` entitlement claim ([Step 5](#patch-the-service-account-entitlement-claim-required-with-thunder--045)) | Control Plane | Service calls return `200` with empty lists; gateway bootstrap cannot find the environment |
+| `ClusterAuthzRoleBinding` entitlement claims ([Step 5](#patch-the-service-account-entitlement-claim-required-with-thunder--045)) | Control Plane | Same as above |
+| `observer-auth-config` entitlement claim ([Step 8](#step-8-setup-observability-plane)) | Observability Plane | Build-log queries return `403` |
+
+Two cautions learned the hard way. Because these use `kubectl patch`/`apply`, the field manager takes ownership of the patched fields, so the *next* `helm upgrade` of that chart can fail outright with a conflict such as `conflict with "kubectl-patch" using openchoreo.dev/v1alpha1: .spec.entitlement.claim`. And the obvious recovery — deleting the objects so Helm recreates them — is unsafe for the ClusterAuthzRoleBindings, because the set spans two charts: `amp-platform-resources` owns `amp-api-client-binding` and `amp-observer-reader-binding`, which the Control Plane chart will not recreate. Losing `amp-api-client-binding` silently empties every organization and agent list in the console. Re-create them from their own chart with `helm get manifest amp-platform-resources -n ${DEFAULT_NS}` rather than deleting blindly.
+
+### Identity and Access
+
+The console's `admin` login is not something you set on a production install: leave `thunder.setup.admin.password` unset (the guidance in [Step 4](#step-4-install-thunder-extension-identity-provider) does) and Thunder's chart generates its password itself at install time — a random 10-character value, stored in the `amp-admin-credentials` Secret in the Thunder namespace, reused across reinstalls rather than rotated — so there is never a shipped default to leave unchanged. This is different from the quick-start and VM installers, which set that same field to a fixed, memorable password on purpose, since those install onto a machine only the operator reaches. Retrieve the real value in effect either way with:
+
+```bash
+kubectl get secret amp-admin-credentials -n ${THUNDER_NS} -o jsonpath='{.data.password}' | base64 -d
+```
+
+Log in with it once, then go to the user profile menu in the console and set your own password before doing anything else — this seeded login is for bootstrap only, not a credential to keep using. Beyond that, create real users in Thunder or connect your organization's identity provider before exposing the platform — see ThunderID's [Manage Users](https://thunderid.dev/docs/v1.0.x/guides/users/manage-users/) and [Manage Identity Providers](https://thunderid.dev/docs/v1.0.x/guides/identity-providers/manage-identity-providers/) guides. This is separate from [Configure Identity Providers at the Gateway](./configure-identity-providers-at-the-gateway.mdx), which covers the issuers a gateway trusts for agent endpoints.
+
+Each environment also gets its own Thunder instance, provisioned in Phase 2, which issues agents their OAuth credentials in that environment. Those are separate installations from the platform Thunder; its admin password is generated once at provisioning and shown only in the verify step, so capture it into your secret manager then. Apply the same database and credential hygiene per environment.
+
+There is no first-class rotation flow for the platform's internal client secrets yet: because Thunder seeds them through a `pre-install` hook, changing one means re-running the bootstrap and updating every consumer in the same maintenance window. Treat them as install-time values and protect them accordingly.
+
+#### Confirm JWT signature verification is active
+
+Both the Agent Manager API and the observer carry a **development-only** path that decodes a token's payload without verifying its signature. Leaving that active on an exposed deployment would let anyone forge a token, so it is worth confirming explicitly even though it is off by default.
+
+Neither service is at risk with the values this guide sets. The API takes the bypass only when its JWKS URL is empty **and** `IS_LOCAL_DEV_ENV` is `true`; that variable defaults to `false`, the chart does not set it on the API deployment, and the install above sets `agentManagerService.config.keyManager.jwksUrl` explicitly. With a JWKS URL configured it always verifies, and with neither configured it rejects the request outright rather than falling back. The observer is guarded in the chart: `amObserver.auth.isLocalDevEnv` defaults to `false`, and while it is false the chart refuses to render unless `auth.jwksUrl`, `auth.issuer`, and `auth.audience` are all set.
+
+The checks are therefore that nothing has switched the bypass on, and that the JWKS URLs point at your Thunder:
+
+```bash
+# Neither should report "true"
+kubectl get deploy amp-api -n ${AMP_NS} \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="IS_LOCAL_DEV_ENV")].value}{"\n"}'
+kubectl get deploy amp-observer -n ${OBSERVABILITY_NS} \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="IS_LOCAL_DEV_ENV")].value}{"\n"}'
+
+# The JWKS URL should be your Thunder instance
+kubectl get configmap -n ${AMP_NS} -o yaml | grep -i KEY_MANAGER_JWKS_URL
+```
+
+Empty output from the first two commands is the expected, secure result — the variable is simply not set. The `amp-db-migration` job does set `IS_LOCAL_DEV_ENV=true`, which is harmless: it runs the binary with `-migrate -server=false`, so it serves no requests and validates no tokens.
+
+### External Dependencies
+
+The install steps carry the values; these are the reference pages behind them.
+
+| Dependency | Reference |
+|---|---|
+| Thunder identity | [Thunder production guidelines](https://thunderid.dev/docs/v1.0.x/deployment/production-guidelines/) — database, TLS, encryption keys, CORS, [caching](https://thunderid.dev/docs/v1.0.x/deployment/production-guidelines/#configure-caching) |
+| Secret management | [OpenChoreo secret management](https://openchoreo.dev/docs/platform-engineer-guide/secret-management/), [OpenBao auto-unseal](https://openbao.org/docs/concepts/seal/) |
+| Observability storage | [OpenChoreo observability and alerting](https://openchoreo.dev/docs/platform-engineer-guide/observability-alerting/) |
+| Container registry | [OpenChoreo registry configuration](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers) |
+| API Platform Gateway | [High-availability production deployment](https://wso2.com/api-platform/docs/api-gateway/1.1.0/deployment/high-availability-production-deployment/), [database configuration](https://wso2.com/api-platform/docs/api-gateway/1.1.0/deployment/production-deployment/database-configuration/) |
+| AI Gateway | [Kubernetes deployment with the gateway operator](https://wso2.com/api-platform/docs/ai-gateway/1.1.0/deployment-modes/kubernetes/gateway-operator/) |
+
+#### Observability storage
+
+To move off the in-cluster OpenSearch entirely, point the observability modules at a managed domain instead of letting the logs module deploy one: install it with `openSearch.enabled=false` and set the endpoint and credentials the modules and observer use through the `opensearch-admin-credentials` secret created in [Step 8](#step-8-setup-observability-plane). Existing data does not follow automatically — moving a running platform is a reindex, so prefer deciding this before trace volume accumulates.
+
+Metrics come from the in-cluster Prometheus deployed by the metrics module; for retention and alerting beyond its defaults, see the OpenChoreo observability guide above.
+
+### Gateway Hardening
+
+The gateway extension provisions one gateway per environment and ships with `developmentMode: true`, which relaxes several security checks. The production install in [Phase 2](#phase-2-agent-manager-installation) already sets `developmentMode=false` and provisions the encryption key the gateway needs, so a gateway installed by following this guide starts hardened — there is nothing to turn off afterwards.
+
+If you inherited a gateway that was installed with development mode on, turn it off in place:
+
+```bash
+helm upgrade api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --reuse-values \
+  --set developmentMode=false \
+  --timeout 1800s
+```
+
+Encryption keys are **not** part of that decision. The gateway requires them whichever way `developmentMode` is set, which is why the key Secret is created before the operator is installed. If the upgrade above fails with `encryptionKeys must be enabled: at-rest encryption is mandatory`, the key is missing — create it and wire it through the operator as [Step 1](#phase-2-agent-manager-installation) describes, then retry.
+
+:::note Configure the gateway through the operator, not the rendered ConfigMap
+Any gateway chart value can be set through the operator's `gateway.values` passthrough, which the operator merges into the values it deploys the gateway with:
+
+```bash
+--set gateway.values.gateway.controller.<setting>=<value>
+```
+
+The extension also renders a `<release>-config` ConfigMap holding those values, and editing it directly looks like a shortcut. It is not: `kubectl apply` takes ownership of `.data.values.yaml`, so the next `helm upgrade` of the extension fails with a field-manager conflict, and recovery means deleting the ConfigMap so Helm can recreate it. Set values on the operator instead.
+:::
+
+:::warning A gateway that fails its first install stays failed
+If the gateway stack cannot start on first install — a missing encryption key is the usual cause — the operator exhausts its retry budget and **persists that state**. Correcting the values afterwards changes nothing on its own: the `APIGateway` stays `Programmed=False` with `Max retries (10) exceeded`, through operator restarts and re-reconciles, and its Helm sub-release is left in `pending-install`.
+
+Recovery is to clear both halves: `helm uninstall <release>-gw` to remove the wedged sub-release, then delete the `APIGateway` resource and `helm upgrade` the extension to re-render it. It reconciles to `Ready` within a minute once both are gone.
+:::
+
+Verify the gateway actually registered, rather than only that it is running:
+
+```bash
+kubectl get apigateway -n ${DATA_PLANE_NS}
+# expect PROGRAMMED=True
+```
+
+A gateway can be `Programmed=True` with both pods healthy and still not be registered with Agent Manager — it then never appears in the console's gateway list and cannot serve agent traffic. If that happens, check the controller's startup log for an empty control-plane address, which means the chart and image versions do not match: see the pinning note in [Step 1](#phase-2-agent-manager-installation).
+
+Rate-limiting policies default to an **in-memory** backend, which does not share counters across gateway replicas. When running more than one replica, switch to Redis through the extension's `apiGateway.config.policyConfigurations.ratelimit_v1` values (`backend: redis` plus the `redis` connection block).
+
+:::warning Rolling back the gateway extension needs the API reachable
+The extension's bootstrap job runs as a `pre-install`, `pre-upgrade` **and `pre-rollback`** hook, so `helm rollback` executes it too and can fail — leaving the release stuck in `pending-rollback` — when the Agent Manager API is unreachable. If you are rolling back precisely because the platform is unhealthy, that is exactly when it will bite. Recovery is to re-run `helm rollback` once the API is back, or `helm rollback --no-hooks` to skip the job entirely.
+:::
+
+#### Gateway roles and topology
+
+Every gateway declares a role: **`INGRESS`** for traffic arriving at the agents in an environment, **`EGRESS`** for the calls those agents make out to LLMs and MCP servers, or **`BOTH`**. The install above registers the default environment's gateway as `BOTH`, which is what a single-gateway environment needs.
+
+Running the two directions on separate gateways lets you scale and harden them independently — an internet-facing ingress gateway and an egress gateway that reaches your model providers are rarely under the same load or the same threat model. That **split topology** is created per environment with `GATEWAY_TOPOLOGY=split`, which installs a second, egress-only release beside the ingress one. See [Gateway topology](./environment-management.mdx#gateway-topology) for how to create an environment that way, including the shorter name limit it imposes.
+
+Two constraints are worth knowing before you choose:
+
+- An environment may hold **at most one** ingress-capable gateway (`INGRESS` or `BOTH`). Egress gateways are uncapped.
+- A gateway's role is fixed when it first registers. A later `helm upgrade` with a different `gateway.type` only logs a drift warning — it never rewrites the role — so an environment's topology cannot be switched in place. Moving an existing environment to a split topology means deleting and recreating it.
+
+`REGULAR` and `AI` are still accepted as input, mapping to `BOTH` and `EGRESS`, but they are deprecated; prefer the role names.
+
+### Build Workflows
+
+Agent builds run as Argo workflows in the Workflow Plane, and build pods have **no built-in resource ceiling** — a burst of builds can starve the platform and agent workloads on a shared node. Two mitigations, in order of preference:
+
+1. **Dedicated build nodes** — run the workflow plane's build workloads on a separate node pool so build spikes cannot affect serving workloads. Remember the build-node kernel requirement (Linux 6.3+ for user-namespaced builds, see [Prerequisites](#cluster-requirements)). This is the preferred mitigation: it needs no per-pod resource declarations and cannot reject a build.
+
+2. **Namespace ResourceQuota plus a LimitRange** — cap total build resource consumption. Both objects go in the namespace where builds actually run, which is **`workflows-<environment>`** (`workflows-default` for the default environment), not the workflow-plane namespace — that one holds the Argo controller and cluster agent, not the build pods.
+
+   The `LimitRange` is not optional, and it has to come before the quota. Build pods declare no requests or limits of their own, and a ResourceQuota that tracks `requests.*`/`limits.*` **rejects** every pod that omits them. Applying the quota alone fails each build within seconds at its first step with `must specify limits.cpu for: init,main,wait` — a hard failure, not a queued build. Note all three containers in that message: `main` is the build step, while `init` and `wait` are injected by Argo, so a `LimitRange` is what covers them all from one object you control.
+
+   **Measure before you set these.** The values below are placeholders, not recommendations — the right numbers depend on what your agents build. Run one build with the `LimitRange` absent and watch what a step actually uses:
+
+```bash
+# While a build is running, in another shell:
+kubectl top pod -n workflows-default --containers
+```
+
+   Set `defaultRequest` near the steady-state usage you observe and `default` (the limit) above the peak, with headroom. Then apply both objects:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: build-workload-defaults
+  namespace: workflows-default
+spec:
+  limits:
+    - type: Container
+      # Replace with your measured values.
+      defaultRequest:
+        cpu: 500m
+        memory: 1Gi
+      default:
+        cpu: "2"
+        memory: 4Gi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: build-workloads
+  namespace: workflows-default
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+EOF
+```
+
+Size the quota to your expected build concurrency: the quota divided by the per-container defaults is what decides how many build steps run at once. With the defaults in place, builds beyond that cap stay Pending until capacity frees up instead of failing.
+
+:::warning Defaults set too low fail builds in a way that looks unrelated
+A memory limit under what a build needs gets the step OOMKilled, and a low CPU limit throttles it into a timeout. Either reads as a broken build rather than a resource cap, and the build log rarely says which. If builds start failing after you apply these, raise the limits before looking anywhere else — and prefer generous limits with a smaller quota, since the quota is what actually bounds total consumption.
+:::
+
+:::note The namespace appears when the environment first runs a workflow
+`workflows-<environment>` is created by OpenChoreo the first time a workflow runs there, so apply these after the first successful build rather than during the install. Repeat them for each environment you add.
+:::
+
+### High Availability and Scaling
+
+The production install already runs the Agent Manager API, console, and observer at two replicas. Spread them across availability zones with your cluster's default topology spreading, and adjust to load:
+
+- `agentManagerService.replicaCount` and `console.replicaCount` on `wso2-agent-manager`
+- `amObserver.replicaCount` on the observability extension
+- `thunder.deployment.replicaCount` on the Thunder extension — needs **both** external PostgreSQL (the default in-pod SQLite cannot be shared between pods) and a shared Redis cache. The database half is fixed at install; see [Step 4](#step-4-install-thunder-extension-identity-provider)
+
+The Agent Manager API runs a monitor scheduler that coordinates through a lock, so scheduled evaluations fire once regardless of replica count.
+
+Stateful dependencies get their availability from the platforms behind them: managed PostgreSQL, managed or clustered OpenSearch, and a sealed OpenBao with auto-unseal configured. Gateway replica guidance is in the gateway HA documentation linked above.
+
+### Certificates and Cluster Security
+
+With the Let's Encrypt DNS-01 issuer, certificate renewals are automatic — monitor cert-manager (its `Certificate` resources expose `Ready` and expiry conditions) and rotate the DNS-provider credentials Secret on your normal schedule. With a corporate CA, track the intermediate's expiry yourself.
+
+Apply your organization's standard cluster hardening around the platform: restrict namespace-to-namespace traffic with NetworkPolicies — in particular, only the gateways should reach the OTel collector and OpenSearch — scope RBAC for humans and CI to the namespaces they operate in, and enforce Pod Security Standards on the workload namespaces.
+
+Confirm your CNI actually **enforces** the `NetworkPolicy` objects the platform ships (the Observability and Evaluation extensions each include one — see [Cluster Requirements](#cluster-requirements)). A cluster without a policy engine selected — EKS's default VPC CNI, AKS, or legacy GKE — accepts those objects silently while blocking nothing, so the protection you think you have is not there.
+
+### Agent Isolation
+
+Agents run sandboxed under **runc** by default. Environments that execute untrusted or externally authored agent code can be moved to stronger isolation tiers — [gVisor](./isolation-tiers/gvisor.mdx) (userspace kernel) or [Kata Containers](./isolation-tiers/kata.mdx) (per-agent VM). Both have hardware/OS requirements and need dedicated nodes; plan the node pools alongside the build-node decision above.
+
+---
+
+## Appendix: Installing Without a Domain (nip.io)
+
+For evaluation on a cluster where you control no DNS zone, [nip.io](https://nip.io) turns LoadBalancer IPs into resolvable hostnames. This path is **not for production** — browsers warn on every hostname and the certificates are self-signed.
+
+<details>
+<summary>Full nip.io / self-signed flow differences</summary>
+
+The flow is the same as above with five differences.
+
+**1. Self-signed issuer.** In Step 3, create a self-signed chain under the same `openchoreo-ca` name instead of an ACME or corporate issuer:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: openchoreo-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: openchoreo-ca
+  secretName: openchoreo-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: openchoreo-ca
+spec:
+  ca:
+    secretName: openchoreo-ca-secret
+EOF
+```
+
+Browsers will warn on every hostname (import `openchoreo-ca-secret`'s `ca.crt` into your trust store to avoid this), and the Control Plane install in Step 5 needs one extra override because it cannot verify Thunder's JWKS against an untrusted chain: add `--set-string openchoreoApi.config.security.authentication.jwt.jwks.skip_tls_verify=true` (and `--set-string security.oidc.jwksUrlTlsInsecureSkipVerify=true` on the Observability Plane install in Step 8).
+
+**2. Hostnames come from the first LoadBalancer.** The control-plane gateway must exist before you can derive a base domain, but Thunder needs the final hostnames at install time. So: run Step 5's namespace creation, then install *only* the kgateway-provisioned gateway by running the Control Plane install once with placeholder hostnames (`api.placeholder.tld`, issuer `https://thunder.placeholder.tld`, `gateway.tls.enabled=false`), wait for the LoadBalancer, and derive the base domain:
+
+```bash
+CP_LB_IP=$(kubectl get svc gateway-default -n openchoreo-control-plane \
+  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export BASE_DOMAIN="${CP_LB_IP//./-}.nip.io"
+```
+
+Now export the [Plan Your Deployment](#plan-your-deployment) variables from this `BASE_DOMAIN`, continue with Thunder (Step 4), and rerun the Step 5 install command — with the real values — as `helm upgrade`.
+
+**3. One caveat on the shared base domain.** All hostnames (`console.`, `traces.`, `*.agents.` …) resolve to the control-plane gateway's IP, but `traces.` and `*.agents.` must reach the *other* two gateways. Point them correctly by using per-gateway nip.io domains instead: derive `TRACES`/`AGENTS` hostnames from the observability and data-plane LoadBalancer IPs after those planes install, e.g. `export OBS_API_PUBLIC_HOST="traces.$(kubectl get svc gateway-default -n openchoreo-observability-plane -o jsonpath='{.status.loadBalancer.ingress[0].ip}' | tr . -).nip.io"` and the equivalent `AGENTS_DOMAIN` from the data-plane gateway — then use those values in the observability/data-plane certificates and in Phase 2.
+
+**4. Skip Step 10** (DNS records) — nip.io resolution is automatic.
+
+**5. Env-Thunder provisioning trusts the self-signed CA explicitly.** In the [Provision Thunder Identity Provider](#provision-thunder-identity-provider-for-the-default-environment) step, `SKIP_CA_BUNDLE_TRUST` doesn't mount anything, and the script's own auto-detect looks for a different, local-dev-specific secret name than the `openchoreo-ca-secret` this appendix creates. Extract the CA live instead:
+
+```bash
+PLATFORM_THUNDER_CA_PEM="$(echo | openssl s_client -connect "${THUNDER_PUBLIC_HOST}:443" \
+  -servername "${THUNDER_PUBLIC_HOST}" -showcerts 2>/dev/null \
+  | awk '/BEGIN CERTIFICATE/,/END CERTIFICATE/{print}')"
+```
+
+This only covers env-Thunder's own pod. The `curl` call the script makes from **your** machine to `IDP_TOKEN_URL` needs the same CA trusted locally, or it fails with "unable to get local issuer certificate":
+
+```bash
+CURL_CA_BUNDLE="$(mktemp)"
+if [ -f /etc/ssl/cert.pem ]; then
+  SYSTEM_CA_BUNDLE=/etc/ssl/cert.pem                        # macOS
+elif [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+  SYSTEM_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt       # Debian/Ubuntu
+else
+  echo "Could not find a system CA bundle at /etc/ssl/cert.pem or /etc/ssl/certs/ca-certificates.crt. Find yours and set SYSTEM_CA_BUNDLE to it manually." >&2
+  exit 1
+fi
+cat "${SYSTEM_CA_BUNDLE}" > "${CURL_CA_BUNDLE}"
+echo "${PLATFORM_THUNDER_CA_PEM}" >> "${CURL_CA_BUNDLE}"
+export CURL_CA_BUNDLE
+```
+
+Then run the script exactly as in the Corporate CA tab (with `PLATFORM_THUNDER_CA_PEM` set).
+
+The Thunder reinstall warning applies with full force here: if you tear down and recreate the cluster, the LoadBalancer IP — and therefore every hostname — changes, and Thunder must be reinstalled with the new values.
+
+</details>
+
+---
+
+## Appendix: Red Hat OpenShift
+
+Agent Manager runs on Red Hat OpenShift, including managed offerings such as Azure Red Hat OpenShift (ARO). The flow is the same as the main guide; OpenShift needs extra settings at a few steps, mostly because of its stricter pod security defaults, its built-in platform components (monitoring, DNS, image registry), and the Kubernetes version a given OpenShift release ships.
+
+This appendix was validated on **ARO, OpenShift 4.18 (Kubernetes 1.31)**.
+
+<details>
+<summary>OpenShift-specific setup and changes</summary>
+
+Each change is tagged with where it applies:
+
+| Tag | Applies to |
+|---|---|
+| **All OpenShift** | Every OpenShift cluster, any version or provider |
+| **OpenShift 4.18 (Kubernetes 1.31)** | OpenShift releases that ship Kubernetes 1.31 or earlier, which is below the guide's 1.32 minimum |
+| **ARO** | Azure Red Hat OpenShift only |
+| **Private registry** | Clusters that push agent images to a registry requiring credentials (for example Azure Container Registry) |
+
+Use `oc` or `kubectl` interchangeably for the commands below; the SCC commands need `oc`.
+
+### How OpenShift security affects the install
+
+**All OpenShift.** OpenShift admits pods through Security Context Constraints (SCCs). The default, `restricted-v2`, runs every pod as a random, namespace-assigned user ID and rejects pods that request a specific user ID, root, host access, or privilege. Most charts in this guide pin fixed non-root user IDs, and a few components need root or privilege, so you grant SCCs per namespace or service account **before** installing the charts that need them. Three built-in SCCs are used:
+
+| SCC | Allows | Used for |
+|---|---|---|
+| `nonroot-v2` | Any fixed user ID except root (0) | Most platform namespaces |
+| `anyuid` | Any user ID, including root | Two setup jobs that run as root |
+| `privileged` | Root, privileged containers, host paths, host network | Agent build steps, the Fluent Bit log collector |
+
+Images that expect to run as their own user (rather than OpenShift's random one) are pinned to that user through chart values in the steps below.
+
+### Prerequisites
+
+- **Kernel (All OpenShift).** RHCOS nodes run a 5.14 kernel, below the 6.3 needed for user-namespaced builds. Set `buildWorkflows.userNamespaces=false` on the Platform Resources chart (Phase 2, Step 4).
+- **Kubernetes version (OpenShift 4.18 (Kubernetes 1.31)).** The OpenChoreo control-plane CRDs need a patch before installing; see Step 5 under Phase 1 changes below.
+- **LoadBalancer check (All OpenShift).** The `nginx` image in the LoadBalancer test runs as root and is rejected by `restricted-v2`. Use the unprivileged image instead:
+
+  ```bash
+  kubectl create deploy lbtest --image=nginxinc/nginx-unprivileged:alpine --port=8080
+  kubectl expose deploy lbtest --port=80 --target-port=8080 --type=LoadBalancer
+  ```
+
+- **NetworkPolicy (All OpenShift).** OpenShift's default network plugin (OVN-Kubernetes) enforces NetworkPolicy, so the platform's policies take effect. Its DNS service listens on a different port from upstream Kubernetes, which two of those policies need adjusting for (Phase 2, Steps 4 and 6).
+- **Default StorageClass (ARO).** ARO ships `managed-csi` (Azure Disk) as the default class, which works as-is. Azure disks are zonal: a pod with persistent volumes can only run on a worker in its volume's zone, so keep at least one worker per zone.
+- **Node count (ARO).** ARO requires 3 control-plane nodes and at least 3 workers, and does not schedule workloads on control-plane nodes. All platform components run on the workers.
+
+### SCC grants
+
+**All OpenShift.** Grant these before the corresponding steps. Some namespaces do not exist until a later step creates them; `oc adm policy` refuses a namespace that does not exist yet, so those are granted with a ClusterRoleBinding instead, which takes effect when the namespace is created.
+
+```bash
+for ns in openchoreo-control-plane openchoreo-data-plane openchoreo-workflow-plane openchoreo-observability-plane amp-thunder wso2-amp; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+  oc adm policy add-scc-to-group nonroot-v2 "system:serviceaccounts:$ns"
+done
+
+oc create clusterrolebinding agent-sandbox-system-nonroot-v2 \
+  --clusterrole=system:openshift:scc:nonroot-v2 \
+  --group=system:serviceaccounts:agent-sandbox-system
+
+oc create clusterrolebinding amp-thunder-default-default-nonroot-v2 \
+  --clusterrole=system:openshift:scc:nonroot-v2 \
+  --group=system:serviceaccounts:amp-thunder-default-default
+
+oc adm policy add-scc-to-user anyuid -z amp-hooks -n wso2-amp
+oc adm policy add-scc-to-user anyuid -z api-platform-default-default-bootstrap-sa -n openchoreo-data-plane
+oc adm policy add-scc-to-user privileged -z fluent-bit -n openchoreo-observability-plane
+
+oc create clusterrolebinding workflows-default-workflow-sa-privileged \
+  --clusterrole=system:openshift:scc:privileged \
+  --serviceaccount=workflows-default:workflow-sa
+```
+
+| Namespace / service account | SCC | Why |
+|---|---|---|
+| The four OpenChoreo plane namespaces, `amp-thunder`, `wso2-amp` | `nonroot-v2` | Pods pin fixed non-root user IDs (1000, 1001, 10001, 65532 and others) |
+| `agent-sandbox-system` | `nonroot-v2` | Sandbox controller runs as user ID 1000 |
+| `amp-thunder-<org>-<env>` | `nonroot-v2` | Per-environment Thunder runs as user ID 10001. Repeat for every environment you add |
+| `wso2-amp/amp-hooks` | `anyuid` | The JWT key generation job runs as root |
+| `openchoreo-data-plane/api-platform-default-default-bootstrap-sa` | `anyuid` | The gateway bootstrap job runs as root |
+| `openchoreo-observability-plane/fluent-bit` | `privileged` | Reads node log files through host paths |
+| `workflows-default/workflow-sa` | `privileged` | Agent build steps run privileged podman containers. Repeat for `workflows-<env>` of every environment you add |
+
+### Phase 1 changes
+
+#### Step 2: OpenBao
+
+**All OpenShift.** The OpenBao chart pins user ID 100 by default. Add `--set global.openshift=true` to the OpenBao `helm upgrade --install` command; the chart then leaves the user ID to OpenShift and needs no SCC grant.
+
+#### Step 5: OpenChoreo Control Plane
+
+**OpenShift 4.18 (Kubernetes 1.31).** The control-plane chart's CRDs fail to install with `CustomResourceDefinition ... is invalid ... undefined field 'namespace'`. Some of their validation rules refer to fields named `namespace` and `var`, which Kubernetes 1.31 and earlier treat as reserved words and only accept in the escaped form `__namespace__` / `__var__`. The escaped form is also valid on newer Kubernetes.
+
+Apply patched CRDs yourself, then install the chart with `--skip-crds`:
+
+```bash
+helm pull oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane --version 1.2.0 --untar -d oc-cp-chart
+
+sed -i.bak -E 's/has\(self\.var\)/has(self.__var__)/g; s/self\.scope\.namespace\)/self.scope.__namespace__)/g' \
+  oc-cp-chart/openchoreo-control-plane/crds/*.yaml
+rm -f oc-cp-chart/openchoreo-control-plane/crds/*.bak
+
+kubectl apply --server-side -f oc-cp-chart/openchoreo-control-plane/crds/
+```
+
+Then add `--skip-crds` to every control-plane `helm upgrade --install` in this guide. Helm never upgrades CRDs, so on a later control-plane chart upgrade repeat these commands with the new chart version.
+
+#### Step 8: Observability Plane
+
+**All OpenShift.** Three changes to the observability modules:
+
+1. **OpenSearch.** Its init container changes the data volume's owner as root, which `nonroot-v2` does not allow. The pod's `fsGroup` already makes the volume writable, so turn the init container off. Add to the logs module install:
+
+   ```bash
+   --set openSearch.persistence.enableInitChown=false
+   ```
+
+2. **Fluent Bit.** OpenShift's container runtime writes log files readable only by root, with an SELinux label unprivileged containers cannot read. The `privileged` SCC grant only permits privilege; the container must also request it. Add to the command that enables Fluent Bit:
+
+   ```bash
+   --set fluent-bit.securityContext.runAsUser=0 \
+   --set fluent-bit.securityContext.runAsNonRoot=false \
+   --set fluent-bit.securityContext.privileged=true \
+   --set fluent-bit.securityContext.allowPrivilegeEscalation=true
+   ```
+
+   Without this, every log query in the console stays empty while all pods look healthy.
+
+3. **Metrics module.** OpenShift ships its own Prometheus Operator and kube-state-metrics, whose cluster roles use the same names as this chart's, so the install fails with `ClusterRole "kube-state-metrics" ... exists and cannot be imported into the current release`. The chart's operator would also manage OpenShift's own `Prometheus` and `Alertmanager` resources. Rename the chart's components, keep its operator out of OpenShift's monitoring namespaces, and keep Prometheus off a public LoadBalancer. Add to the metrics module install:
+
+   ```bash
+   --set kube-prometheus-stack.prometheusOperator.fullnameOverride=openchoreo-prometheus-operator \
+   --set kube-prometheus-stack.kube-state-metrics.fullnameOverride=openchoreo-kube-state-metrics \
+   --set "kube-prometheus-stack.prometheusOperator.denyNamespaces={openshift-monitoring,openshift-user-workload-monitoring}" \
+   --set kube-prometheus-stack.prometheus.service.type=ClusterIP
+   ```
+
+   OpenShift owns the `monitoring.coreos.com` CRDs, so the chart's operator runs against OpenShift's versions; a warning such as `unknown field "spec.enableOTLPReceiver"` during install is expected and harmless.
+
+### Phase 2 changes
+
+#### Step 1: Gateway Operator
+
+**All OpenShift.** The gateway runtime image keeps its working directories owned by user ID 10001 and crash-loops (`Failed to bind to address unix:/var/run/api-platform/python-executor.sock ... Permission denied`) under OpenShift's random user ID. Pin it through the operator's gateway values. Add to the gateway operator install:
+
+```bash
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.runAsUser=10001 \
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.runAsGroup=10001 \
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.fsGroup=10001 \
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.runAsNonRoot=true
+```
+
+Set these on the **initial** install. If the gateway extension (Step 7) is installed while the runtime is crash-looping, the operator records the gateway as permanently failed and does not retry on its own.
+
+#### Step 2: Agent Manager
+
+**All OpenShift.** Two components need their user ID pinned. Add to the Agent Manager install:
+
+```bash
+--set agentManagerService.podSecurityContext.runAsUser=1000 \
+--set agentManagerService.podSecurityContext.runAsNonRoot=true \
+--set agentManagerService.podSecurityContext.fsGroup=1000 \
+--set console.securityContext.runAsUser=1001 \
+--set console.securityContext.runAsNonRoot=true \
+--set console.securityContext.allowPrivilegeEscalation=false \
+--set "console.securityContext.capabilities.drop={ALL}"
+```
+
+- The API pod's `wait-for-db` init container (used with the in-cluster database) runs an image that defaults to root and has no user ID of its own, so the pod-level user ID applies to it.
+- The console's web server writes its runtime configuration into a directory owned by user ID 1001.
+
+#### Step 4: Platform Resources
+
+**All OpenShift.** Add `--set buildWorkflows.userNamespaces=false` to the Platform Resources install (RHCOS kernel 5.14).
+
+After installing, apply two patches the chart has no values for:
+
+1. **Build checkout step.** It is the only non-privileged build step, so it runs under a random user ID with no home directory and git fails with `could not lock config file //.gitconfig`. Give it a writable `HOME`:
+
+   ```bash
+   kubectl patch clusterworkflowtemplate checkout-source --type=json \
+     -p '[{"op":"add","path":"/spec/templates/0/container/env/-","value":{"name":"HOME","value":"/tmp"}}]'
+   ```
+
+2. **Agent DNS egress.** OpenShift's DNS (`openshift-dns`) listens on port **5353** behind a Service on port 53. NetworkPolicies match the pod's real port, and the agent egress policy only allows 53, so agents cannot resolve any hostname (`Temporary failure in name resolution`). Allow 5353 as well:
+
+   ```bash
+   kubectl patch componenttype.openchoreo.dev agent-api -n default --type=json \
+     -p '[{"op":"add","path":"/spec/resources/0/template/spec/networkPolicy/egress/0/ports/-","value":{"port":5353,"protocol":"UDP"}},{"op":"add","path":"/spec/resources/0/template/spec/networkPolicy/egress/0/ports/-","value":{"port":5353,"protocol":"TCP"}}]'
+   ```
+
+   Agents deployed before this patch pick it up on their next deploy.
+
+**Private registry.** Agent component types do not set `imagePullSecrets`, so agent pods cannot authenticate to a private registry themselves. On OpenShift, add the registry's credentials to the cluster-wide pull secret, which every node uses for every image:
+
+```bash
+oc get secret/pull-secret -n openshift-config -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d > cluster-pull-secret.json
+jq -s '.[0] * .[1]' cluster-pull-secret.json registry-dockerconfig.json > cluster-pull-secret.merged.json
+oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=cluster-pull-secret.merged.json
+```
+
+`registry-dockerconfig.json` is your registry's `.dockerconfigjson` (for ACR, built from the registry's admin credentials). Keep every existing entry; on ARO the `arosvc.azurecr.io` entry must not be removed. OpenShift rolls the change out to all nodes without a reboot.
+
+#### Step 6: Evaluation Extension
+
+**All OpenShift.** The evaluation job's egress policy expects DNS in `kube-system` on port 53. Point it at OpenShift's DNS through chart values, adding to the evaluation extension install:
+
+```bash
+--set networkPolicy.evaluationJob.dns.namespace=openshift-dns \
+--set networkPolicy.evaluationJob.dns.podLabel.key=dns.operator.openshift.io/daemonset-dns \
+--set networkPolicy.evaluationJob.dns.podLabel.value=default
+```
+
+The DNS port is fixed at 53 in the chart, so add 5353 right after installing (the chart creates `workflows-default` and the policy itself):
+
+```bash
+kubectl patch networkpolicy amp-evaluation-job-egress -n workflows-default --type=json \
+  -p '[{"op":"add","path":"/spec/egress/0/ports/-","value":{"port":5353,"protocol":"UDP"}},{"op":"add","path":"/spec/egress/0/ports/-","value":{"port":5353,"protocol":"TCP"}}]'
+```
+
+#### After the first agent build
+
+**All OpenShift.** OpenShift adds an image-registry pull secret (`workflow-sa-dockercfg-...`) as the first entry in every service account's `secrets` list. Evaluation monitor workflows mount the service account's first secret as their API token, so they fail at start-up with `invalid configuration: no configuration has been provided`. Put the token Secret first:
+
+```bash
+DOCKERCFG=$(kubectl get sa workflow-sa -n workflows-default \
+  -o jsonpath='{.secrets[?(@.name!="workflow-sa.service-account-token")].name}')
+kubectl patch sa workflow-sa -n workflows-default --type=merge \
+  -p "{\"secrets\":[{\"name\":\"workflow-sa.service-account-token\"},{\"name\":\"${DOCKERCFG}\"}]}"
+```
+
+Repeat for `workflows-<env>` of every environment you add.
+
+#### Provision Thunder Identity Provider
+
+**ARO.** Thunder's volumes are created in a single availability zone, and attaching them can take a few minutes on Azure. Pass `WAIT_TIMEOUT=600s` to `add-environment-thunder.sh` so the script does not stop waiting before Thunder is ready. Remember the `amp-thunder-<org>-<env>` SCC grant for every environment you add.
+
+### After a chart upgrade
+
+Some OpenShift changes are applied with `kubectl` on top of what Helm renders, and an upgrade of the owning chart reverts them. Re-apply after upgrading:
+
+| Change | Owning chart | Applies to |
+|---|---|---|
+| Patched control-plane CRDs, install with `--skip-crds` | OpenChoreo Control Plane | OpenShift 4.18 (Kubernetes 1.31) |
+| `checkout-source` `HOME=/tmp` | Platform Resources | All OpenShift |
+| `agent-api` DNS port 5353 | Platform Resources | All OpenShift |
+| `amp-evaluation-job-egress` DNS port 5353 | Evaluation Extension | All OpenShift |
+
+The changes made through `--set` values persist across upgrades that use `--reuse-values`.
+
+</details>
+
+---
+
+## Appendix: Rancher Desktop / k3s
+
+For **evaluation** on Rancher Desktop or another k3s distribution — not a production target.
+
+<details>
+<summary>k3s-specific setup and workarounds</summary>
+
+- Single-node clusters work for development but may run low on resources with all observability modules
+- LoadBalancer IPs are assigned via the built-in k3s servicelb
+- **cgroup `pids` controller issue** — see [Build workflow fails with cgroup pids error](#build-workflow-fails-with-cgroup-pids-error) in Troubleshooting
+
+k3s ships with Traefik which binds to host ports 80/443 and conflicts with OpenChoreo's kgateway. Remove Traefik before [Step 1](#step-1-install-cluster-prerequisites):
+
+```bash
+helm uninstall traefik -n kube-system
+helm uninstall traefik-crd -n kube-system
+```
+
+After removing Traefik, re-apply the Gateway API CRDs (Traefik's CRD chart may have removed them):
+
+```bash
+kubectl apply --server-side --force-conflicts \
+  -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/experimental-install.yaml
+```
+
+</details>
+
+---
+
+## Cleanup
+
+Remove all Agent Manager and OpenChoreo resources:
+
+```bash
+# 1. Delete plane registrations
+kubectl delete clusterdataplane default -n default
+kubectl delete clusterworkflowplane default -n default
+kubectl delete clusterobservabilityplane default
+
+# 2. Uninstall all Helm releases
+helm uninstall amp -n wso2-amp
+helm uninstall api-platform-default-default -n openchoreo-data-plane
+helm uninstall amp-thunder-extension -n amp-thunder
+helm uninstall amp-observability-traces -n openchoreo-observability-plane
+helm uninstall amp-evaluation-extension -n openchoreo-workflow-plane
+helm uninstall amp-platform-resources -n default
+helm uninstall gateway-operator -n openchoreo-data-plane
+helm uninstall openchoreo-observability-plane -n openchoreo-observability-plane
+helm uninstall openchoreo-workflow-plane -n openchoreo-workflow-plane
+helm uninstall openchoreo-data-plane -n openchoreo-data-plane
+helm uninstall openchoreo-control-plane -n openchoreo-control-plane
+helm uninstall openbao -n openbao
+helm uninstall external-secrets -n external-secrets
+helm uninstall cert-manager -n cert-manager
+
+# 3. Delete namespaces
+kubectl delete namespace wso2-amp amp-thunder \
+  openchoreo-observability-plane openchoreo-workflow-plane \
+  openchoreo-data-plane openchoreo-control-plane \
+  openbao external-secrets cert-manager
+```
+
+---
+
+## Troubleshooting
+
+<details>
+<summary>LoadBalancer not getting external IP</summary>
+
+```bash
+kubectl describe svc <service-name> -n <namespace>
+```
+
+For EKS, ensure the AWS Load Balancer Controller is installed and the service has the correct annotations.
+
+On k3s/Rancher Desktop, check if another service (like Traefik) is already using the required ports:
+
+```bash
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+```
+
+</details>
+
+<details>
+<summary>Certificate not being issued</summary>
+
+```bash
+kubectl describe certificate <cert-name> -n <namespace>
+kubectl get clusterissuers
+kubectl get certificaterequests -n <namespace>
+```
+
+</details>
+
+<details>
+<summary>Plane registration issues</summary>
+
+```bash
+kubectl get clusterdataplane default -n default -o yaml
+kubectl logs -n openchoreo-control-plane -l app.kubernetes.io/name=openchoreo-control-plane
+```
+
+</details>
+
+<details>
+<summary>Agent Manager API returns 401 for environment/gateway calls</summary>
+
+This typically means the OpenChoreo Control Plane's OIDC issuer does not match the `iss` claim in Thunder-issued JWTs. Verify:
+
+```bash
+# Check what issuer Thunder puts in tokens
+kubectl exec -n amp-thunder deploy/amp-thunder-extension-deployment -- \
+  wget -qO- http://localhost:8090/.well-known/openid-configuration 2>/dev/null \
+  | grep -o '"issuer":"[^"]*"'
+
+# Check what the Control Plane expects
+kubectl get configmap openchoreo-api-config -n openchoreo-control-plane -o yaml \
+  | grep issuer
+```
+
+Both must match exactly. If they don't, update the Control Plane's `security.oidc.issuer` to match Thunder's issuer.
+
+</details>
+
+<details>
+<summary>Console shows "refused to connect" on login</summary>
+
+The console redirects the browser to Thunder for OAuth login at `THUNDER_PUBLIC_URL`. Check that the `thunder.${BASE_DOMAIN}` DNS record points at the control-plane gateway LoadBalancer and that the Thunder HTTPRoute exists:
+
+```bash
+dig +short thunder.${BASE_DOMAIN}
+kubectl get httproute -n openchoreo-control-plane amp-thunder-extension
+curl -s -o /dev/null -w '%{http_code}\n' https://thunder.${BASE_DOMAIN}/.well-known/openid-configuration
+```
+
+If you need to change Thunder's public URL after installation, you must uninstall, delete the PVC, and reinstall:
+
+```bash
+helm uninstall amp-thunder-extension -n amp-thunder
+kubectl delete pvc -n amp-thunder --all
+# Then reinstall with the new THUNDER_PUBLIC_URL
+```
+
+</details>
+
+<details>
+<summary>Evaluations mysteriously fail or hang with connection errors</summary>
+
+The evaluation-job NetworkPolicy scopes DNS egress to a specific namespace/pod label (default: `kube-system` / `k8s-app=kube-dns`). If your cluster's DNS runs elsewhere — NodeLocal DNSCache, a relabeled CoreDNS, a managed provider's own DNS add-on — that egress rule won't match it, DNS resolution fails inside the eval-job pod, and *every* other egress rule fails right along with it, since nothing can resolve first. Check this first when evaluations fail with generic connection errors: point `networkPolicy.evaluationJob.dns.namespace`/`podLabel` at your cluster's actual DNS workload.
+
+</details>
+
+<details>
+<summary>OpenSearch connectivity issues</summary>
+
+```bash
+kubectl get pods -n openchoreo-observability-plane -l app=opensearch
+kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
+  curl -v http://opensearch.openchoreo-observability-plane.svc.cluster.local:9200
+```
+
+</details>
+
+<details id="build-pods-fail-with-mount_attr_idmap--idmap-mounts-errors">
+<summary>Build pods fail with MOUNT_ATTR_IDMAP / idmap mounts errors</summary>
+
+If every agent build fails at pod-sandbox creation with events like:
+
+```
+failed to create containerd container: snapshotter "overlayfs" doesn't support
+idmap mounts on this host, configure `slow_chown` to allow a slower and expensive fallback
+```
+
+or
+
+```
+OCI runtime create failed: ... failed to set MOUNT_ATTR_IDMAP on
+/var/lib/kubelet/pods/.../volumes/kubernetes.io~projected/...: invalid argument
+(maybe the filesystem used doesn't support idmap mounts on this kernel?)
+```
+
+the build pods are requesting a Linux **user namespace** (`hostUsers: false` — the build's root is unprivileged on the node), which requires idmapped-mount support for every filesystem the pod mounts. tmpfs (used by projected service-account token volumes) only gained that support in **Linux 6.3** — see the [Kubernetes user namespaces documentation](https://kubernetes.io/docs/concepts/workloads/pods/user-namespaces/). Common node images below that line: Ubuntu 22.04 (kernel 5.15) and Amazon Linux 2 (kernel 5.10). Older Kubernetes versions silently ignored `hostUsers`, so the same manifests may have "worked" on an older cluster without ever using the feature.
+
+Two fixes:
+
+1. **Preferred:** use build nodes with kernel ≥ 6.3 (Ubuntu 24.04, Amazon Linux 2023, recent COS releases).
+2. **Otherwise:** run builds without user namespaces by setting the Platform Resources chart value:
+
+```bash
+helm upgrade amp-platform-resources \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
+  --version ${VERSION} \
+  --namespace ${DEFAULT_NS} \
+  --reuse-values \
+  --set buildWorkflows.userNamespaces=false
+```
+
+Note that containerd's `slow_chown` option alone is **not** sufficient — it only covers the overlayfs snapshotter, and the build then fails on the tmpfs/projected-volume mount instead.
+
+</details>
+
+<details>
+<summary>Agent deploys fail with "Secret does not exist" after an OpenBao restart</summary>
+
+This guide installs OpenBao in **dev mode** (in-memory storage). Any restart of the `openbao-0` pod — including node drains and reboots — wipes every secret it holds. Already-running agents keep working (their secrets were injected at startup), but any **new** deployment or environment promotion fails with ExternalSecrets stuck in `SecretSyncedError` / `Secret does not exist`.
+
+Fix: re-save the affected agent's environment variables in the console (agent configuration → environment variables → re-enter and save). The values are rewritten to OpenBao and the ExternalSecret syncs within its refresh interval. For production, configure OpenBao with persistent storage.
+
+</details>
+
+<details id="build-workflow-fails-with-cgroup-pids-error">
+<summary>Build workflow fails with cgroup pids error (Rancher Desktop)</summary>
+
+If the build workflow fails with:
+
+```
+Error: OCI runtime error: crun: the requested cgroup controller `pids` is not available
+Error: exit status 126
+```
+
+This happens on Rancher Desktop because the underlying Lima VM (Alpine Linux) does not delegate the `pids` cgroup controller to containers. The Podman containers inside the build workflow cannot create the required cgroup namespace.
+
+**Fix:** Patch the ClusterWorkflowTemplates that use Podman to inject a `containers.conf` that disables cgroup management.
+
+:::note
+The patch commands below require **python3** to be installed on your machine.
+:::
+
+Run these commands to patch each template:
+
+```bash
+# Patch gcp-buildpacks-build (build-image step)
+kubectl get clusterworkflowtemplate gcp-buildpacks-build -o json | \
+  python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+script = data['spec']['templates'][0]['container']['args'][0]
+fix = '''set -e
+
+# Fix: disable cgroup management for Podman (Rancher Desktop cgroup pids workaround)
+cat > /tmp/containers.conf <<CCONF
+[engine]
+cgroup_manager = \"cgroupfs\"
+events_logger = \"file\"
+[containers]
+pids_limit = 0
+CCONF
+export CONTAINERS_CONF=/tmp/containers.conf
+
+'''
+data['spec']['templates'][0]['container']['args'][0] = script.replace('set -e\n', fix, 1)
+json.dump(data, sys.stdout)
+" | kubectl apply -f -
+
+# Patch publish-image
+kubectl get clusterworkflowtemplate publish-image -o json | \
+  python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+script = data['spec']['templates'][0]['container']['args'][0]
+fix = '''set -e
+
+# Fix: disable cgroup management for Podman (Rancher Desktop cgroup pids workaround)
+cat > /tmp/containers.conf <<CCONF
+[engine]
+cgroup_manager = \"cgroupfs\"
+events_logger = \"file\"
+[containers]
+pids_limit = 0
+CCONF
+export CONTAINERS_CONF=/tmp/containers.conf
+
+'''
+data['spec']['templates'][0]['container']['args'][0] = script.replace('set -e\n', fix, 1)
+json.dump(data, sys.stdout)
+" | kubectl apply -f -
+
+# Patch amp-generate-workload
+kubectl get clusterworkflowtemplate amp-generate-workload -o json | \
+  python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+script = data['spec']['templates'][0]['container']['args'][0]
+fix = '''# Fix: disable cgroup management for Podman (Rancher Desktop cgroup pids workaround)
+cat > /tmp/containers.conf <<CCONF
+[engine]
+cgroup_manager = \"cgroupfs\"
+events_logger = \"file\"
+[containers]
+pids_limit = 0
+CCONF
+export CONTAINERS_CONF=/tmp/containers.conf
+
+'''
+data['spec']['templates'][0]['container']['args'][0] = fix + script
+json.dump(data, sys.stdout)
+" | kubectl apply -f -
+```
+
+After patching, re-trigger the build workflow. These patches are applied in-cluster and will be overwritten if the Helm chart (`amp-platform-resources`) is reinstalled.
+
+:::note
+This issue affects Rancher Desktop specifically because it runs k3s inside a Lima VM with Alpine Linux, which uses OpenRC instead of systemd. The `pids` cgroup controller is not delegated to containers by default. Other Kubernetes distributions (EKS, GKE, AKS) are not affected.
+:::
+
+</details>

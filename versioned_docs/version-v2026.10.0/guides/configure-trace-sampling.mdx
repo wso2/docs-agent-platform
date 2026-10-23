@@ -1,0 +1,112 @@
+---
+sidebar_position: 4
+---
+
+# Configure Trace Sampling
+
+At high request rates, exporting every trace becomes impractical — a single agent invocation produces a root span plus one span per LLM call, tool call, and retrieval step.
+
+AMP does not sample traces on the server side. Sampling is a **client-side, head-based** decision made inside the agent process by the OpenTelemetry SDK, before spans are exported. You control it with two standard OpenTelemetry environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `OTEL_TRACES_SAMPLER` | Which sampling strategy to use |
+| `OTEL_TRACES_SAMPLER_ARG` | The sampling rate, for the ratio-based samplers |
+
+No code change is required — the OpenTelemetry SDK that the Traceloop SDK builds on reads them at startup.
+
+:::note Python agents
+This page covers **Python** agents instrumented with `amp-instrumentation`. An agent that configures a sampler in code overrides these environment variables — the .NET setup in [AMP Instrumentation](./amp-instrumentation.mdx#instrumenting-net-agents) does exactly that with `.SetSampler(new AlwaysOnSampler())`, so change the sampler in code there instead.
+:::
+
+## Supported Values
+
+| `OTEL_TRACES_SAMPLER` | Behaviour |
+|---|---|
+| `parentbased_always_on` | **Default.** Keep every trace. |
+| `parentbased_traceidratio` | Keep a fraction of traces, set by `OTEL_TRACES_SAMPLER_ARG`, but reuse the caller's decision when there is one. **Recommended.** |
+| `traceidratio` | Keep a fraction of traces, ignoring the caller's decision. |
+| `always_on` | Keep every trace, even ones the caller decided to drop. |
+| `always_off` | Drop everything. Disables tracing for the agent. |
+| `parentbased_always_off` | Drop everything except traces the caller already decided to keep. |
+
+`OTEL_TRACES_SAMPLER_ARG` is a decimal between `0.0` and `1.0` and applies only to the two ratio samplers — `0.1` keeps roughly 10% of traces. Values outside the list above (for example `jaeger_remote` or `xray`) are not supported by the bundled SDK.
+
+## Recommended Configuration
+
+```bash
+export OTEL_TRACES_SAMPLER="parentbased_traceidratio"
+export OTEL_TRACES_SAMPLER_ARG="0.1"
+```
+
+This keeps about 10% of traces.
+
+Sampling is **per trace, not per span**. The decision is derived from the trace ID, so every span in a trace shares the same outcome — a sampled trace arrives complete in the Console, and an unsampled one never leaves the agent process. You will not see partial traces.
+
+### What "parent-based" means
+
+When another instrumented service calls your agent, that service starts the trace and decides whether to keep it. It passes that decision along in the standard `traceparent` HTTP header. The *parent* is simply the calling span.
+
+- A **parent-based** sampler reuses the caller's decision when a caller is present, and applies its own rule only when the agent starts the trace itself.
+- A **non-parent-based** sampler (`traceidratio`, `always_on`, `always_off`) ignores the caller entirely and always applies its own rule.
+
+Prefer `parentbased_traceidratio` because it keeps distributed traces whole. If the calling service decided to keep a trace but your agent independently dropped it, the trace would still appear upstream with the agent's portion missing.
+
+If nothing calls your agent through an instrumented service — that is, the agent always starts its own traces — then `parentbased_traceidratio` and `traceidratio` behave identically.
+
+## Where to Set the Variables
+
+The variables are the same for both deployment models — only *how* you set them differs:
+
+| | Platform-hosted agent | Externally-hosted agent |
+|---|---|---|
+| Where | Console → **Deploy** → **Configurations and Secrets** → **Configure** | The agent's own environment |
+| Endpoint and API key | Injected by AMP — you do not set them | You set `AMP_OTEL_ENDPOINT` and `AMP_AGENT_API_KEY` yourself |
+| You add | The two sampler variables only | The two sampler variables, alongside the endpoint and API key |
+| To apply | Redeploy the agent | Restart the agent |
+
+The sampler is read once when the agent process starts, so a change never affects a running agent until it is redeployed or restarted.
+
+### Platform-Hosted Agents
+
+AMP already injects `AMP_OTEL_ENDPOINT` and `AMP_AGENT_API_KEY`, so you only add the two sampler variables:
+
+1. Open the agent and click **Deploy**.
+2. On the card for the environment you want to sample, click **Configure** next to **Configurations and Secrets**.
+3. In the drawer, scroll to **Environment Variables** and add `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`.
+4. Save and redeploy the agent.
+
+You can also set the same variables when first deploying the agent, from the **Environment Variables** section of the **Configure & Deploy** step.
+
+Environment variables apply to one environment at a time, so set them for each environment you want sampled; values for later environments are configured when you promote. See [Manage Environments and Deployment Pipelines](./environment-management.mdx) for how promotion works.
+
+This works whether the agent uses auto-instrumentation or the manual `init_otel()` helper — both read the variables from the container environment at startup.
+
+### Externally-Hosted Agents
+
+Set all four variables in the agent's own environment, then start it:
+
+```bash
+export AMP_OTEL_ENDPOINT="<your-amp-otel-endpoint>"
+export AMP_AGENT_API_KEY="<your-generated-api-key>"
+export OTEL_TRACES_SAMPLER="parentbased_traceidratio"
+export OTEL_TRACES_SAMPLER_ARG="0.1"
+
+amp-instrument python my_agent.py
+```
+
+The same variables apply if you call `init_otel()` from your own code instead of using `amp-instrument`.
+
+## Important Considerations
+
+**Invalid values fail open, silently.** A misspelled sampler name falls back to the default `parentbased_always_on`, and a non-numeric `OTEL_TRACES_SAMPLER_ARG` falls back to a rate of `1.0`. Both export *every* trace — the opposite of what you intended, with only a warning in the agent logs. After changing these variables, confirm in the Console that trace volume actually dropped.
+
+**Sampled-out traces are gone for good.** They cannot be searched in the Console and are not available to evaluation monitors. A monitor on a 10%-sampled agent scores only that 10% — factor this into how you read monitor scores.
+
+**Head sampling is random, not selective.** The decision is made when the trace starts, before the agent has done any work, so the SDK cannot preferentially keep errors or slow requests. A 10% sample keeps roughly 10% of failures too. If you need every error, keep full sampling and filter at query time instead.
+
+## Related
+
+- [Observability](../concepts/observability.mdx) — how tracing works in AMP
+- [AMP Instrumentation](./amp-instrumentation.mdx) — instrumentation setup and the manual span contract
+- [OpenTelemetry SDK configuration](https://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_traces_sampler) — upstream reference for these variables

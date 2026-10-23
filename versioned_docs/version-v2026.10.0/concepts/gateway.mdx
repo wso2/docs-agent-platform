@@ -1,0 +1,47 @@
+---
+title: Gateway
+---
+
+# Gateway
+
+A Gateway is an organization-level infrastructure component that routes traffic through a controlled proxy. Every **[LLM Service Provider](./llm-service-provider.mdx)** and **[MCP Proxy](./mcp-proxy.mdx)** is exposed to agents through a gateway's invoke URL, rather than being called directly. Agent Manager currently supports the **WSO2 API Platform Gateway**.
+
+Unlike Organization, Project, and Environment, the Gateway isn't an OpenChoreo abstraction. It's a [WSO2 API Platform](https://github.com/wso2/api-platform) component that Agent Manager registers and manages on top of OpenChoreo's infrastructure.
+
+## Why Traffic Goes Through a Gateway
+
+Routing LLM and MCP traffic through a gateway rather than exposing upstream providers directly gives Agent Manager one place to apply cross-cutting controls:
+
+- **Authentication** — agents authenticate with platform issued API keys instead of upstream provider credentials.
+- **Access control** — which API operations or MCP tools/resources/prompts an agent can reach.
+- **Rate limiting** — request and token thresholds enforced at the gateway, protecting the upstream provider.
+- **Guardrails** — content safety policies attached to a provider or agent.
+
+## Per-Environment Deployment
+
+A gateway is registered at the organization level, but it deploys one artifact per **[Environment](./environment.mdx)** it's mapped to. When you register an LLM Service Provider or MCP Proxy, the platform deploys that resource's configuration into each environment it's configured for, onto an egress gateway in that environment — you don't wire a provider to a gateway environment by environment yourself. You only name a gateway explicitly when an environment offers more than one choice; see [How the Egress Gateway Is Selected](#how-the-egress-gateway-is-selected).
+
+## Ingress and Egress Gateways
+
+Every gateway is registered with a placement **role** (`INGRESS`, `EGRESS`, or `BOTH`) which is fixed at registration and can't be changed afterward. The role is placement policy. Every gateway has the same runtime features whichever role it holds, so the role decides what gets deployed where, not what a gateway is able to do.
+
+- **Ingress** faces incoming calls to your agents. An environment has **at most one** ingress gateway, and a `BOTH` gateway occupies that same single slot.
+- **Egress** hosts the outbound LLM Service Provider and MCP Proxy artifacts. An environment can have **any number** of egress gateways. Running a `BOTH` gateway alongside a dedicated `EGRESS` one is the supported shape for an environment that gains egress separation after it was originally set up.
+
+Separating the two lets inbound and outbound traffic be scaled and hardened independently, since they rarely share the same load or threat profile.
+
+### How the Egress Gateway Is Selected
+
+Because the ingress slot holds at most one gateway, inbound routing is unambiguous — there is nothing to choose.
+
+Egress placement does have to be resolved, since an environment may have several candidates:
+
+- When the environment has **exactly one** egress gateway, the platform infers it and you don't specify anything.
+- When it has **more than one**, the target gateway must be named as the resource is deployed to that environment.
+
+Placement is then fixed. Once an endpoint is deployed to an environment through a given gateway, supplying a different one on update is rejected rather than silently moving live traffic.
+
+## Relationship to Other Concepts
+
+- **[LLM Service Providers](./llm-service-provider.mdx)** and **[MCP Proxies](./mcp-proxy.mdx)** are registered independently of any gateway, but each deploys its per-environment configuration onto an egress gateway in that environment.
+- Multiple gateways can exist in one organization — for different environments or teams, and several within a single environment. Each LLM Service Provider is exposed through the egress gateway its artifact is placed on in that environment.

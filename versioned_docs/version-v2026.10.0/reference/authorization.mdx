@@ -1,0 +1,377 @@
+# Authorization
+
+WSO2 Agent Manager (AMP) authorizes every action against a single, platform-wide permission model. Access is governed by OAuth 2.0 scopes issued by the bundled Thunder identity provider: each capability on the platform maps to one scope, and a caller can perform a capability only if its access token carries the matching scope.
+
+## One model, every entry point
+
+The same scopes gate the same capabilities no matter how you reach the platform:
+
+- the **Console** (the web UI),
+- the **REST API** (`agent-manager-service` and `agent-manager-observer`), and
+- the **MCP servers** (the [main MCP server](./mcp-server.mdx) and the [Observer MCP server](./observer-mcp-server.mdx)).
+
+Because the model is shared, an MCP tool and its equivalent REST route enforce the **identical** scope. Triggering a build through the `build_agent` MCP tool and calling `POST /orgs/{org}/.../builds` both require `amp:agent:build`; there is no separate "MCP permission" to reason about. Learn the scope once and it applies everywhere.
+
+## How a scope is named
+
+Scopes follow a fixed three-part shape, built from the `amp` resource server:
+
+```
+amp:<resource>:<action>
+```
+
+For example, `amp:project:read`, `amp:agent:build`, and `amp:observability:trace-read`. The `<resource>` identifies what you are acting on and `<action>` identifies what you are doing to it.
+
+## Scope catalog
+
+The tables below list every scope the platform defines, grouped by resource. The observability scopes (in their own group) are enforced by `agent-manager-observer`; all others are enforced by `agent-manager-service`.
+
+<details>
+<summary><strong>Organization</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:org:view` | View organization details |
+| `amp:org:modify-settings` | Modify organization settings |
+| `amp:org:invite-member` | Invite a member to the organization |
+| `amp:org:remove-member` | Remove a member from the organization |
+| `amp:org:assign-role` | Assign roles to members |
+| `amp:org:manage-idp` | Manage the organization's identity providers |
+| `amp:org:manage-service-account` | Manage organization service accounts |
+
+</details>
+
+<details>
+<summary><strong>Project</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:project:create` | Create a project |
+| `amp:project:read` | View projects |
+| `amp:project:update` | Update a project |
+| `amp:project:delete` | Delete a project |
+
+</details>
+
+<details>
+<summary><strong>Environment</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:environment:create` | Create an environment |
+| `amp:environment:read` | View environments |
+| `amp:environment:update` | Update an environment |
+| `amp:environment:delete` | Delete an environment |
+
+</details>
+
+<details>
+<summary><strong>Gateway</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:gateway:create` | Register a gateway |
+| `amp:gateway:read` | View gateways |
+| `amp:gateway:update` | Update a gateway |
+| `amp:gateway:delete` | Delete a gateway |
+| `amp:gateway:token-manage` | Manage gateway tokens |
+
+</details>
+
+<details>
+<summary><strong>Infrastructure</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:data-plane:read` | View data planes |
+| `amp:deployment-pipeline:read` | View deployment pipelines |
+| `amp:deployment-pipeline:create` | Create a deployment pipeline |
+| `amp:deployment-pipeline:update` | Update a deployment pipeline |
+| `amp:deployment-pipeline:delete` | Delete a deployment pipeline |
+
+</details>
+
+<details>
+<summary><strong>Git secret</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:git-secret:create` | Create a Git secret |
+| `amp:git-secret:read` | View Git secrets |
+| `amp:git-secret:delete` | Delete a Git secret |
+
+</details>
+
+<details>
+<summary><strong>LLM provider template</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:llm-provider-template:create` | Create an LLM provider template |
+| `amp:llm-provider-template:read` | View LLM provider templates |
+| `amp:llm-provider-template:update` | Update an LLM provider template |
+| `amp:llm-provider-template:delete` | Delete an LLM provider template |
+
+</details>
+
+<details>
+<summary><strong>LLM provider</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:llm-provider:create` | Create an LLM provider |
+| `amp:llm-provider:read` | View LLM providers |
+| `amp:llm-provider:update` | Update an LLM provider |
+| `amp:llm-provider:delete` | Delete an LLM provider |
+| `amp:llm-provider:configure-guardrail` | Configure guardrails on an LLM provider |
+| `amp:llm-provider:connect` | Connect to an LLM provider |
+| `amp:llm-provider:deploy` | Deploy an LLM provider |
+| `amp:llm-provider:api-key-manage` | Manage LLM provider API keys |
+
+</details>
+
+<details>
+<summary><strong>MCP server</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:mcp-server:create` | Create an MCP server |
+| `amp:mcp-server:read` | View MCP servers |
+| `amp:mcp-server:update` | Update an MCP server |
+| `amp:mcp-server:delete` | Delete an MCP server |
+| `amp:mcp-server:configure-guardrail` | Configure guardrails on an MCP server |
+| `amp:mcp-server:connect` | Connect to an MCP server |
+| `amp:mcp-server:api-key-manage` | Manage MCP server API keys |
+
+</details>
+
+<details>
+<summary><strong>Scope catalog</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:scope:create` | Create a scope |
+| `amp:scope:read` | View scopes |
+| `amp:scope:update` | Update a scope |
+| `amp:scope:delete` | Delete a scope |
+
+</details>
+
+<details>
+<summary><strong>Agent identity</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:agent-identity:read` | View agent identity roles and assignments |
+| `amp:agent-identity:create` | Create agent identity roles |
+| `amp:agent-identity:update` | Update agent identity roles and assignments |
+| `amp:agent-identity:delete` | Delete agent identity roles |
+
+</details>
+
+<details>
+<summary><strong>LLM proxy</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:llm-proxy:create` | Create an LLM proxy |
+| `amp:llm-proxy:read` | View LLM proxies |
+| `amp:llm-proxy:update` | Update an LLM proxy |
+| `amp:llm-proxy:delete` | Delete an LLM proxy |
+| `amp:llm-proxy:deploy` | Deploy an LLM proxy |
+| `amp:llm-proxy:api-key-manage` | Manage LLM proxy API keys |
+
+</details>
+
+<details>
+<summary><strong>Evaluator</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:evaluator:create` | Create an evaluator |
+| `amp:evaluator:read` | View evaluators |
+| `amp:evaluator:update` | Update an evaluator |
+| `amp:evaluator:delete` | Delete an evaluator |
+
+</details>
+
+<details>
+<summary><strong>Agent</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:agent:create` | Create an agent |
+| `amp:agent:read` | View agents |
+| `amp:agent:update` | Update an agent |
+| `amp:agent:delete` | Delete an agent |
+| `amp:agent:build` | Trigger an agent build |
+| `amp:agent:env-non-production` | Reach non-production environments. Required by deploy, promote and deployment-state changes, and never sufficient by itself for the last of those |
+| `amp:agent:env-production` | Reach environments flagged `isProduction`, held **in addition to** the non-production scope. Grants nothing on its own |
+| `amp:agent:suspend` | Suspend an agent deployment |
+| `amp:agent:token-manage` | Manage agent identity tokens |
+| `amp:agent:api-key-manage` | Manage agent API keys |
+
+</details>
+
+<details>
+<summary><strong>Agent kind</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:agent-kind:read` | View agent kinds |
+| `amp:agent-kind:create` | Create an agent kind |
+| `amp:agent-kind:update` | Update an agent kind |
+| `amp:agent-kind:delete` | Delete an agent kind |
+
+</details>
+
+<details>
+<summary><strong>Monitor</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:monitor:create` | Create a monitor |
+| `amp:monitor:read` | View monitors |
+| `amp:monitor:update` | Update a monitor |
+| `amp:monitor:delete` | Delete a monitor |
+| `amp:monitor:execute` | Execute a monitor |
+| `amp:monitor:score-read` | View monitor scores |
+| `amp:monitor:score-publish` | Publish monitor scores |
+
+</details>
+
+<details>
+<summary><strong>Observability</strong> (enforced by <code>agent-manager-observer</code>)</summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:observability:trace-read` | Read traces and spans |
+| `amp:observability:log-read` | Read runtime logs |
+| `amp:observability:build-log-read` | Read build logs |
+| `amp:observability:metric-read` | Read metrics |
+
+</details>
+
+<details>
+<summary><strong>Role management</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:role:create` | Create a role |
+| `amp:role:read` | View roles |
+| `amp:role:update` | Update a role |
+| `amp:role:delete` | Delete a role |
+
+</details>
+
+<details>
+<summary><strong>Group management</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:group:create` | Create a group |
+| `amp:group:read` | View groups |
+| `amp:group:update` | Update a group |
+| `amp:group:delete` | Delete a group |
+
+</details>
+
+<details>
+<summary><strong>Catalog &amp; repository</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:catalog:read` | View the catalog |
+| `amp:repository:read` | View repositories |
+
+</details>
+
+<details>
+<summary><strong>Profile</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:profile:read` | View your own profile |
+| `amp:profile:update-attributes` | Update your own profile attributes |
+
+</details>
+
+### The environment tier is a separate axis
+
+Deploying, promoting, and changing an agent's deployment state are gated on which
+kind of environment they target, as well as on what the operation is.
+`amp:agent:env-non-production` is the floor — it means "may act on environments
+at all", and on its own it allows deploying and promoting into any environment
+not marked as production. `amp:agent:env-production` is granted **in addition**
+to the floor to reach the environments that are: a production environment
+requires both scopes, and the production scope on its own grants nothing.
+
+Changing an agent's deployment state additionally requires `amp:agent:suspend`:
+the tier says which environments a caller may reach, and `amp:agent:suspend` says
+they may stop what is running there. Holding the tier alone does not stop
+anything. Deploying and promoting are the operations with no separate capability
+scope — for those, within an environment the tier is the whole grant.
+
+An environment counts as production when its `isProduction` flag is set. That
+flag is set per environment on create and update, and in the console's Edit
+Environment drawer. **Nothing else decides it**: on an installation where no
+environment carries the flag, every environment is non-production, and anyone
+holding the floor can promote all the way to whatever the organization considers
+production. Set the flag on your production environments before relying on this
+boundary.
+
+## Predefined roles
+
+Rather than grant scopes one at a time, AMP ships four predefined roles. Each bundles a set of scopes tuned to a persona, and is registered as a role-to-scope binding in Thunder at bootstrap. A user's token carries the scopes of the roles assigned to them.
+
+| Capability area | Agent Manager Admin | Developer | AI Lead | Platform Engineer |
+| --- | --- | --- | --- | --- |
+| Organization | Full | View | View | View |
+| Projects | Full | Full | View | Full |
+| Environments | Full | View | View | Full |
+| Gateways | Full | View | — | Full |
+| Deployment pipelines | Full | View | View | Full |
+| Git secrets | Full | Full | View | View |
+| LLM providers & templates | Full | Read; connect, configure guardrail | Full | Full |
+| MCP servers | Full | Read, connect, configure guardrail, manage API keys | Full | Full |
+| MCP proxy scopes | Full | View | Full | Full |
+| LLM proxies | Full | Full | — | — |
+| Agent kinds | Full | Full | View | View |
+| Evaluators | Full | View | Full | View |
+| Agents (lifecycle) | Full | Create, read, update, delete, build, act on non-production environments, suspend, manage tokens & API keys | Read, build, act on non-production environments, suspend, manage API keys | Read, build, act on all environments, suspend, manage API keys |
+| Monitors | Full | Create, read, update, delete, run, read scores | Create, read, update, delete, run, read scores | Create, read, update, delete, run, read scores |
+| Observability | All reads | All reads | Traces, metrics | All reads |
+| Roles & groups | Full | — | — | — |
+| Agent identities | Full | View | — | Full |
+
+"Full" means every action in that capability area; "View" means read-only access. This table summarizes each role; the authoritative, exhaustive scope-per-role mapping lives in `agent-manager-service/rbac/predefined_roles.go`.
+
+## REST and MCP share the model
+
+Every MCP tool authorizes against the same scope its REST equivalent does. A few examples from the [main MCP server](./mcp-server.mdx):
+
+| MCP tool | Required scope |
+| --- | --- |
+| `list_projects` | `amp:project:read` |
+| `create_project` | `amp:project:create` |
+| `build_agent` | `amp:agent:build` |
+| `deploy_agent` | `amp:agent:env-non-production`, plus `amp:agent:env-production` when the target environment is flagged `isProduction` |
+| `update_deployment_state` | `amp:agent:suspend` + `amp:agent:env-non-production`, plus `amp:agent:env-production` in a production environment |
+| `create_external_agent` | `amp:agent:create` + `amp:agent:token-manage` |
+| `list_environments` | `amp:environment:read` |
+
+The observability tools on the [Observer MCP server](./observer-mcp-server.mdx) map the same way — the trace tools require `amp:observability:trace-read`, and `get_runtime_logs`, `get_build_logs`, and `get_metrics` require `amp:observability:log-read`, `amp:observability:build-log-read`, and `amp:observability:metric-read` respectively.
+
+### Two MCP OAuth clients, disjoint scopes
+
+Because the two MCP servers are addressed separately, AMP ships two pre-registered OAuth clients whose scope allowances do not overlap:
+
+- **`am-mcp`** (main MCP server) is allowed every `amp:*` scope **except** the four `amp:observability:*-read` scopes.
+- **`am-obs-mcp`** (Observer MCP server) is allowed **only** the four `amp:observability:*-read` scopes (plus the OIDC scopes).
+
+A token obtained for one server therefore cannot be reused against the other. See [MCP Server](./mcp-server.mdx#default-oauth-client) and [Observer MCP Server](./observer-mcp-server.mdx#configuring-ai-assistants) for the client details.
+
+## Next steps
+
+- [Authorize agent access to MCP tools](../guides/authorize-agent-access-to-mcp-tools.mdx) — define your own scopes on a resource and grant them to agents through roles.
+- [MCP Server](./mcp-server.mdx) and [Observer MCP Server](./observer-mcp-server.mdx) — the tools each scope unlocks.

@@ -1,0 +1,101 @@
+---
+sidebar_position: 1
+---
+# Quick Start Guide
+
+Get the Agent Manager running with a single command using a dev container!
+
+:::info Stronger agent isolation tiers
+Agents run sandboxed under the standard **runc** runtime by default. Agent Manager also supports stronger per-environment isolation tiers — **gVisor** (userspace kernel) and **Kata Containers** (per-agent VM) — but they have hardware/OS requirements and need a dedicated node. For more information, see the [gVisor](../guides/isolation-tiers/gvisor.mdx) and [Kata Containers](../guides/isolation-tiers/kata.mdx) setup guides.
+:::
+
+## Prerequisites
+
+Ensure the following before you begin:
+
+- **Docker** (Engine 26.0+ recommended)
+    Allocate at least 8 GB RAM and 4 CPUs.
+
+- **Mac users**: Use Colima for best compatibility
+
+  ```sh
+  colima start --profile agent-manager \
+    --vm-type=vz --vz-rosetta --network-address \
+    --cpu 4 --memory 8
+  ```
+
+  The `agent-manager` profile isolates this install from your default Colima instance, and `--network-address` gives the VM a stable IP so the cluster survives network changes.
+
+  :::warning Set the VM size before you install, not after
+  Changing `--cpu` or `--memory` later requires restarting the Colima VM, which rebuilds the Docker networks underneath the `amp-local` cluster. The k3d server container can then crash-loop on every boot instead of starting, and `kubectl` stops responding. Recovering means deleting and recreating the cluster, so it is worth allocating enough up front. The [k3d installation guide](../guides/on-k3d.mdx#troubleshooting) has the recovery steps.
+  :::
+
+## 🚀 Installation Using Dev Container
+
+The quick-start includes a dev container with all required tools pre-installed (kubectl, Helm, K3d). This ensures a consistent environment across different systems.
+
+### Option A: Download and run `start.sh`
+
+`start.sh` checks your local prerequisites (Docker installed and running, free disk space, CPU architecture) and then launches the dev container for you:
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v2026.10.0/start.sh -o start.sh
+chmod +x start.sh
+./start.sh
+```
+
+### Option B: Run the Dev Container directly
+
+```bash
+docker run --rm -it --name amp-quick-start \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --network=host \
+  ghcr.io/wso2/amp-quick-start:v2026.10.0
+```
+
+Either way, the container drops you into a shell once it starts. From there, run the installer yourself:
+
+```bash
+./install.sh
+```
+
+**Time:** ~15-20 minutes
+
+This installs everything you need:
+- ✅ K3d cluster
+- ✅ OpenChoreo platform
+- ✅ Agent Manager
+- ✅ Full observability stack
+
+## What Happens During Installation
+
+1. **Prerequisites Check**: Verifies Docker, kubectl, Helm, and K3d are available
+2. **K3d Cluster Setup**: Creates a local Kubernetes cluster named `amp-local`
+3. **CoreDNS Configuration**: Applies CoreDNS custom configuration for OpenChoreo
+4. **Machine ID Generation**: Generates machine IDs for Fluent Bit observability
+5. **Cluster Prerequisites**: Installs Cert Manager, Gateway API CRDs, External Secrets Operator, and kgateway
+6. **Secrets Setup**: Installs OpenBao for Workflow Plane and configures ClusterSecretStore with OpenBao backend
+7. **OpenChoreo Installation**: Installs OpenChoreo Control Plane, Data Plane, Workflow Plane, and Observability Plane
+8. **Gateway Operator**: Installs Gateway Operator with RBAC for WSO2 API Platform CRDs
+9. **AMP Thunder Extension**: Installs WSO2 AMP Thunder Extension
+10. **AI Gateway Extension**: Registers and installs WSO2 AI Gateway for LLM Provider management.
+11. **Agent Sandbox Module**: Installs the Agent Sandbox controller that runs agents as sandboxed pods
+12. **Agent Management Platform**: Installs core platform (PostgreSQL, API, Console) and extensions (Secrets, Platform Resources, Observability, Build, Evaluation, Gateway)
+
+## Access Your Platform
+
+After installation completes, use the following endpoints to access the platform.
+
+- **Console**: [`http://console.amp.localhost:8080`](http://console.amp.localhost:8080)
+
+Login using the following credentials:
+- **Username**: `admin`
+- **Password**: `admin`
+
+## Uninstall
+
+**Platform only:**
+
+```bash
+./uninstall.sh
+```

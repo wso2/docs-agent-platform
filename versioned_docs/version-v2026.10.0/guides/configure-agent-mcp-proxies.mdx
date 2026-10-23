@@ -1,0 +1,279 @@
+---
+sidebar_position: 11
+---
+
+# Configure MCP Proxies for an Agent
+
+Agents can be configured to use one or more [MCP Proxies](./register-mcp-proxy.mdx) registered at the organization level. Each binding — called a **tool configuration** — references an org-level MCP proxy and exposes the proxy's per-environment endpoint (and, where required, an API key) to the agent. The process differs slightly between **Platform-hosted** and **External** agents, but both follow the same pattern: reference an org-level proxy from the agent.
+
+The agent does not embed the proxy. It references it, and the platform resolves the proxy's endpoint for the agent's target environment at deploy time. Because the org-level proxy owns its per-environment gateway artifacts, changing the proxy does not redeploy the agent automatically — the agent picks up any change on its next deployment.
+
+:::tip
+The API key described in this guide **authenticates** the agent: it proves the caller
+is allowed to reach the proxy at all. It says nothing about *which* tools that agent
+may invoke — any agent holding a valid key can call every tool the endpoint exposes.
+
+When you need that granularity(controling which agent access which tool). See
+[Authorize Agent Access to MCP Tools](./authorize-agent-access-to-mcp-tools.mdx),
+which covers per-tool **authorization** on top of authentication.
+:::
+
+## Prerequisites
+
+- At least one MCP Proxy registered at the org level (see [Register an MCP Proxy](./register-mcp-proxy.mdx))
+- An agent created in a project (Platform-hosted or External)
+
+---
+
+## Overview: Agent Types
+
+| Type | Description |
+|---|---|
+| **Platform** | Agent code is built and deployed by the platform from a GitHub repository. The platform injects the MCP server URL and API key as environment variables, with environment-specific values at runtime. |
+| **External** | Agent is deployed and managed externally. The platform provides the gateway endpoint URL and a per-environment API key for the MCP proxy so the agent can connect to it. |
+
+---
+
+## Configuring an MCP Proxy for a Platform-Hosted Agent
+
+### Step 1: Open the Agent
+
+1. Navigate to your project (**Projects** → select project → **Agents**).
+2. Click on a **Platform**-tagged agent.
+3. In the left sidebar, click **Configure**.
+
+The **Configure** page has two tabs — **LLM Configurations** and **Tool Configurations**. MCP proxies are attached under **Tool Configurations**.
+
+### Step 2: Add a Tool Configuration
+
+1. Open the **Tool Configurations** tab and click **Add Tool Configuration**. A right-side drawer opens.
+2. **Choose the MCP server for this agent.** The drawer lists all org-level MCP proxies. Use the **Search MCP servers** box to filter, then click the server you want.
+   - If none are listed, the drawer shows *"No MCP servers available"* with a link to *"Add MCP servers from the organization MCP Proxies page first."*
+3. The drawer switches to the configuration step, showing:
+   - The selected **MCP Server** (click the card to change it).
+   - A **Configuration Name** (auto-suggested from the proxy name; editable — placeholder `my-mcp-configuration`).
+   - The **Environment Variable Names** section (platform agents only, see Step 3).
+4. Click **Save**.
+
+> **One proxy, all environments.** Selecting a proxy here is environment-agnostic: the configuration maps every environment in the agent's deployment pipeline to the same proxy. The proxy supplies each environment's endpoint, and the platform injects environment-specific values at runtime — empty in any environment the proxy is not configured for. (To choose a *different* proxy per environment, do so while creating the agent — see [Attaching an MCP Proxy During Agent Creation](#attaching-an-mcp-proxy-during-agent-creation).)
+
+### Step 3: Set Environment Variable Names
+
+For platform agents, the drawer shows the **Environment Variable Names** section — the two environment variables the platform injects into the agent at runtime:
+
+| Variable Key | Default Name (example) | Description |
+|---|---|---|
+| `url` | `MY_PROXY_URL` | Base URL of the MCP server endpoint |
+| `apikey` | `MY_PROXY_API_KEY` | API key for authenticating with the MCP server endpoint |
+
+The names are auto-generated from the selected proxy's ID (uppercased, non-alphanumeric characters replaced with `_`; e.g., a proxy `my-proxy` yields `MY_PROXY_URL` and `MY_PROXY_API_KEY`). If your agent code already reads different names, edit them directly in the table.
+
+> These names are shared across all environments. The platform injects the MCP server URL and API key **values** at runtime per environment (empty in environments the proxy is not configured for). Edit only if your code uses different names.
+
+### Step 4: Use the Proxy in Agent Code
+
+After saving, open the tool configuration's detail page and click **Environment Variables & Integration Guide** (top-right). The panel shows the injected variable names (editable here too) and an **Integration Guide** with a ready-to-use Python snippet that loads the MCP tools through the injected proxy URL and API key:
+
+```python
+import os
+from typing import Any
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+raw_urls = os.environ.get("MY_PROXY_URL", "")
+mcp_server_urls = [url.strip() for url in raw_urls.split(",") if url.strip()]
+mcp_api_key = os.environ.get("MY_PROXY_API_KEY", "").strip()
+
+server_configs: dict[str, dict[str, Any]] = {
+    f"mcp_server_{i}": {
+        "url": url,
+        "transport": "streamable_http",
+        "headers": {
+            "API-Key": mcp_api_key,
+            "Authorization": "",
+        },
+    }
+    for i, url in enumerate(mcp_server_urls)
+} if mcp_server_urls and mcp_api_key else {}
+
+mcp_client = MultiServerMCPClient(server_configs)
+tools = await mcp_client.get_tools()
+```
+
+The variable names in the snippet match whatever you set in Step 3.
+
+> Renaming the variables here only changes their names — *"These variable names are injected into the agent at runtime with environment-specific values. Rename them here if your code already uses different names, then save."*
+
+#### OAuth (AgentID)-Secured Proxies
+
+If the proxy's Security tab is set to **OAuth** instead of **API Key**, the panel shows an **AgentID Variables** section instead of an API key, and the Integration Guide snippet mints a token instead of reading one:
+
+```python
+import os
+from typing import Any
+import requests
+from langchain_mcp_adapters.client import MultiServerMCPClient
+
+mcp_server_url = os.environ.get("MY_PROXY_URL", "").strip()
+
+client_id = os.environ["AMP_AGENTID_CLIENT_ID"]
+client_secret = os.environ["AMP_AGENTID_CLIENT_SECRET"]
+token_endpoint = os.environ["AMP_AGENTID_TOKEN_ENDPOINT"]
+scopes = os.environ["AMP_AGENTID_SCOPES"]
+
+token_response = requests.post(
+    token_endpoint,
+    auth=(client_id, client_secret),
+    data={
+        "grant_type": "client_credentials",
+        "scope": scopes,
+        "resource": mcp_server_url,  # scopes the token to this proxy (RFC 8707)
+    },
+    timeout=30,
+)
+token_response.raise_for_status()
+access_token = token_response.json()["access_token"]
+
+server_configs: dict[str, dict[str, Any]] = {
+    "mcp_server": {
+        "url": mcp_server_url,
+        "transport": "streamable_http",
+        "headers": {"Authorization": f"Bearer {access_token}"},
+    }
+} if mcp_server_url else {}
+
+mcp_client = MultiServerMCPClient(server_configs)
+tools = await mcp_client.get_tools()
+```
+
+The `AMP_AGENTID_*` variable names are fixed and not renameable. See [Use AgentID in a Platform-Hosted Agent](./use-agentid-in-platform-hosted-agents.mdx) for how these are provisioned and injected. For an OAuth-secured proxy on an **External** agent, see [Configuring an MCP Proxy for an External Agent](#configuring-an-mcp-proxy-for-an-external-agent) below.
+
+---
+
+## Configuring an MCP Proxy for an External Agent
+
+### Step 1: Open the Agent and Add a Tool Configuration
+
+1. Navigate to your project (**Projects** → select project → **Agents**) and open an **External** agent.
+2. In the left sidebar, click **Configure**, then open the **Tool Configurations** tab.
+3. Click **Add Tool Configuration**, choose an MCP server from the drawer, give the configuration a name, and click **Save**.
+
+> External agents do not show the **Environment Variable Names** section — the platform provides the connection details directly instead of injecting environment variables.
+
+### Step 2: Manage the Per-Environment API Key
+
+Open the tool configuration's detail page. For external agents it shows an **Environment** selector and an **API key** section for the selected environment:
+
+- *"Generate an API key to authenticate this agent's requests to the MCP server through the gateway. Only one key can exist per configuration."*
+- Use the controls to **generate**, **regenerate** (rotate), or **delete** (revoke) the key. There is one key per configuration per environment.
+
+Switch environments with the selector to manage each environment's key independently.
+
+### Step 3: Connect Your Agent Code to the Proxy
+
+Click **Connect to MCP Server** (top-right) to open the connection panel for the selected environment:
+
+| Field | Description |
+|---|---|
+| **Endpoint URL** | The gateway invoke URL for this MCP proxy in the selected environment — use it as the server URL in your MCP client |
+| **Header Name** | The HTTP header to pass the API key (from the proxy's Security settings; default `X-API-Key`) |
+| **API Key** | The generated client key — shown only right after you generate or rotate it |
+| **Example cURL** | A ready-to-use cURL command combining the Endpoint URL, Header Name, and API Key |
+
+Example cURL:
+
+```bash
+curl -N <endpoint-url> \
+  --header "X-API-Key: <your-api-key>"
+```
+
+> When a key is freshly generated, the panel warns *"Make sure to copy your API key now. You will not be able to see it again."* If you reopen the panel later, it shows *"The endpoint is available below. If the MCP server requires an API key, the key was only displayed when this configuration was created."* — rotate the key from the API key section to obtain a new value.
+
+Configure your agent's MCP client using the Endpoint URL and pass the API Key in the configured header on every request.
+
+#### OAuth (AgentID)-Secured Proxies
+
+If the proxy's Security tab is set to **OAuth** instead of **API Key**, Step 2 above doesn't apply — there's no API key to manage. The **Connect to MCP Server** panel shows different fields instead:
+
+| Field | Description |
+|---|---|
+| **MCP URL** | The gateway invoke URL for this MCP proxy in the selected environment |
+| **Client ID** / **Client Secret** | This agent's OAuth 2.0 credentials for this environment (the secret is shown once, right after it's generated or rotated) |
+| **Issuer URL** | This environment's ThunderID issuer, useful for verifying tokens |
+| **Token Endpoint** | The `/oauth2/token` endpoint to request a token from |
+| **JWKS Endpoint** | This environment's JSON Web Key Set, for verifying token signatures |
+| **Available Scopes** | The scopes to request when minting a token |
+
+Copy these values into your external agent's own environment (there is no automatic injection, since the platform doesn't run this agent's process). Mint a token with the `client_credentials` grant, passing the **MCP URL** as the `resource` parameter (RFC 8707) so the token is scoped to this specific proxy, then call the MCP URL with it as a Bearer token:
+
+```bash
+TOKEN=$(curl -s -X POST "<token-endpoint>" \
+  -u "<client-id>:<client-secret>" \
+  -d "grant_type=client_credentials" \
+  -d "scope=<scopes>" \
+  -d "resource=<mcp-url>" \
+  | jq -r .access_token)
+
+curl -N <mcp-url> \
+  --header "Authorization: Bearer $TOKEN"
+```
+
+Rotate credentials from the **Agent ID** page (top-right on the agent's Overview page) if a secret is lost or needs to be regenerated.
+
+---
+
+## Attaching an MCP Proxy During Agent Creation
+
+You can also attach MCP proxies while creating a new agent, without visiting the Configure page afterward.
+
+1. During agent creation, find the **MCP Proxies (Optional)** section.
+2. Click **Add**, then select a proxy from the **Select MCP Proxy** drawer (searchable, with an **Add MCP Proxy** link to register a new one).
+3. For each selected proxy, define the **URL variable name** and **API key variable name** (auto-suggested, customizable). Names must match `^[A-Za-z_][A-Za-z0-9_]*$`, be unique across the agent's configuration, and differ from each other.
+4. If the agent spans multiple environments, use the per-environment tabs to select a proxy for each environment. (Unlike the Configure page — which attaches one proxy across all environments — agent creation lets you pick a different proxy per environment.)
+
+The proxies you attach here appear afterward as tool configurations on the agent's **Configure** page.
+
+---
+
+## Managing Tool Configurations
+
+From the **Configure** page **Tool Configurations** tab, the table shows all attached configurations with:
+
+- **Name**: The configuration name. Click a row to open the detail page.
+- **Description**: The configuration's description.
+- **Created**: When the binding was created.
+- **Actions**: A delete icon (tooltip *"Remove tool configuration"*) to detach the proxy. Confirm in the **Remove Tool Configuration** dialog.
+
+Use the **Search by name or description...** box to filter. Multiple configurations can be attached to a single agent, letting the agent code use different MCP servers by referencing their respective environment variable names (platform agents) or endpoint URLs and API keys (external agents).
+
+> To change the linked proxy, remove the configuration and add a new one with the desired proxy.
+
+---
+
+## Troubleshooting
+
+### Promotion is blocked with "has no MCP server in..."
+
+If promoting a platform-hosted agent fails with an error like:
+
+> Promotion blocked: `<configuration name>` has no MCP server in `"<environment>"`
+
+the agent's tool configuration has no working connection to the proxy in the target environment yet. Promoting anyway would deploy the agent with an empty MCP URL and API key, so the platform blocks it upfront instead of letting the agent fail on its first tool call.
+
+To resolve it, open the MCP proxy that the tool configuration references and confirm it is actually deployed to the target environment (see [Register an MCP Proxy](./register-mcp-proxy.mdx)). Saving the proxy's configuration, even without changing anything, makes the platform recheck every agent bound to it and complete any binding that has now become possible. Retry the promotion afterward.
+
+### The connection stays stuck even after the proxy is deployed there
+
+Saving the proxy's configuration, as described above, resolves this in most cases. It does not cover one specific situation: if the target environment only just became usable because its first gateway was assigned to it, rather than because the proxy itself was updated, the platform does not automatically recheck existing agent bindings for it.
+
+If you have confirmed the proxy is deployed to the environment and the connection is still unresolved, remove the tool configuration from the agent and add it again (see [Managing Tool Configurations](#managing-tool-configurations)). Re-adding it builds the binding fresh, which resolves the stuck state.
+
+---
+
+## Notes
+
+- MCP proxy credentials are **never exposed** to agent code directly — only the injected environment variables (platform agents) or the gateway endpoint + API key (external agents) are available at runtime.
+- For platform agents, the MCP server URL and API key values are injected at deploy time per environment, and are empty in any environment the proxy is not configured for. Changing the org-level proxy does not redeploy the agent automatically — the agent resolves the endpoint on its next deployment.
+- For external agents, the Endpoint URL routes traffic through the AI Gateway, applying any security, access control, and rewrite rules configured on the endpoint serving that environment.
+- The external agent API Key is displayed only right after it is generated or rotated. If lost, rotate the key from the tool configuration's API key section (per environment) to obtain a new value.
+- A single proxy attached from the Configure page maps to every environment in the agent's pipeline; the proxy supplies each environment's endpoint. To use different proxies per environment, attach them during agent creation.
+- An API key controls **whether** an agent may call the proxy, not **which tools** it may call. For per-tool control, use an identity-secured proxy with scopes and roles — see [Authorize Agent Access to MCP Tools](./authorize-agent-access-to-mcp-tools.mdx).

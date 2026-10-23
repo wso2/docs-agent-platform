@@ -1,0 +1,123 @@
+---
+sidebar_position: 17
+description: Register an A2A agent that runs outside Agent Manager, store its agent card per environment, and optionally route callers to it through the gateway.
+---
+
+# Register an External A2A Agent
+
+Register an [Agent2Agent (A2A)](https://a2a-protocol.org/) agent that runs outside WSO2 Agent Manager, so the platform stores its agent card for each environment. You can also route the agent through an environment's gateway, which puts gateway API keys, CORS, and authentication in front of it.
+
+## How Agent Manager Fronts an External A2A Agent
+
+Each environment of an externally-hosted A2A agent has its own card URL and its own routing. An environment is in one of two modes:
+
+| Mode | What Agent Manager does | Where callers send requests |
+|---|---|---|
+| Direct (the default) | Fetches the card from the URL you register and shows it in the Console | The agent's own address |
+| **Route through gateway** | Also publishes the agent to the environment's gateway, which forwards each call to the agent | The gateway URL the Console shows for the environment |
+
+When the agent is routed through the gateway, callers use the same paths as on the agent, under the gateway URL. For a card at `https://agent.example.com/team/.well-known/agent-card.json` that lists JSON-RPC at `https://agent.example.com/team/a2a/jsonrpc`, callers send JSON-RPC requests to `<gateway-url>/a2a/jsonrpc`. The card the gateway serves at `<gateway-url>/.well-known/agent-card.json` already lists these gateway URLs.
+
+## Prerequisites
+
+- An agent that serves A2A protocol version `1.0` and its agent card at a public `http` or `https` address.
+- A project to register the agent in.
+- To route the agent through the gateway: an ingress gateway mapped to the environment. See [Environment Management](./environment-management.mdx).
+
+## Step 1: Register the Agent
+
+1. Open your project and click **Add Agent**, then select **External Agent**.
+2. Enter a **Name** and, optionally, a **Description**.
+3. Under **Agent Type**, select **A2A Agent**.
+4. Click **Register**.
+
+Registration does not ask for a URL. You register the card URL for each environment in the next step.
+
+## Step 2: Register the Agent Card URL
+
+1. Open the agent. In the left sidebar, under **Agent Lifecycle**, click **Configure**.
+2. Click the **A2A** tab, then select the environment's tab.
+3. In **Agent card URL**, enter the full URL of the agent's card, such as `https://agent.example.com/.well-known/agent-card.json`.
+4. Click **Save**.
+
+The **Agent Card** section on the agent's overview also links here through **Register agent card URL**.
+
+The URL must be publicly reachable. Agent Manager rejects `localhost` and private network addresses.
+
+Agent Manager then reads the card. Until it has, the card shows **Pending**. Then the panel shows the card's name, version, **Interfaces**, and **Skills**. Click **View JSON** to see the whole card. If the card shows **Failed**, fix the cause shown with it, then click **Refetch**.
+
+To change the URL, click the edit icon next to it. To remove the URL and the stored card for the environment, click **Remove**.
+
+## Step 3: Route the Agent Through the Gateway
+
+Optional: skip this step if callers should keep reaching the agent directly.
+
+To route through the gateway, the card URL must end in `/.well-known/agent-card.json`, and the agent's JSON-RPC or HTTP+JSON interfaces must be on the same host, under the same path as the card.
+
+To turn on routing:
+
+1. On the environment's **A2A** tab, turn on **Route through gateway**.
+2. Optional: if the agent itself requires a credential, enter the header it expects in **Upstream header**, such as `X-API-Key`, and the credential in **Header value**. The gateway adds this header to every call it forwards to the agent.
+3. Click **Save**.
+
+You can also turn on **Route through gateway** while registering the card URL in Step 2.
+
+Under **Gateway routing**, the status changes from **Publishing to gateway** to **Routed through gateway**, and the Console shows the agent's gateway URL with a copy button. If the status is **Gateway publish failed**, read the error, fix the cause, and click **Retry**.
+
+### Upstream Credential
+
+- The card URL must use `https` before you can save a header value.
+- The Console never shows a saved value again. Click **Replace** to enter a new one, or **Clear** to remove it.
+- While a value is saved, you cannot change the card URL to another host. Clear the value first.
+
+## Step 4: Configure Gateway Security
+
+Routing an environment through the gateway turns on API key security and CORS with the platform defaults. To change them:
+
+1. Under **Gateway routing**, click **Security settings**.
+2. In the **Gateway security** drawer, set **CORS Configuration**, **Agent Card CORS**, and **Endpoint Authentication** as for a platform-hosted A2A agent. See [Deploy an A2A Agent](./deploy-an-a2a-agent.mdx#step-2-configure-endpoint-settings).
+3. Click **Apply**.
+
+With **OAuth** selected, **Forward token to upstream** stays off: the gateway checks the caller's token but never passes it on to an externally-hosted agent.
+
+## Step 5: Create an API Key
+
+With API key security on, callers need an agent API key for the environment. Once the environment is routed through the gateway, open the agent and, under **Security** in the left sidebar, click **Credentials**. Create the key as described in [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx#step-2-create-an-agent-api-key).
+
+An externally-hosted agent has no deployment, so its keys work as soon as the environment is routed through the gateway.
+
+## Step 6: Call the Agent Through the Gateway
+
+Send a request to the gateway URL plus the interface path from the card. For a JSON-RPC interface at `/a2a/jsonrpc` under the card's base:
+
+```bash
+curl -X POST "<gateway-url>/a2a/jsonrpc" \
+  -H "Content-Type: application/json" \
+  -H "A2A-Version: 1.0" \
+  -H "X-API-Key: <agent-api-key>" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "msg-1",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Hello"}]
+      }
+    }
+  }'
+```
+
+Replace `<gateway-url>` with the URL under **Gateway routing**, `/a2a/jsonrpc` with your agent's JSON-RPC path, and `<agent-api-key>` with the key from Step 5. An A2A client can instead fetch the card from `<gateway-url>/.well-known/agent-card.json` and use the interface URLs in it.
+
+## Stop Routing Through the Gateway
+
+1. On the environment's **A2A** tab, turn off **Route through gateway**.
+2. Click **Save**, then click **Stop routing** to confirm.
+
+## Next Steps
+
+- [Deploy an A2A Agent](./deploy-an-a2a-agent.mdx): run an A2A agent on the platform instead.
+- [Internal and External Agent](../concepts/internal-and-external-agent.mdx)
+- [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx)

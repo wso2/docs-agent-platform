@@ -444,3 +444,8 @@
 .markdown > h4 {
   --ifm-h4-font-size: 1rem;
 }
+
+/* amctl agent reference: keep flag and column names in the first column on one line. */
+.docs-doc-id-reference\/cli\/agent .markdown table td:first-child {
+  white-space: nowrap;
+}

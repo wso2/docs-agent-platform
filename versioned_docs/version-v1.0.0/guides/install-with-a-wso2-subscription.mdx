@@ -1,0 +1,185 @@
+---
+sidebar_position: 5
+description: Install the WSO2-supported build of Agent Manager from registry.wso2.com with the registry credentials WSO2 sends for a subscription or an evaluation.
+---
+
+# Install with a WSO2 Subscription
+
+A WSO2 subscription, or an evaluation of one, gives you the WSO2-supported build of WSO2 Agent Manager. It is the same platform as the community release, with updates that carry fixes on top of the release. Its Helm charts and images are published to `registry.wso2.com` and signed by WSO2. You install it with the [k3d](./on-k3d.mdx) or [On Your Environment](./on-your-environment.mdx) guide, using the changes on this page.
+
+## Get Your Registry Credentials
+
+How you get registry credentials, and which registry project they open, depends on how you obtained Agent Manager.
+
+### Evaluation
+
+When you download Agent Manager from the WSO2 website for evaluation, WSO2 emails you registry credentials: a username and a token. Your registry project is `wso2-agent-manager-evaluations`.
+
+### Subscription
+
+With a WSO2 subscription, get your registry credentials from the WSO2 Customer Portal, under **Settings** → **Registry Tokens**. See [Registry Token Management](https://updates.docs.wso2.com/en/latest/updates/registry-token-management/) for how to create and manage them. Your registry project is `wso2-agent-manager`.
+
+The rest of this page writes the registry project as `<project>`, and calls the username and token your registry credentials.
+
+## What Changes From the Community Install
+
+| | Community | WSO2 subscription |
+|---|---|---|
+| Helm charts | `oci://ghcr.io/wso2/<chart>` | `oci://registry.wso2.com/<project>/helm-charts/<chart>` |
+| Agent Manager images | `ghcr.io/wso2/<image>` | `registry.wso2.com/<project>/<image>` |
+| Chart version | `1.0.0` | `1.0.0` for the release, `1.0.0-u<N>` for update N |
+| Image tag | `v1.0.0` | `1.0.0` for the release, `1.0.0.<N>` for update N |
+| Credentials | None | Registry username and token |
+
+The charts in your project already point at the images in the same project, and they reference an image pull secret named `wso2-registry-credentials`. The `helm install` commands in the guides therefore stay the same. Only the Agent Manager images move. The instrumentation image (`amp-python-instrumentation-provider`) and third-party images, such as OpenChoreo, ThunderID, and cert-manager, still come from their public registries.
+
+WSO2 publishes the 1.0.0 release to your project, followed by updates to it. The release is version `1.0.0`, and update N is version `1.0.0-u<N>`. For example, update 2 is `1.0.0-u2`, with chart version `1.0.0-u2` and image tag `1.0.0.2`. This page calls either one your version. Install the newest version published to your project, unless WSO2 asks you to install a particular one.
+
+:::note Always name the version
+Helm treats an update such as `1.0.0-u2` as a pre-release of `1.0.0`, so it ranks every update below the release. `helm install` and `helm upgrade` without `--version`, and version ranges in tools such as Argo CD or Flux, therefore resolve to `1.0.0` and never to an update. Pass the exact version every time.
+:::
+
+## List the Published Versions
+
+To see which versions are published to your project, list the tags of the `wso2-agent-manager` chart with [ORAS](https://oras.land/). Helm cannot list the versions of a chart in an OCI registry, and `helm list` shows only the version installed in your cluster.
+
+```bash
+oras login registry.wso2.com
+oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep -v '\.sig$' | sort -V
+```
+
+`oras login` asks for your registry username and token. Run `oras logout registry.wso2.com` when you are done, so the login is not kept on your machine.
+
+Without ORAS installed, run the same commands in a temporary container. Nothing is kept after it exits:
+
+```bash
+docker run --rm -it --entrypoint sh ghcr.io/oras-project/oras:v1.2.3 -c 'oras login registry.wso2.com && oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep -v "\.sig$" | sort -V'
+```
+
+The list starts with the release, `1.0.0`, followed by its updates in order, so the last version is the newest. The `.sig` tags that `grep` removes are the signatures described in [Verify Image Signatures](#verify-image-signatures-optional).
+
+## Install on k3d
+
+### One Command
+
+Run the subscription installer with your project. It installs the newest version published to your project:
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3d-install-subscription.sh | bash -s -- --project <project>
+```
+
+To install a particular version, such as one WSO2 asked you to use, add `--version`:
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3d-install-subscription.sh | bash -s -- --project <project> --version 1.0.0-u2
+```
+
+The script asks for your registry username and token, and reads the token without echoing it. It then:
+
+1. Checks the same prerequisites as the [community one-command install](./on-k3d.mdx#install).
+2. Signs in to `registry.wso2.com` with your credentials and finds your version: the one you named, or the newest published to your project.
+3. Downloads the 1.0.0 release bundle from GitHub, the same one the community install uses, into `~/.wso2-agent-manager/subscription/<project>/<image tag>/`.
+4. Creates the `amp-local` cluster and installs Agent Manager, pulling every chart and Agent Manager image from your project.
+
+| Option | Description |
+|---|---|
+| `--project` | `wso2-agent-manager` or `wso2-agent-manager-evaluations`. Without it, the script asks which one. |
+| `--version` | Install this version, such as `1.0.0` or `1.0.0-u2`, instead of the newest. This installer only installs 1.0.0 and its updates, and refuses a version of another release. |
+| `--download-only` | Check the credentials, find the version, download the release bundle, print its location, and stop without installing. It also shows when a newer version is published to your project. |
+
+To run the script without prompts, set the credentials first, as described in [Provide the Credentials Without Prompts](#provide-the-credentials-without-prompts).
+
+When the install finishes, it prints the Console URL, the admin sign-in, and the version it installed. Continue with [Verify and Access the Platform](./on-k3d.mdx#verify-and-access-the-platform).
+
+### Guided Install
+
+Follow the [k3d guide](./on-k3d.mdx) and select the **WSO2 Subscription** tab where it appears:
+
+- **Step 5: Configuration Variables** sets the chart version and registry, and signs Helm in to `registry.wso2.com`.
+- **Phase 2** creates the `wso2-registry-credentials` pull secret before Agent Manager is installed.
+
+## Install on Your Environment
+
+Follow the [On Your Environment](./on-your-environment.mdx) guide and select the **WSO2 Subscription** tab where it appears:
+
+- **Plan Your Deployment** sets the chart version and registry, and signs Helm in to `registry.wso2.com`.
+- **Phase 2** creates the `wso2-registry-credentials` pull secret before Agent Manager is installed.
+
+## Provide the Credentials Without Prompts
+
+`k3d-install-subscription.sh` reads the credentials from `AMP_REGISTRY_USERNAME` and `AMP_REGISTRY_PASSWORD`, or from a file named by `AMP_REGISTRY_CREDENTIALS_FILE`. Keep them in a file that only you can read rather than on a command line, where they end up in your shell history:
+
+```bash
+cat > ~/amp-registry.creds <<'EOF'
+AMP_REGISTRY_USERNAME='<username>'
+AMP_REGISTRY_PASSWORD=<token>
+EOF
+chmod 600 ~/amp-registry.creds
+```
+
+Keep the single quotes around the username. A registry username can contain `$`, which a shell would otherwise expand.
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3d-install-subscription.sh | AMP_REGISTRY_CREDENTIALS_FILE=~/amp-registry.creds bash -s -- --project <project>
+```
+
+## Verify the Installation
+
+Check that the Agent Manager pods run images from your project:
+
+```bash
+kubectl get pods -n wso2-amp -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | grep amp-
+kubectl get pods -n openchoreo-observability-plane -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | grep amp-
+```
+
+Each image should start with `registry.wso2.com/<project>/`. The instrumentation image that platform-hosted agents use stays on `ghcr.io/wso2`, which is expected.
+
+To see which version is installed, check the chart version of the `amp` release:
+
+```bash
+helm list -n wso2-amp
+```
+
+## Verify Image Signatures (Optional)
+
+WSO2 signs every Agent Manager image and Helm chart in the registry with [cosign](https://docs.sigstore.dev/cosign/). To verify one, save the WSO2 public key as `cosign.pub`:
+
+```text
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw4rovhfVQqdUeXvtxxAl
+3OKdNLNaUqiAlnb3zBxv7ITYCJXhXLByUk5wuKca6fr00d3NqwXoUeVARdrKMz5y
+6a0QTLmM8CmD+l/ffGRqrNel23cdHkIi3wZFAJToHy+mFB6tYUoL6ieuEtLT+bFn
+msBkucHBPp6ahicCVPfegiTWjSwBylnYSOPa9D/VmvQV13ROfuq1EgeejbCpepbc
+9APj3pXjpFtOPWPBBYdofumqYj2sKR2y/V4yYl8mrEJon6SX3hBi5d0RXGNaFzdU
+6D9rm4K6ZEEYX+l2uT+sHorTtI4e08KVOK7lU0VY4fiR+5Mh3FFKeLvF8KNMSYOZ
+gQIDAQAB
+-----END PUBLIC KEY-----
+```
+
+Sign in to the registry, then verify an image and a chart:
+
+```bash
+printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
+printf '%s' "$AMP_REGISTRY_PASSWORD" | docker login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
+cosign verify --key cosign.pub registry.wso2.com/<project>/amp-api:<image tag>
+cosign verify --key cosign.pub registry.wso2.com/<project>/helm-charts/wso2-agent-manager:<chart version>
+```
+
+Use the image tag and chart version of your version from [What Changes From the Community Install](#what-changes-from-the-community-install). For update 2, they are `1.0.0.2` and `1.0.0-u2`.
+
+A valid signature prints the verified claims for the image or chart. An error means the artifact was not signed by WSO2 or has changed since it was signed.
+
+## Troubleshooting
+
+### Helm Fails With 401 Unauthorized
+
+Helm is not signed in to `registry.wso2.com`. Run the `helm registry login` command from the **WSO2 Subscription** tab again, and check your [registry credentials](#get-your-registry-credentials).
+
+### Agent Manager Pods Stay in ImagePullBackOff
+
+Check the pod's events with `kubectl describe pod`. The usual causes are:
+
+- The `wso2-registry-credentials` secret is missing from that pod's namespace.
+- The secret was created for a registry host other than `registry.wso2.com`.
+- The username was not quoted when the secret or credentials file was created, so the shell expanded its `$`.

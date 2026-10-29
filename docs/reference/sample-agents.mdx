@@ -1,11 +1,12 @@
 # Sample Agents
 
-The repository ships seven runnable agents under [`samples/`](https://github.com/wso2/agent-manager/tree/main/samples), each demonstrating a different framework and a different way of getting traces into the Agent Manager. Start from whichever one is closest to what you are building rather than from an empty directory.
+The repository ships eight runnable agents under [`samples/`](https://github.com/wso2/agent-manager/tree/main/samples), each demonstrating a different framework and a different way of getting traces into the Agent Manager. Start from whichever one is closest to what you are building rather than from an empty directory.
 
 ## Choosing a Sample
 
 | Sample | Framework | Instrumentation | Start Here If You Want |
 |---|---|---|---|
+| [a2a-agent](#a2a-agent) | `a2a-sdk` (A2A protocol) | Zero-code | An agent other agents call over the A2A protocol |
 | [crewai-agent](#crewai-agent) | CrewAI | Zero-code | A multi-agent crew with sequential tasks |
 | [customer-support-agent](#customer-support-agent) | LangGraph | Zero-code | A multi-tool agent backed by a real database |
 | [dotnet-agent](#dotnet-agent) | Microsoft Agent Framework (.NET) | Native OpenTelemetry | An agent in a language AMP does not auto-instrument |
@@ -16,8 +17,8 @@ The repository ships seven runnable agents under [`samples/`](https://github.com
 
 **Zero-code** means the Agent Manager injects instrumentation at deploy time and the sample contains no tracing code. **Manual** and **native** samples emit their own spans. See [AMP Instrumentation](../guides/amp-instrumentation.mdx) for how the two paths differ.
 
-:::note Two of the seven run in CI
-`customer-support-agent` and `crewai-agent` are deployed and trace-verified on every release by the instrumentation matrix ([`deployable_samples.py`](https://github.com/wso2/agent-manager/blob/main/test/instrumentation-matrix/harness/deployable_samples.py)). The other five are maintained by hand, so pin versions yourself if you build on them.
+:::note Two of the eight run in CI
+`customer-support-agent` and `crewai-agent` are deployed and trace-verified on every release by the instrumentation matrix ([`deployable_samples.py`](https://github.com/wso2/agent-manager/blob/main/test/instrumentation-matrix/harness/deployable_samples.py)). The other six are maintained by hand, so pin versions yourself if you build on them.
 :::
 
 ## Before You Start
@@ -31,6 +32,28 @@ export OPENAI_API_KEY="your-key"
 Most samples are **Platform-Hosted**, meaning you point the Agent Manager at the sample's directory and it builds and runs the agent for you. Follow [Create Your First Agent](../tutorials/create-your-first-agent.mdx) and set **App Path** to the path given below for each sample. Two samples run on your own machine as **Externally-Hosted** agents instead, and say so.
 
 No sample uses MCP tools. To see those, follow [Configure Agent MCP Proxies](../guides/configure-agent-mcp-proxies.mdx) separately.
+
+---
+
+## a2a-agent
+
+A notes agent that speaks the [A2A protocol](https://a2a-protocol.org/). Give it meeting notes and it either summarizes them or extracts action items, both through OpenAI.
+
+Pick this one to deploy an **A2A Agent**. It serves its own agent card and both A2A transports, JSON-RPC under `/rpc` and HTTP+JSON under `/rest`, from one process, and streams its summaries. [Deploy the A2A Notes Agent Sample](../tutorials/deploy-the-a2a-notes-agent-sample.mdx) walks through deploying and calling it.
+
+- **App Path**: `/samples/a2a-agent`
+- **Agent Type**: **A2A Agent**, port `9099`
+- **Requires**: `OPENAI_API_KEY`
+- **Installs**: `a2a-sdk[fastapi]==1.1.5`
+
+Keep `a2a-sdk` at `1.1.5` or newer if you adapt the sample. Older releases fail every A2A message when auto instrumentation is on.
+
+```bash
+cd samples/a2a-agent
+pip install -r requirements.txt
+python main.py
+# Serves on port 9099
+```
 
 ---
 

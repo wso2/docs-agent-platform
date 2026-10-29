@@ -14,6 +14,9 @@
          operator, since the gateway requires them regardless of that setting.
 */}
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 export const Prod = ({production, children}) => (production ? <>{children}</> : null);
 export const Dev = ({production, children}) => (production ? null : <>{children}</>);
 
@@ -25,6 +28,33 @@ The Agent Manager installs as a set of Helm charts on top of OpenChoreo. The com
 :::info Prerequisites
 Thunder (identity provider) must be installed before proceeding — see the Thunder installation step in Phase 1. The variables `THUNDER_PUBLIC_URL`, `THUNDER_INTERNAL_URL`, `CONSOLE_PUBLIC_URL`, `API_PUBLIC_URL`, `OBS_API_PUBLIC_URL`, `CONSOLE_PUBLIC_HOST`, `API_PUBLIC_HOST`, `OBS_API_PUBLIC_HOST`, and `INSTRUMENTATION_URL` must be set from the Configuration Variables section. The production steps below additionally use `AGENTS_DOMAIN` — the domain deployed agents are served on, `agents.<your base domain>` — to build the gateway's hostname and virtual host. The `*_PUBLIC_HOST` variables carry the bare hostname (no scheme or port) and become the HTTPRoute hostnames on the plane gateways.
 :::
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+The community images are public, so no image pull secret is needed.
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+Create the `wso2-registry-credentials` image pull secret in the namespaces that run Agent Manager images, with the registry username and token from the earlier **WSO2 Subscription** tab:
+
+```bash
+for ns in "${AMP_NS}" "${OBSERVABILITY_NS}" workflows-default; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+  kubectl create secret docker-registry wso2-registry-credentials \
+    --namespace "$ns" \
+    --docker-server=registry.wso2.com \
+    --docker-username="$AMP_REGISTRY_USERNAME" \
+    --docker-password="$AMP_REGISTRY_PASSWORD" \
+    --dry-run=client -o yaml | kubectl apply -f -
+done
+```
+
+Evaluation monitors run in `workflows-default`, the workflow namespace of the `default` organization.
+
+</TabItem>
+</Tabs>
 
 ---
 

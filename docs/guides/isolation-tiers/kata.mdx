@@ -17,12 +17,15 @@ Kata boots a real VM per agent, so the node **must expose `/dev/kvm`**:
 - ❌ GCP E2, AMD N2D, ARM T2A machine types, and Container-Optimized OS (read-only filesystem)
 - ❌ k3d / kind **node containers** — even on a KVM-capable host, the Kata guest-agent handshake cannot complete inside a container-based node; Kata needs a real Linux node
 
-Verify on the node:
+Verify on the node itself, not on your workstation. From a machine with `kubectl` access, `kubectl debug` runs the check on the node:
 
 ```bash
-ls -l /dev/kvm
-cat /sys/module/kvm_intel/parameters/nested   # expect: Y (Intel)
+kubectl debug node/<node-name> -it --profile=sysadmin --image=busybox:1.36 -- \
+  chroot /host sh -c 'ls -l /dev/kvm; cat /sys/module/kvm_intel/parameters/nested'
+# expect: a /dev/kvm character device, then Y (Intel)
 ```
+
+This leaves a completed `node-debugger-<node-name>-…` pod in the current namespace; delete it afterwards. With SSH access to the node, run the two commands there instead.
 :::
 
 ## How It Works
@@ -45,7 +48,7 @@ Like gVisor, Kata uses a **dedicated node** labeled `kata=true` and tainted `kat
 | Virtualization | `/dev/kvm` present and functional (see warning above) |
 | Architecture | x86_64 |
 | OS | Ubuntu (or similar) with systemd + containerd — **not** Container-Optimized OS |
-| Access | kubectl access to the cluster (the installer runs from your machine, not on the node) |
+| Access | `kubectl` and `helm` access to the cluster (the installer runs from your machine, not on the node) |
 
 ## Set Up a Kata Node
 
@@ -70,12 +73,12 @@ not on your workstation.
 Provision a KVM-capable Linux node matching the requirements above and join it to your cluster using your platform's standard mechanism. Leave it empty.
 
 :::tip Taint the node as early as possible
-If your platform lets you set taints at node-pool creation, apply `kata=true:NoSchedule` there. An untainted node starts accepting regular platform pods immediately, and you will have to drain them all off before installing the runtime (the containerd reconfiguration restarts every pod on the node). If the node has already picked up workloads, `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data` it first.
+If your platform lets you set taints at node-pool creation, apply `kata=true:NoSchedule` there. An untainted node starts accepting regular platform pods immediately. The installer restarts the node's container runtime; running pods normally survive that, but if the node has already picked up workloads you can `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data` it first. To share the node with other pods instead, leave it untainted and run the installer with `KATA_TAINT=false`.
 :::
 
-### Step 2: Run the installer from a machine with kubectl access
+### Step 2: Run the installer from a machine with kubectl and helm access
 
-Unlike the gVisor installer (which runs on the node), the Kata installer runs from **any machine with kubectl access** and does everything through the Kubernetes API:
+Unlike the gVisor installer (which runs on the node), the Kata installer runs from **any machine with `kubectl` and `helm` access** and does everything through the Kubernetes API:
 
 ```bash
 KATA_NODES="<node-name>" bash "${AMP_DIST}/deployments/setup/install-kata.sh"
@@ -85,10 +88,14 @@ What it does:
 
 1. **Pre-flights `/dev/kvm`** on every target node (via a short-lived privileged pod) and aborts if any node lacks it.
 2. Labels the node(s) `kata=true`.
-3. Applies the upstream **kata-deploy** DaemonSet, with a nodeSelector and toleration injected **before** apply — so it only ever lands on the labeled node(s); your other nodes are never reconfigured.
-4. **Auto-wires k3s nodes**: k3s bundles its own containerd (configured only via `config.toml.tmpl`, read at startup), which upstream kata-deploy does not handle — the installer detects k3s nodes and patches the template + restarts the k3s agent for you.
-5. Applies the `kata-qemu` RuntimeClass and taints the node(s) `kata=true:NoSchedule`.
-6. Patches the Fluent Bit log DaemonSet to tolerate the taint, so agent logs are collected.
+3. Installs upstream **kata-deploy** from its Helm chart (kata-containers `KATA_VERSION`, default `4.2.0`), scoped to the labeled node(s) so your other nodes are never reconfigured. The chart wires the node's containerd itself on standard Kubernetes, k3s and RKE2; the installer detects which one from the node's kubelet version. Nodes set up by the earlier manifest-based installer are migrated on the first run.
+4. Applies the `kata-qemu` RuntimeClass and boots a test pod under it on every target node. The installer reports success only once that pod has run in its own VM, with a kernel different from the node's.
+5. Taints the node(s) `kata=true:NoSchedule`. Set `KATA_TAINT=false` to leave them schedulable for other pods.
+6. Lets the Fluent Bit log DaemonSet tolerate the taint, so agent logs are collected. It checks the toleration stored in your `observability-logs-opensearch` Helm release and, if it is missing, sets the chart value `fluent-bit.tolerations` (a `helm upgrade --reuse-values` at the release's installed chart version). It patches the DaemonSet only when that release cannot be upgraded with Helm, and then prints the `helm upgrade` command to make it durable, because a patch is lost whenever the DaemonSet is recreated.
+
+:::note Upgrading from the earlier guide
+Re-run the installer on a node set up with the earlier version of this guide; it replaces the manifest-based kata-deploy with the Helm release. On RKE2, the `/etc/containerd/config.toml` stub and the `config.toml.tmpl` that guide had you write can stay: kata-deploy 4.x writes its runtime entry where RKE2 reads it alongside that template.
+:::
 
 :::tip Verify
 ```bash
@@ -98,40 +105,9 @@ kubectl get node <node-name> --show-labels   # kata=true
 ```
 :::
 
-<details>
-<summary>RKE2 nodes (bundled containerd)</summary>
-
-Upstream kata-deploy assumes a standalone containerd at `/etc/containerd/config.toml`, which RKE2 nodes do not have. Two extra steps are needed on each RKE2 Kata node:
-
-**1. Before running the installer**, create an empty stub so the kata-deploy pod gets past its pre-flight check (it crash-loops with `cp: can't stat '/etc/containerd/config.toml'` otherwise):
-
-```bash
-sudo mkdir -p /etc/containerd && sudo touch /etc/containerd/config.toml
-```
-
-**2. After kata-deploy has installed the binaries into `/opt/kata`** (the node gets the `katacontainers.io/kata-runtime=true` label on success), wire the runtime through RKE2's containerd template — kata-deploy wrote its config to the stub, which RKE2 never reads:
-
-```bash
-sudo mkdir -p /usr/local/bin
-sudo ln -sf /opt/kata/bin/containerd-shim-kata-v2 /usr/local/bin/containerd-shim-kata-qemu-v2
-sudo tee /var/lib/rancher/rke2/agent/etc/containerd/config.toml.tmpl > /dev/null <<'EOF'
-{{ template "base" . }}
-
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu]
-  runtime_type = "io.containerd.kata-qemu.v2"
-  privileged_without_host_devices = true
-  pod_annotations = ["io.katacontainers.*"]
-  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu.options]
-    ConfigPath = "/opt/kata/share/defaults/kata-containers/configuration-qemu.toml"
-EOF
-sudo systemctl restart rke2-agent
-```
-
-:::warning Rewrite, never append
-The template must contain `{{ template "base" . }}` exactly once. If the file already exists (e.g. it also carries a gVisor or build-related block), merge the runtime sections into one file and rewrite it wholesale; appending a duplicate template line produces an invalid containerd config and the node's kubelet will not come back after the restart — recovery then requires SSH/console access, `kubectl` cannot reach the node.
+:::warning Keep the Fluent Bit toleration on later upgrades
+The toleration is stored in the `observability-logs-opensearch` release's values, so it must be present on every upgrade that re-renders the Fluent Bit DaemonSet. An upgrade with `--reset-values`, or one that passes new `--set`/`-f` values without `--reuse-values`, drops it unless you pass `--set "fluent-bit.tolerations[0].operator=Exists"` again. Agents on the Kata node then stop producing logs with no error.
 :::
-
-</details>
 
 ### Local development
 
@@ -157,7 +133,9 @@ ISOLATION_TIER=kata \
   bash "${AMP_DIST}/deployments/scripts/add-environment.sh"
 ```
 
-The tier appears as a **Sandboxing T3** shield chip in the environment list, and as a shield icon next to the environment name on the agent's Deploy and Overview pages — hover over it to confirm *Sandboxing Tier 3 — Kata Containers*. Then deploy or promote an agent to the environment as usual.
+The tier appears as a **Sandboxing T3** shield chip in the environment list, and as a shield icon next to the environment name on the agent's Deploy and Overview pages — hover over it to confirm *Sandboxing Tier 3 — Kata Containers*.
+
+A new environment is not part of any deployment pipeline yet. Add it to your project's pipeline ([Managing Deployment Pipelines](../environment-management.mdx#managing-deployment-pipelines)), then deploy or promote an agent to it as usual.
 
 ## Verify VM Isolation
 
@@ -180,7 +158,7 @@ If the pod reports the same kernel as the node, it is **not** running under Kata
 <details>
 <summary>Pod stuck in ContainerCreating</summary>
 
-Almost always missing nested virtualization. Confirm on the node itself:
+Almost always missing nested virtualization. Confirm on the node itself (with the `kubectl debug` command under the KVM requirement above, or over SSH):
 
 ```bash
 ls -l /dev/kvm
@@ -200,13 +178,10 @@ The RuntimeClass exists but containerd on the node has no `kata-qemu` runtime �
 ```bash
 kubectl -n kube-system rollout status daemonset/kata-deploy
 kubectl -n kube-system logs -l name=kata-deploy
-
-# on the node — confirm the runtime is in containerd's config:
-sudo grep -n kata-qemu /var/lib/rancher/k3s/agent/etc/containerd/config.toml   # k3s nodes
-grep -n kata-qemu /etc/containerd/config.toml                                  # other nodes
+kubectl get node <node-name> -L katacontainers.io/kata-runtime   # true once kata-deploy has wired the node
 ```
 
-On k3s nodes, re-running `install-kata.sh` re-applies the containerd template wiring.
+Re-running `install-kata.sh` is safe: it re-applies the kata-deploy chart and boots a test pod on every target node again, failing with the reason if Kata still cannot run there.
 
 </details>
 

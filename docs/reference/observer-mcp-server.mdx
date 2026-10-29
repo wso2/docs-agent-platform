@@ -73,14 +73,30 @@ Returns a summary view of recent traces for an agent within a time window. A tra
 | `environment` | Yes      | Environment name.                                                                             |
 | `start_time`  | No       | Start time in RFC3339 format. Defaults to 24h before `end_time`/now. Window cannot exceed 30 days. |
 | `end_time`    | No       | End time in RFC3339 format. Defaults to now.                                                  |
-| `limit`       | No       | Max number of traces to return. Defaults to 10; values over 1000 are clamped down to 1000.    |
+| `limit`       | No       | Maximum number of traces to return. Defaults to 10, up to 1000. |
 | `sort_order`  | No       | `asc` (oldest first) or `desc` (newest first). Defaults to `desc`.                            |
+| `status`      | No       | Root span status: `ok` or `error`. |
+| `min_duration_ms` | No   | Minimum trace duration, in milliseconds. |
+| `min_tokens`  | No       | Minimum total tokens. A trace with no token usage never matches. |
+| `min_span_count` | No    | Minimum number of spans. |
+| `model`       | No       | A model name contains this text, ignoring case. |
+| `conversation_id` | No   | Exact conversation ID. |
+| `missing`     | No       | Only traces missing these fields. Accepts `conversation_id`. |
+| `tool`        | No       | A tool name contains this text, ignoring case. |
+| `tool_error`  | No       | Only traces where a tool call failed. With `tool` set, that tool failed. |
+| `mcp_server`  | No       | An MCP server name contains this text, ignoring case. |
+| `include_models` | No    | Add the models used to each trace. Off by default. |
+| `include_tools` | No     | Add the tools called, and those that failed, to each trace. Off by default. |
+| `include_mcp_servers` | No | Add the MCP servers used to each trace. Off by default. |
+| `cursor`      | No       | `nextCursor` from the previous result, for the next page. Keep the other inputs unchanged. |
+
+A trace must match every filter set. They are the same filters as the Console's, described in [Filter traces](../concepts/observability.mdx#filter-traces). The result sets `truncated` when the search stopped before covering the whole window, with `lookedBackTo` for how far it got. Pass `nextCursor` as `cursor` to continue.
 
 #### `get_traces`
 
 Returns the traces for an agent including full span details within a time window. A trace contains spans that record the internal steps of an execution.
 
-Takes the same parameters as `list_traces`, but defaults `limit` to 100 and clamps values over 1000 down to 1000.
+Takes the same scope, time window, and filter parameters as `list_traces`, without the `include_*` inputs and `cursor`. It returns up to 100 traces by default. Set `limit` to get more, up to 1000. Here `truncated` is also set when a trace's spans were cut.
 
 #### `get_trace_details`
 
@@ -156,4 +172,5 @@ claude mcp add --transport http agent-manager-observer http://traces.amp.localho
 ## Next Steps
 
 - Try a few prompts in Claude Code, e.g. *"Show me the last 10 traces for agent X"*, *"Get the runtime logs for agent X in the dev environment"*, *"What are the CPU and memory metrics for agent X over the last hour?"*.
+- Ask for filtered traces in plain language, e.g. *"Find the failed traces for agent X in dev from the last day that called `search_issues`"*, or *"List agent X's traces from the last 3 hours that took over 10 seconds and used the github MCP server"*.
 - See [MCP Server](./mcp-server.mdx) for the agent-lifecycle tools (projects, agents, builds, deployments).

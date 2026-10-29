@@ -35,6 +35,7 @@
       "label": "Guides",
       "collapsed": false,
       "items": [
+        "guides/deploy-an-a2a-agent",
         {
           "type": "category",
           "label": "Evaluation & Observability",
@@ -103,7 +104,8 @@
           "type": "doc",
           "id": "tutorials/build-a-ballerina-agent",
           "label": "Deploy the Ballerina Leave Assistant Sample"
-        }
+        },
+        "tutorials/deploy-the-a2a-notes-agent-sample"
       ],
       "className": "sidebar-section-icon-tutorials"
     }

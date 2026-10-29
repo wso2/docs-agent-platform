@@ -1,0 +1,115 @@
+---
+sidebar_position: 14
+description: Deploy an agent that speaks the A2A protocol and expose its JSON-RPC and HTTP+JSON transports and agent card through the gateway.
+---
+
+# Deploy an A2A Agent
+
+Deploy a platform-hosted agent that speaks the [Agent2Agent (A2A) protocol](https://a2a-protocol.org/) as an **A2A Agent**, so the gateway exposes both A2A transports and serves the agent's card under the agent's URL.
+
+## How the Gateway Exposes an A2A Agent
+
+A client fetches the agent's card, picks a transport, and sends messages; the agent answers with a task.
+
+Your agent serves its own card and its own A2A routes. Agent Manager publishes it to the gateway with two transports at fixed path prefixes under the agent's URL:
+
+| Path | What it serves |
+|---|---|
+| `/<agent-name>/.well-known/agent-card.json` | The agent's public card |
+| `/<agent-name>/rpc` | The JSON-RPC transport |
+| `/<agent-name>/rest` | The HTTP+JSON transport |
+
+Build your agent so its JSON-RPC routes live under `/rpc` and its HTTP+JSON routes under `/rest`. Neither prefix is configurable, and there is no gRPC transport. The gateway serves A2A protocol version `1.0` only.
+
+Clients reach the agent only through the gateway, so the gateway's CORS and authentication policies apply to every call. The gateway also leaves its request timeout off for A2A agents, because streaming operations such as `SendStreamingMessage` hold the connection open.
+
+## Prerequisites
+
+- An agent that serves the A2A protocol on a single port, with JSON-RPC under `/rpc`, HTTP+JSON under `/rest`, and its card at `/.well-known/agent-card.json`. The [A2A Notes Agent sample](../tutorials/deploy-the-a2a-notes-agent-sample.mdx) is a working example built on the `a2a-sdk` Python package.
+- The agent's source in a GitHub repository.
+- An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
+
+## Step 1: Create the Agent
+
+1. Open your project and click **Add Agent**.
+2. Choose **Platform-Hosted Agent**, then **Source Code** as the source type.
+3. Fill in **Name**, **GitHub Repository**, **Branch**, and **Project Path** for your agent, and choose its language and build settings.
+4. Under **Agent Type**, choose **A2A Agent**.
+5. In **Port**, enter the port your agent's A2A server listens on.
+6. Add the agent's environment variables, then click **Deploy**.
+
+There is no **OpenAPI Spec Path** or **Base Path** field for an A2A agent. It needs only a port.
+
+:::note The A2A choice is permanent
+You can switch an agent between **Chat Agent** and **Custom API Agent** later, but not into or out of **A2A Agent**. To change an A2A agent into another type, create a new agent.
+:::
+
+## Step 2: Configure Endpoint Settings
+
+An A2A agent's deployment settings differ from a chat or custom API agent's in a few places. To open them:
+
+1. Open the agent and click **Deploy**.
+2. On the environment card, click **Configure** next to **Configurations and Secrets**.
+
+### CORS Configuration
+
+The `A2A-Version` request header is always allowed for an A2A agent, whatever you put under **Allowed headers**. A2A clients send it on every request. Configure the rest as described in [Configure CORS for Agent Endpoints](./configure-cors-for-agent-endpoints.mdx).
+
+### Agent Card CORS
+
+**Agent Card CORS** controls which origins may fetch the agent's public card from a browser. It is separate from the agent's CORS because the card is served on its own route.
+
+- **Inherit from agent CORS** (the default): the card uses the agent's **Enable CORS** setting, allowed origins, and **Allow credentials**, with `Content-Type` as its only allowed header.
+- **Custom**: turn on **Enable Agent Card CORS** and set the card's own **Allow all origins**, **Allow credentials**, **Allowed origins**, and **Allowed headers**.
+
+The card's **Allowed methods** are fixed at `GET, OPTIONS`. With **Custom** selected and **Allow all origins** cleared, add at least one origin. **Allow credentials** cannot be combined with **Allow all origins**.
+
+### Endpoint Authentication
+
+Choose **No authentication**, **API key**, or **OAuth**, as for any other agent. See [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx) and [Secure Agents with JWT Authentication](./secure-agents-with-jwt-authentication.mdx).
+
+:::warning No authentication leaves the agent open
+With **No authentication**, anyone who can reach the gateway can call the agent, and the extended agent card (`GetExtendedAgentCard`) always returns `401`. The gateway serves the extended card only to a caller it has authenticated.
+:::
+
+### Request Timeout
+
+There is no **Request Timeout** section for an A2A agent. A timeout would cut off streaming responses.
+
+Saving these settings republishes the agent to the gateway. Promoting the agent to another environment publishes it there too.
+
+## Step 3: Call the Agent
+
+The **Try It** page cannot call an A2A agent. It shows "Testing isn't available for A2A agents yet". Use an A2A client or `curl` instead.
+
+1. Open the agent's overview and copy the **Invoke URL** for the environment.
+2. Send a JSON-RPC request to `<invoke-url>/rpc`, or an HTTP+JSON request under `<invoke-url>/rest`.
+
+```bash
+curl -X POST "<invoke-url>/rpc" \
+  -H "Content-Type: application/json" \
+  -H "A2A-Version: 1.0" \
+  -H "X-API-Key: <agent-api-key>" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "msg-1",
+        "role": "ROLE_USER",
+        "parts": [{"text": "Hello"}]
+      }
+    }
+  }'
+```
+
+Replace `<agent-api-key>` with a key for the agent, or drop the `X-API-Key` header if the agent uses **No authentication**. For OAuth, send the token in the header the agent is configured for instead.
+
+An A2A client can instead fetch the card from `<invoke-url>/.well-known/agent-card.json`. That card lists the gateway URLs, so the client calls the agent through the gateway.
+
+## Next Steps
+
+- [Deploy the A2A Notes Agent Sample](../tutorials/deploy-the-a2a-notes-agent-sample.mdx): deploy a working A2A agent end to end.
+- [Configure CORS for Agent Endpoints](./configure-cors-for-agent-endpoints.mdx)
+- [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx)

@@ -186,6 +186,30 @@ A couple of kinds work as a *kind* but don't have their full data card extracted
 - **Rerank** is recognised as a kind only — a rerank span gets the rerank icon, no data card. There's no `RerankData` payload today and no per-kind extractor runs for rerank, so model, query, and results are not surfaced. A future enhancement will add a proper rerank payload. (Note: `rerank` isn't a value OTel GenAI enumerates for `gen_ai.operation.name`; AMP reads it because Cohere's OTel instrumentation and OpenLLMetry emit it. If OTel ratifies a rerank operation later, AMP will align.)
 - **Retriever documents.** The retrieved documents on a retriever span are not extracted in v1 (they aren't extracted for any instrumentation source today). The vectorDB chip, collection, and Top-K render; the document list doesn't.
 
+### Making traces filterable
+
+Auto-instrumentation (platform-hosted agents and `amp-instrument`) already records what the [trace filters](../concepts/observability.mdx#filter-traces) need. If your agent emits its own spans, this is what each filter reads:
+
+| Filter | What the observer reads |
+|---|---|
+| Status | On the root span: status `Error`, `error.type`, an error value in `gen_ai.tool.status`, or a numeric `http.status_code` of 400 or more |
+| Duration, Span count | The trace's start and end times and its number of spans |
+| Tokens | `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` (or `gen_ai.usage.prompt_tokens` and `gen_ai.usage.completion_tokens`). Read from the root span, then the root's first non-LLM child span, then summed over up to 50 LLM spans. |
+| Model | `gen_ai.response.model`, else `gen_ai.request.model`, on LLM spans |
+| Conversation ID | `gen_ai.conversation.id` (or `session.id` and similar session keys). Read from the root span, then the root's first non-LLM child span, then the LLM spans. |
+| Tool | The span name: `execute_tool <tool>`, or a name ending in `.tool`, `.tools`, `.function`, or `.functions` (for example `search_issues.tool`) |
+| Tool failed | Status `Error` on a tool span |
+| MCP server | `serverInfo.name` in the `traceloop.entity.output` of a span named `initialize.mcp` |
+
+The observer recognizes LLM spans by name: `chat`, `chat <model>`, or `<vendor>.chat`. It reads LLM spans only in traces with up to 100 spans, so in a larger trace, model, token, and conversation ID values found only on LLM spans are not seen. Tool filters read the span name, not `gen_ai.tool.name`.
+
+To make a manually instrumented agent's traces filterable:
+
+- Open one root span per request, with every other span inside it.
+- Set `gen_ai.conversation.id` and the token totals on the root span, and set its status to `Error` when the request fails.
+- Name LLM spans `chat <model>` and set the model and token attributes on them, as in [Setting up the exporter](#setting-up-the-exporter).
+- Name tool spans `execute_tool <tool>`, and set their status to `Error` when the call fails.
+
 ### Suppressing prompt and completion content
 
 Prompt and completion content is captured by default. To suppress it, set `TRACELOOP_TRACE_CONTENT=false` in the agent's environment. The variable is read by the Traceloop SDK on the auto path and is documented here for parity — on a fully hand-rolled manual setup that bypasses Traceloop, you control what you put into `gen_ai.input.messages` / `gen_ai.output.messages` directly.
@@ -264,7 +288,8 @@ These are the versions that ship with this AMP release:
 
 | AMP instrumentation version | Traceloop SDK (`traceloop-sdk`) | Supported Python versions | Init-container image tag |
 |---|---|---|---|
-| 0.4.1 (default) | 0.62.3 | 3.10, 3.11, 3.12, 3.13 | `ghcr.io/wso2/amp-python-instrumentation-provider:0.4.1-python<X.Y>` |
+| 0.4.2 (default) | 0.62.4 | 3.10, 3.11, 3.12, 3.13 | `ghcr.io/wso2/amp-python-instrumentation-provider:0.4.2-python<X.Y>` |
+| 0.4.1 | 0.62.3 | 3.10, 3.11, 3.12, 3.13 | `ghcr.io/wso2/amp-python-instrumentation-provider:0.4.1-python<X.Y>` |
 | 0.4.0 | 0.62.1 | 3.10, 3.11, 3.12, 3.13 | `ghcr.io/wso2/amp-python-instrumentation-provider:0.4.0-python<X.Y>` |
 | 0.3.0 | 0.61.0 | 3.10, 3.11, 3.12, 3.13 | `ghcr.io/wso2/amp-python-instrumentation-provider:0.3.0-python<X.Y>` |
 
@@ -299,7 +324,9 @@ These are covered by the [instrumentation matrix test suite](https://github.com/
 :::warning CrewAI 1.14.5 does not install on AMP instrumentation 0.3.0
 `crewai 1.14.5` requires `opentelemetry-api >=1.34,<1.35`, while the `traceloop-sdk 0.61.0` that AMP instrumentation 0.3.0 pins requires `>=1.38,<2`. Installing both fails with `ResolutionImpossible` at install time rather than degrading at runtime.
 
-CrewAI 1.14 has not been tested on 0.4.0 or 0.4.1, because the matrix pins CrewAI 1.1.0 for every version. Both resolve an `opentelemetry-api` above CrewAI 1.14.5's ceiling, so the same conflict is likely there, but it is unconfirmed. Stay on 1.1.x unless you have verified the combination yourself.
+CrewAI 1.14 has not been tested on 0.4.0, 0.4.1, or 0.4.2, because the matrix pins CrewAI 1.1.0 for every version. All three resolve an `opentelemetry-api` above CrewAI 1.14.5's ceiling, so the same conflict is likely there, but it is unconfirmed. Stay on 1.1.x unless you have verified the combination yourself.
 :::
+
+OpenClaw is not in the matrix. It exports traces through its own plugin and is partially supported. See [Observe OpenClaw Agents](./observe-openclaw-agents.mdx).
 
 The canonical source for the verified-framework list is [`test/instrumentation-matrix/matrix.yaml`](https://github.com/wso2/agent-manager/blob/main/test/instrumentation-matrix/matrix.yaml); known limitations are tracked in [`FINDINGS.md`](https://github.com/wso2/agent-manager/blob/main/test/instrumentation-matrix/FINDINGS.md) alongside it.

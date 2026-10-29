@@ -62,9 +62,12 @@ const sidebars: SidebarsConfig = {
             'guides/on-your-environment',
             'guides/production-recommendations',
             'guides/on-a-vm',
+            'guides/install-with-a-wso2-subscription',
             'guides/cli-installation',
           ],
         },
+        'guides/deploy-an-a2a-agent',
+        'guides/register-an-external-a2a-agent',
         {
           type: 'category',
           label: 'Evaluation & Observability',
@@ -73,6 +76,7 @@ const sidebars: SidebarsConfig = {
             'guides/custom-evaluators',
             'guides/evaluation-monitors',
             'guides/configure-trace-sampling',
+            'guides/observe-openclaw-agents',
           ],
         },
         {
@@ -100,6 +104,16 @@ const sidebars: SidebarsConfig = {
           label: 'Platform Administration',
           collapsed: true,
           items: [
+            {
+              type: 'category',
+              label: 'Upgrades',
+              collapsed: true,
+              link: {type: 'doc', id: 'guides/upgrades/overview'},
+              items: [
+                'guides/upgrades/from-v1-0-0',
+                'guides/upgrades/platform-dependencies',
+              ],
+            },
             {
               type: 'doc',
               id: 'guides/register-llm-service-provider',
@@ -147,6 +161,7 @@ const sidebars: SidebarsConfig = {
           id: 'tutorials/build-a-ballerina-agent',
           label: 'Deploy the Ballerina Leave Assistant Sample',
         },
+        'tutorials/deploy-the-a2a-notes-agent-sample',
       ],
     },
     {

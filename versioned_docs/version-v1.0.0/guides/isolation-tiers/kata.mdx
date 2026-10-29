@@ -17,12 +17,15 @@ Kata boots a real VM per agent, so the node **must expose `/dev/kvm`**:
 - ❌ GCP E2, AMD N2D, ARM T2A machine types, and Container-Optimized OS (read-only filesystem)
 - ❌ k3d / kind **node containers** — even on a KVM-capable host, the Kata guest-agent handshake cannot complete inside a container-based node; Kata needs a real Linux node
 
-Verify on the node:
+Verify on the node itself, not on your workstation. From a machine with `kubectl` access, `kubectl debug` runs the check on the node:
 
 ```bash
-ls -l /dev/kvm
-cat /sys/module/kvm_intel/parameters/nested   # expect: Y (Intel)
+kubectl debug node/<node-name> -it --profile=sysadmin --image=busybox:1.36 -- \
+  chroot /host sh -c 'ls -l /dev/kvm; cat /sys/module/kvm_intel/parameters/nested'
+# expect: a /dev/kvm character device, then Y (Intel)
 ```
+
+This leaves a completed `node-debugger-<node-name>-…` pod in the current namespace; delete it afterwards. With SSH access to the node, run the two commands there instead.
 :::
 
 ## How It Works
@@ -70,7 +73,7 @@ not on your workstation.
 Provision a KVM-capable Linux node matching the requirements above and join it to your cluster using your platform's standard mechanism. Leave it empty.
 
 :::tip Taint the node as early as possible
-If your platform lets you set taints at node-pool creation, apply `kata=true:NoSchedule` there. An untainted node starts accepting regular platform pods immediately, and you will have to drain them all off before installing the runtime (the containerd reconfiguration restarts every pod on the node). If the node has already picked up workloads, `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data` it first.
+If your platform lets you set taints at node-pool creation, apply `kata=true:NoSchedule` there. An untainted node starts accepting regular platform pods immediately. The containerd reconfiguration restarts the node's container runtime; running pods normally survive that, but if the node has already picked up workloads you can `kubectl cordon` + `kubectl drain --ignore-daemonsets --delete-emptydir-data` it first.
 :::
 
 ### Step 2: Run the installer from a machine with kubectl access
@@ -93,6 +96,19 @@ What it does:
 5. Applies the `kata-qemu` RuntimeClass and taints the node(s) `kata=true:NoSchedule`.
 6. Patches the Fluent Bit log DaemonSet to tolerate the taint, so agent logs are collected.
 
+:::note Make the Fluent Bit toleration durable
+The v1.0.0 installer adds the toleration by patching the DaemonSet, and a patch is lost whenever the DaemonSet is recreated (a reinstall of the logs module or a namespace teardown). Fluent Bit is rendered by the `observability-logs-opensearch` Helm chart, so set the toleration as a chart value as well, passing the chart version that is already installed (the `CHART` column of `helm list -n openchoreo-observability-plane`):
+
+```bash
+helm upgrade observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --reuse-values \
+  --set "fluent-bit.tolerations[0].operator=Exists"
+```
+:::
+
 :::tip Verify
 ```bash
 kubectl get runtimeclass kata-qemu
@@ -101,10 +117,14 @@ kubectl get node <node-name> --show-labels   # kata=true
 ```
 :::
 
+:::warning Keep the Fluent Bit toleration on later upgrades
+The toleration is stored in the `observability-logs-opensearch` release's values, so it must be present on every upgrade that re-renders the Fluent Bit DaemonSet. An upgrade with `--reset-values`, or one that passes new `--set`/`-f` values without `--reuse-values`, drops it unless you pass `--set "fluent-bit.tolerations[0].operator=Exists"` again. Agents on the Kata node then stop producing logs with no error.
+:::
+
 <details>
 <summary>RKE2 nodes (bundled containerd)</summary>
 
-Upstream kata-deploy assumes a standalone containerd at `/etc/containerd/config.toml`, which RKE2 nodes do not have. Two extra steps are needed on each RKE2 Kata node:
+Upstream kata-deploy assumes a standalone containerd at `/etc/containerd/config.toml`, which RKE2 nodes do not have. Two extra steps are needed on each RKE2 Kata node. Run them on the node itself, over SSH or in a `kubectl debug node/<node-name> -it --profile=sysadmin --image=busybox:1.36 -- chroot /host sh` shell (there, drop `sudo`):
 
 **1. Before running the installer**, create an empty stub so the kata-deploy pod gets past its pre-flight check (it crash-loops with `cp: can't stat '/etc/containerd/config.toml'` otherwise):
 
@@ -160,7 +180,9 @@ ISOLATION_TIER=kata \
   bash "${AMP_DIST}/deployments/scripts/add-environment.sh"
 ```
 
-The tier appears as a **Sandboxing T3** shield chip in the environment list, and as a shield icon next to the environment name on the agent's Deploy and Overview pages — hover over it to confirm *Sandboxing Tier 3 — Kata Containers*. Then deploy or promote an agent to the environment as usual.
+The tier appears as a **Sandboxing T3** shield chip in the environment list, and as a shield icon next to the environment name on the agent's Deploy and Overview pages — hover over it to confirm *Sandboxing Tier 3 — Kata Containers*.
+
+A new environment is not part of any deployment pipeline yet. Add it to your project's pipeline ([Managing Deployment Pipelines](../environment-management.mdx#managing-deployment-pipelines)), then deploy or promote an agent to it as usual.
 
 ## Verify VM Isolation
 
@@ -183,7 +205,7 @@ If the pod reports the same kernel as the node, it is **not** running under Kata
 <details>
 <summary>Pod stuck in ContainerCreating</summary>
 
-Almost always missing nested virtualization. Confirm on the node itself:
+Almost always missing nested virtualization. Confirm on the node itself (with the `kubectl debug` command under the KVM requirement above, or over SSH):
 
 ```bash
 ls -l /dev/kvm

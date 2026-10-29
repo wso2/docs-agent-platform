@@ -1,0 +1,316 @@
+---
+title: Upgrade from v1.0.0 to v0.0.0-dev
+sidebar_label: From v1.0.0
+description: Migrate an existing Helm installation, including Agent Manager database and API Platform gateway changes.
+---
+
+This guide upgrades an existing WSO2 Agent Manager v1.0.0 Helm installation. The commands use the quick-start release names and namespaces. Substitute the names from your installation, and repeat the gateway steps for every gateway in every organization and environment.
+
+## Breaking changes
+
+| Change | Impact | Required action |
+| --- | --- | --- |
+| OpenChoreo moves from 1.2.0 to 1.2.8 | The CRDs are unchanged. A Helm upgrade of the Control Plane and Observability Plane reverts the service-account `client_id` entitlement patch. | Upgrade the four planes and re-apply the patch, as described in [Upgrade platform dependencies](./platform-dependencies.mdx). |
+| ThunderID moves from 1.0.0 to 1.0.1 | Platform Thunder and each environment Thunder are separate releases. | Upgrade each instance separately. |
+| Gateway Operator moves from chart 0.11.0 to 0.11.3 | Only the `llmprovidertemplates` CRD changes. Upgrading the operator does not redeploy existing gateways. | Apply the CRDs, upgrade the operator, and then trigger each gateway explicitly (Step 7). |
+| API Platform gateway moves from images 1.2.1 to 2026.09.24 | The gateway controller's SQLite schema moves from version 4 to 5, and the new controller refuses a version 4 database. Agent Manager does not resend gateway configuration to an empty controller. | Upgrade each controller database in place before its gateway redeploys (Step 7). Do not delete it. |
+| The Agent Manager database moves from migration 0043 to 0050 | Migrations 0044 to 0050 run in one transaction. v1.0.0 refuses to start against a database that contains them. | Back up PostgreSQL first. A chart rollback alone cannot restore v1.0.0. |
+| The gateway catch-all route request timeout moves from 30 seconds to unlimited | Long-running and streaming requests are no longer cut off at 30 seconds. The gateway's 5-minute idle timeout still applies. | Review any client behavior that relied on the 30-second limit. |
+| The platform Thunder bootstrap runs only at install time | The target adds a refresh-token lifetime and login-screen branding to the Console, CLI, and MCP clients. An upgrade does not apply these to existing clients. | Existing clients keep their v1.0.0 settings. |
+
+## Prerequisites
+
+- Helm 3.14 or later, for `--reset-then-reuse-values`. The target installer uses Helm 3.19.4.
+- `kubectl` access to every cluster that runs an Agent Manager component.
+- Access to the chart registry. For a subscription installation, use the registry and credentials assigned to your subscription.
+- `sqlite3` on the machine where you run the commands.
+- A maintenance window. Each gateway is unavailable while its controller is stopped and redeployed.
+
+## Step 1: Set variables and record the installation
+
+```bash
+export VERSION="0.0.0-dev"
+export REG="oci://ghcr.io/wso2"
+export AMP_NS="wso2-amp"
+export DP_NS="openchoreo-data-plane"
+export GATEWAY_CONTEXT="<gateway-cluster-context>"
+export GW_VERSION="2026.09.24"
+export GW_OPERATOR_VERSION="0.11.3"
+
+helm version
+helm list -A
+kubectl --context "$GATEWAY_CONTEXT" get apigateways -A
+```
+
+Replace `<gateway-cluster-context>` with the Kubernetes context of the cluster that runs the Gateway Operator and your gateways. On a single-cluster installation, this is the output of `kubectl config current-context`. For development testing, set `VERSION` to the exact snapshot under test.
+
+Record each Helm release, namespace, chart version, and Kubernetes context. Record every APIGateway with its namespace. The quick-start installer names them `api-platform-<org>-<env>` in the `<org>-<env>` namespace.
+
+## Step 2: Back up
+
+Pause deployments, promotions, and configuration changes for the maintenance window.
+
+Save each release's history and user-supplied values. These files can contain credentials, so keep them out of source control:
+
+```bash
+umask 077
+mkdir -p upgrade-backup
+helm history amp -n "$AMP_NS" > upgrade-backup/amp-history.txt
+helm get values amp -n "$AMP_NS" -o yaml > upgrade-backup/amp-user-values.yaml
+```
+
+Repeat for the other releases recorded in Step 1.
+
+Back up the Agent Manager database. This dump is the only way back to v1.0.0. The quick-start PostgreSQL instance requires a password, which is stored in the `amp-postgresql` Secret:
+
+```bash
+export PGPW="$(kubectl get secret amp-postgresql -n "$AMP_NS" -o jsonpath='{.data.password}' | base64 -d)"
+kubectl exec -n "$AMP_NS" amp-postgresql-0 -- env PGPASSWORD="$PGPW" \
+  pg_dump -U agentmanager -d agentmanager -Fc \
+  > upgrade-backup/ams-1.0.0.dump
+```
+
+Check that the dump file is not empty. For an external database, use its own backup tooling. Test the restore in a separate database.
+
+For each gateway, back up the controller data and its encryption key Secret. The key is mounted from the `gateway-encryption-keys` Secret, not stored on the volume. This backup is the recovery point for the 1.2.1 controller.
+
+```bash
+export GW_NS="default-default"
+GWC=$(kubectl --context "$GATEWAY_CONTEXT" get deploy -n "$GW_NS" -o name | grep gateway-controller)
+kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$GWC" -- tar cf - -C /app data \
+  > "upgrade-backup/gw-data-$GW_NS.tar"
+kubectl --context "$GATEWAY_CONTEXT" get secret gateway-encryption-keys -n "$GW_NS" -o yaml \
+  > "upgrade-backup/gw-encryption-keys-$GW_NS.yaml"
+```
+
+Record a baseline: invoke representative agents, and note existing traces, monitor results, and API keys in use.
+
+## Step 3: Upgrade OpenChoreo and Thunder
+
+Follow [Upgrade platform dependencies](./platform-dependencies.mdx) through its environment Thunder step. Leave the Gateway Operator at 0.11.0 until Step 6.
+
+## Step 4: Upgrade platform resources, then Agent Manager
+
+Upgrade platform resources first. The target Agent Manager attaches a new `a2a-gateway-route` trait to A2A agents, and only the target platform resources chart defines it.
+
+```bash
+helm upgrade amp-platform-resources \
+  "$REG/wso2-amp-platform-resources-extension" \
+  --version "$VERSION" -n default \
+  --reset-then-reuse-values --timeout 15m --wait
+
+helm upgrade amp "$REG/wso2-agent-manager" \
+  --version "$VERSION" -n "$AMP_NS" \
+  --reset-then-reuse-values --timeout 15m --wait
+```
+
+The `amp-db-migration` post-upgrade hook applies migrations 0044 to 0050. Kubernetes deletes the job 300 seconds after it finishes, so read its logs right away:
+
+```bash
+kubectl logs -n "$AMP_NS" job/amp-db-migration
+kubectl exec -n "$AMP_NS" amp-postgresql-0 -- env PGPASSWORD="$PGPW" \
+  psql -U agentmanager -d agentmanager -tc \
+  "select max(id) from migration_history"
+```
+
+The query returns `0050`. If the job fails, the transaction leaves the database at `0043`. Fix the cause, usually database connectivity or credentials, and rerun the same `helm upgrade amp` command.
+
+## Step 5: Upgrade the observability and evaluation extensions
+
+Skip any extension that is not installed.
+
+```bash
+helm upgrade amp-observability-traces "$REG/wso2-amp-observability-extension" \
+  --version "$VERSION" -n openchoreo-observability-plane \
+  --reset-then-reuse-values --timeout 15m --wait
+
+helm upgrade amp-evaluation-extension "$REG/wso2-amp-evaluation-extension" \
+  --version "$VERSION" -n openchoreo-workflow-plane \
+  --reset-then-reuse-values --timeout 15m --wait
+```
+
+## Step 6: Upgrade the gateway extensions and the Gateway Operator
+
+Upgrade each gateway extension release. This does not redeploy the gateway. Its pre-upgrade bootstrap job calls Agent Manager, which must be running the target version.
+
+```bash
+export GW_RELEASE="api-platform-default-default"
+helm upgrade "$GW_RELEASE" \
+  "$REG/wso2-amp-api-platform-gateway-extension" \
+  --version "$VERSION" -n "$GW_NS" --kube-context "$GATEWAY_CONTEXT" \
+  --reset-then-reuse-values --timeout 15m --wait
+```
+
+Apply the operator CRDs. Helm does not upgrade CRDs in a chart's `crds/` directory. The new CRDs keep serving the existing versions.
+
+```bash
+helm show crds \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version "$GW_OPERATOR_VERSION" \
+  | kubectl --context "$GATEWAY_CONTEXT" apply --server-side --force-conflicts -f -
+```
+
+Upgrade the operator and pin the gateway chart and both gateway images. Setting only the chart version leaves the old images in place.
+
+```bash
+helm upgrade gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version "$GW_OPERATOR_VERSION" -n "$DP_NS" \
+  --kube-context "$GATEWAY_CONTEXT" --reset-then-reuse-values \
+  --set-string gateway.helm.chartVersion="$GW_VERSION" \
+  --set-string gateway.values.gateway.controller.image.tag="$GW_VERSION" \
+  --set-string gateway.values.gateway.gatewayRuntime.image.tag="$GW_VERSION" \
+  --timeout 15m --wait
+```
+
+Chart 0.11.3 runs operator image 0.11.1. Existing gateways keep running 1.2.1 after this step.
+
+## Step 7: Upgrade each controller database in place and redeploy its gateway
+
+The 2026.09.24 controller refuses a version 4 database, and Agent Manager does not resend routes, LLM providers, LLM proxies, or MCP proxies to an empty controller. Upgrade each existing database in place instead. The only schema change between version 4 and version 5 is a new `agents` table, so the upgrade adds that table and sets the schema version. Run this step for one gateway at a time. You need `sqlite3` on the machine where you run the commands.
+
+:::danger
+Confirm the Step 2 backups and the Step 4 migration before you continue. Keep the `gateway-encryption-keys` Secret. Without it, the controller cannot decrypt the stored secrets.
+:::
+
+Set the gateway to work on:
+
+```bash
+export GW_NS="default-default"
+export GW_NAME="api-platform-default-default"
+export GW_DIR="upgrade-backup/gw-$GW_NS"
+mkdir -p "$GW_DIR"
+GWC=$(kubectl --context "$GATEWAY_CONTEXT" get deploy -n "$GW_NS" -o name | grep gateway-controller)
+```
+
+Stop the controller process while keeping its pod and volume. The override replaces the controller command with `sleep`, so nothing writes to the database. First confirm that the container does not already set a command, because removing the override later deletes the field. The first command prints nothing:
+
+```bash
+kubectl --context "$GATEWAY_CONTEXT" get -n "$GW_NS" "$GWC" \
+  -o jsonpath='{.spec.template.spec.containers[0].command}'
+kubectl --context "$GATEWAY_CONTEXT" patch -n "$GW_NS" "$GWC" --type=json -p \
+  '[{"op":"add","path":"/spec/template/spec/containers/0/command","value":["sh","-c","sleep 86400"]}]'
+kubectl --context "$GATEWAY_CONTEXT" get pods -n "$GW_NS" -w | grep gateway-controller
+```
+
+Stop watching once a single controller pod is `Running`. It stays `0/1` ready because the controller is not running. Copy the database out of that pod:
+
+```bash
+POD=$(kubectl --context "$GATEWAY_CONTEXT" get pods -n "$GW_NS" --no-headers \
+  | awk '/gateway-controller/ && $3=="Running"{print $1}')
+kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$POD" -c gateway-controller -- ps
+kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$POD" -c gateway-controller -- \
+  sh -c 'cd /app/data && tar cf - gateway.db*' > "$GW_DIR/gateway-v4.tar"
+```
+
+The `ps` output lists `sleep` and no `gateway-controller` process. Upgrade the copy to version 5:
+
+```bash
+tar xf "$GW_DIR/gateway-v4.tar" -C "$GW_DIR"
+sqlite3 "$GW_DIR/gateway.db" 'PRAGMA wal_checkpoint(TRUNCATE);'
+sqlite3 "$GW_DIR/gateway.db" <<'SQL'
+CREATE TABLE IF NOT EXISTS agents (
+    uuid TEXT NOT NULL,
+    gateway_id TEXT NOT NULL,
+    configuration TEXT NOT NULL,
+    signed_public_card TEXT,
+    signed_protected_card TEXT,
+    PRIMARY KEY (gateway_id, uuid),
+    FOREIGN KEY(gateway_id, uuid) REFERENCES artifacts(gateway_id, uuid) ON DELETE CASCADE
+);
+PRAGMA user_version = 5;
+SQL
+sqlite3 "$GW_DIR/gateway.db" 'PRAGMA user_version; PRAGMA integrity_check; SELECT kind, handle FROM artifacts;'
+```
+
+The output shows `5`, `ok`, and the routes, LLM providers, LLM proxies, and MCP proxies on this gateway. Copy the upgraded database into the pod next to the old one, and compare checksums:
+
+```bash
+kubectl --context "$GATEWAY_CONTEXT" exec -i -n "$GW_NS" "$POD" -c gateway-controller -- \
+  sh -c 'cat > /app/data/gateway.db.new' < "$GW_DIR/gateway.db"
+shasum -a 256 "$GW_DIR/gateway.db"
+kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$POD" -c gateway-controller -- \
+  sha256sum /app/data/gateway.db.new
+```
+
+If the two checksums differ, repeat the copy. When they match, replace the old database:
+
+```bash
+kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$POD" -c gateway-controller -- \
+  sh -c 'rm -f /app/data/gateway.db-wal /app/data/gateway.db-shm && mv /app/data/gateway.db.new /app/data/gateway.db'
+```
+
+Remove the override and redeploy the gateway, with no pause between the two commands. The operator redeploys an APIGateway only when its spec changes, so the second command changes `spec.infrastructure.annotations`. Until the redeploy replaces it, the 1.2.1 controller restarts and refuses the version 5 database without changing it.
+
+```bash
+kubectl --context "$GATEWAY_CONTEXT" patch -n "$GW_NS" "$GWC" --type=json -p \
+  '[{"op":"remove","path":"/spec/template/spec/containers/0/command"}]'
+kubectl --context "$GATEWAY_CONTEXT" patch apigateway "$GW_NAME" -n "$GW_NS" --type=merge -p \
+  "{\"spec\":{\"infrastructure\":{\"annotations\":{\"upgrade.amp.wso2.com/gateway-version\":\"$GW_VERSION\"}}}}"
+```
+
+Wait until the gateway reports the new generation as programmed:
+
+```bash
+kubectl --context "$GATEWAY_CONTEXT" get apigateway "$GW_NAME" -n "$GW_NS" -o jsonpath=\
+'{.metadata.generation} {.status.conditions[?(@.type=="Programmed")].observedGeneration} {.status.conditions[?(@.type=="Programmed")].status}{"\n"}'
+```
+
+Repeat until the first two numbers match and the status is `True`. Then check the controller:
+
+```bash
+kubectl --context "$GATEWAY_CONTEXT" get pods -n "$GW_NS" -o jsonpath='{..image}' | tr ' ' '\n' | sort -u
+kubectl --context "$GATEWAY_CONTEXT" logs -n "$GW_NS" "$GWC" \
+  | grep -E 'Database schema up to date|Loaded configurations|Loaded API keys|Control plane connection established'
+```
+
+The images are `gateway-controller:2026.09.24` and `gateway-runtime:2026.09.24`. The logs show schema version 5 and the same number of configurations and API keys as before the upgrade. Invoke one agent through this gateway before you start the next gateway.
+
+## Step 8: Verify existing workloads
+
+| Check | Command or action | Expected result |
+| --- | --- | --- |
+| Agent Manager images | `kubectl get pods -n "$AMP_NS" -o jsonpath='{..image}' \| tr ' ' '\n' \| sort -u` | The `amp-*` images use the target version. |
+| Migration history | `select max(id) from migration_history` | `0050` |
+| OpenChoreo planes | `helm list -A` | All four planes use chart 1.2.8. |
+| OpenChoreo authorization | List projects in the Console. | Existing projects appear. An empty list with no errors means the `client_id` patch is missing. |
+| Gateways | `kubectl get apigateways -A` | Each gateway is `Programmed=True` at its current generation. |
+| Console gateway status | In the Console left sidebar, under **INFRASTRUCTURE**, click **Gateways**. | Each gateway is listed and active. |
+| Invocation | Invoke an agent that uses an LLM Service Provider or MCP Proxy, with an existing API key. | The call succeeds through the gateway. |
+| Deployment and promotion | Redeploy an existing agent and promote it. | Both succeed. |
+| Observability and evaluation | Open a pre-upgrade trace and run a monitor. | Historical traces load, new traces arrive, and the monitor completes. |
+
+Do not mark the upgrade complete because Helm reported success.
+
+## Troubleshooting
+
+| Symptom | Cause and action |
+| --- | --- |
+| The controller crash-loops with `unsupported schema version 4, expected 5; delete the database to recreate` | The gateway redeployed before its database was upgraded. Do not delete the database. Run Step 7 from the command override onwards: the override stops the crash loop, and the in-place upgrade makes the database readable. |
+| Gateway images stay at 1.2.1 | The operator did not redeploy the gateway. Check `helm get values gateway-operator -n "$DP_NS"` for both image tags, then repeat the Step 7 patch with a new annotation value. |
+| Agent invocations return `404 {"error":"Not Found"}`, which the Console reports as a CORS error, or an agent's LLM calls return `404` | The controller started with an empty database, so it has no routes, LLM providers, LLM proxies, or MCP proxies. Restore the gateway's Step 2 backup into its controller and upgrade it in place as in Step 7. |
+| Agent invocations return `401 Valid API key required` after a restore | The API key was created or regenerated after the backup you restored. Regenerate the key in the Console. |
+| APIGateway reports `Multi-Attach error for volume` | The old and new controller pods are on different nodes. Check that the controller Deployment uses the `Recreate` strategy, and delete the old controller pod. |
+| Migration job fails | Read the job logs before the 300-second cleanup. Fix the cause and rerun `helm upgrade amp`. The database stays at `0043`. |
+| Agent Manager images remain at v1.0.0 | An explicit image tag override in your values pins the old version. Remove it and rerun the upgrade. |
+| OpenChoreo calls return empty lists or `403` | The plane upgrade reverted the `client_id` entitlement patch. Re-apply it as described in [Upgrade platform dependencies](./platform-dependencies.mdx). |
+
+## Recovery to v1.0.0
+
+There is no chart-only downgrade after the database migration. Keep the installation in maintenance mode.
+
+1. Stop the Agent Manager API by scaling its Deployment to zero.
+2. Restore the database:
+
+   ```bash
+   export PGPW="$(kubectl get secret amp-postgresql -n "$AMP_NS" -o jsonpath='{.data.password}' | base64 -d)"
+   kubectl exec -i -n "$AMP_NS" amp-postgresql-0 -- env PGPASSWORD="$PGPW" \
+     pg_restore -U agentmanager -d agentmanager --clean --if-exists \
+     < upgrade-backup/ams-1.0.0.dump
+   ```
+
+3. Roll back the Agent Manager and extension releases with `helm rollback`. The gateway extension's bootstrap job also runs on rollback and needs Agent Manager to be reachable. If it fails, rerun the rollback.
+4. Restore the Gateway Operator pins to chart 0.11.0, gateway chart 1.2.2, and images 1.2.1. For each gateway, restore the controller data from its Step 2 backup and redeploy it.
+5. Restore OpenChoreo and Thunder as described in [Upgrade platform dependencies](./platform-dependencies.mdx).
+
+Restoring the database discards writes made after the backup. Repeat the Step 8 checks before you resume service.

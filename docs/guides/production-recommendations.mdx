@@ -32,6 +32,13 @@ The first four items can only be fixed by reinstalling the component. Verify the
 | Stateless services at multiple replicas | [High availability](#high-availability-and-scaling) | Any time |
 | NetworkPolicies, RBAC, and Pod Security Standards applied | [Cluster security](#certificates-and-cluster-security) | Any time |
 | Stronger isolation tier for untrusted agent code | [Agent isolation](#agent-isolation) | Any time, per environment |
+| Only the three plane gateways are LoadBalancer Services | [Step 8](./on-your-environment.mdx#step-8-setup-observability-plane) | Any time |
+
+The only LoadBalancer Services should be the `gateway-default` Service of each of the three planes. Anything else this command lists is reachable from outside the cluster, so convert it to `ClusterIP`:
+
+```bash
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+```
 
 ### After a chart upgrade
 

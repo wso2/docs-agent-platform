@@ -20,6 +20,7 @@ The practical differences that follow from this:
 
 - **No deploy or promote step.** There's nothing for the platform to deploy, so [AgentID](./agentid.mdx) credential provisioning for every environment in the organization begins as soon as the agent is registered, rather than being tied to a deploy.
 - **You wire configuration in yourself.** Since there's no pod to inject into, the platform instead hands you connection details to configure — an API key and OTel endpoint for instrumentation, and endpoint URLs plus API keys for any LLM Service Provider or MCP Proxy the agent uses.
+- **Callers reach it at its own address.** The exception is an externally-hosted A2A agent, which can be routed through an environment's gateway so that gateway API keys, CORS, and authentication apply to it. See [Register an External A2A Agent](../guides/register-an-external-a2a-agent.mdx).
 - **Observability requires instrumenting it.** No traces appear until the agent is connected via the `amp-instrumentation` package (or the manual `init_otel()` path) — see [AMP Instrumentation](../guides/amp-instrumentation.mdx).
 
 ## Where the Distinction Shows Up

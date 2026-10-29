@@ -108,4 +108,45 @@ By default every trace an agent produces is exported. At high request rates that
 
 Once traces start flowing in, you can explore them in the AMP Console under your agent's sidebar:
 
-- **OBSERVABILITY → Traces** — search and inspect individual traces by time range or correlation ID; expand a trace to see LLM spans, tool spans, and agent reasoning steps
+- **Observability** → **Traces**: search and inspect individual traces by time range, trace ID, or the filters below. Expand a trace to see LLM spans, tool spans, and agent reasoning steps.
+
+### Filter traces
+
+Agent Manager provides the following trace filters:
+
+| Filter | Matches traces |
+|---|---|
+| Status | That ended in an error, or that succeeded. The status comes from the trace's root span. |
+| Duration | That took at least the given time to complete. |
+| Tokens | That used at least the given number of tokens in total, across all LLM calls. |
+| Span count | That have at least the given number of spans, or steps. |
+| Model | That called a model whose name contains the given text. For example, `gpt-4o` also matches `gpt-4o-mini`. |
+| Conversation ID | That belong to the given conversation, or that have no conversation ID. |
+| Tool | That called a tool whose name contains the given text. |
+| Tool failed | Where a tool call failed. With Tool set, only traces where that tool failed. |
+| MCP server | That used an MCP server whose name contains the given text. |
+
+`amctl` and the observer MCP server accept the same filters. See [`amctl agent traces`](../reference/cli/agent.mdx#amctl-agent-traces) and the [observer MCP server's tools](../reference/observer-mcp-server.mdx#available-tools).
+
+#### In the Console
+
+1. Open the agent and navigate to **Observability** → **Traces**, then select the environment and time range.
+2. Select **Errors** or **Success** in the **Status** toggle.
+
+    ![Trace list with the Status toggle, filter chips, Go to trace ID, and Advanced Filters above the list](../img/observability/trace-filter-bar.png)
+
+3. Click **Advanced Filters**, set the filters you need, and click **Filter**. Each filter appears as a chip above the list. Remove a chip to clear that filter.
+
+    ![Advanced Filters panel with Tokens at least set to 9k and Tool called set to search_issues](../img/observability/trace-advanced-filters.png)
+
+4. To open a specific trace, enter its ID in **Go to trace ID** and press Enter.
+
+The page URL carries the filters and time range, so you can share a filtered view by copying it.
+
+**Export** downloads the matching traces with full span data, up to the list's page size of 10. To export more, use [`amctl agent traces export`](../reference/cli/agent.mdx#amctl-agent-traces-export).
+
+#### When results look incomplete
+
+- **The list stops early.** On a busy agent the search can stop before it covers the whole time range, and the list shows **Searched as far as** a time. Scroll down to load more, or narrow the time range.
+- **Conversation ID, tool, or MCP server filters match nothing.** These filters depend on what the agent's traces record. Auto-instrumented agents record them. For an agent that emits its own spans, see [Making traces filterable](../guides/amp-instrumentation.mdx#making-traces-filterable).
+- **A large trace never matches.** For performance, the **Model** filter only checks traces with up to 100 spans, and the tool and MCP server filters only check traces with up to 200 spans.

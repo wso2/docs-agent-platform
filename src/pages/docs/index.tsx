@@ -1,9 +1,6 @@
-import { Redirect } from '@docusaurus/router';
-import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import type {ReactNode} from 'react';
+import RedirectPage from '@site/src/components/RedirectPage';
 
-
-export default function DocsRedirect(): JSX.Element {
-  const { siteConfig } = useDocusaurusContext();
-  const latestVersion = siteConfig.customFields?.latestVersion as string;
-  return <Redirect to={`/agent-platform/docs/${latestVersion}/get-started/what-is-amp`} />;
+export default function DocsRedirect(): ReactNode {
+  return <RedirectPage path="get-started/what-is-amp/" />;
 }

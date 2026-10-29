@@ -111,7 +111,7 @@ Deletion needs no equivalent flag: the delete command detects the egress release
 
    The script uninstalls the environment's API Platform Gateway Helm release and then deletes the environment in Agent Manager.
 
-   > **Warning:** Deleting an environment is permanent and cannot be undone. Any agent deployed to the environment will no longer be reachable, and the deployment will be permanently deleted.
+   > **Warning:** Deleting an environment is permanent and cannot be undone. Any agent deployed to the environment will no longer be reachable, and the deployment will be permanently deleted. Every agent's settings for the environment (CORS, endpoint authentication, and instrumentation settings) are deleted too, so an environment you create again with the same name starts from the defaults.
 
 :::note
 An environment cannot be deleted while it is still referenced by a deployment pipeline. Remove it from any pipeline first.

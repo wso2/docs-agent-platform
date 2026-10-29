@@ -1,0 +1,57 @@
+---
+title: Upgrading Agent Manager
+sidebar_label: Overview
+description: Plan an Agent Manager upgrade, review breaking changes, and protect existing data and workloads.
+---
+
+Upgrading an existing WSO2 Agent Manager installation can require database migrations, configuration changes, and coordinated updates to its gateways and extensions. Read the guide for your source and target versions before changing the installation.
+
+:::warning Breaking changes require migration steps
+An upgrade can change database schemas, remove configuration fields, or require gateway state to be recreated. Updating image tags alone does not complete these migrations. Follow the version-specific instructions and verify existing agents, credentials, traces, and monitors before resuming normal operation.
+:::
+
+## Choose an upgrade path
+
+| Source | Target | Guide |
+| --- | --- | --- |
+| v1.0.0 | v0.0.0-dev | [Upgrade from v1.0.0](./from-v1-0-0.mdx) |
+
+The [platform dependency guide](./platform-dependencies.mdx) lists every standard chart and covers OpenChoreo 1.2.8, platform and environment ThunderID 1.0.1, and Gateway Operator 0.11.3 as part of this transition.
+
+Use only an upgrade path validated for the target release. Do not assume that you can skip releases or that a dependency can be upgraded independently. The version-specific guide takes precedence over this overview.
+
+## Before you upgrade
+
+1. Read the target release notes and migration guide. Identify every breaking change that applies to your configuration.
+2. Record installed chart versions, image tags, Helm values, namespaces, Kubernetes contexts, and gateway instances. Check the target release's dependency requirements.
+3. Back up the Agent Manager database and the persistent state of affected components. Preserve encryption keys, credentials, and the configuration needed to restore the installation. Verify the restore process in a separate environment.
+4. Test the upgrade against a representative copy of your existing installation. A successful fresh installation does not validate an upgrade.
+5. Arrange a maintenance window and pause configuration changes for the migration. Follow the target guide's traffic and downtime requirements.
+6. Capture a baseline: invoke deployed agents, record historical traces and monitor results, and check agents in each promotion environment.
+
+## Upgrade the installation
+
+Follow the version-specific component order. Use explicit chart versions and review old Helm overrides against the target chart defaults. Removed settings and explicitly pinned old images need deliberate changes.
+
+Re-running a quick-start installer is not a substitute for an upgrade procedure. The migration guide describes which existing Helm releases to update and any state migration required between updates.
+
+### OpenChoreo upgrades
+
+Agent Manager and OpenChoreo have separate versions. Upgrade OpenChoreo only when required by the Agent Manager compatibility requirements, following the [OpenChoreo upgrade guide](https://openchoreo.dev/docs/platform-engineer-guide/upgrades/overview/) for that specific transition. Its upgrade policy does not define Agent Manager's supported upgrade paths.
+
+When a required dependency upgrade changes CRDs, follow that dependency's explicit CRD migration instructions. Helm does not automatically update CRDs shipped in a chart's `crds/` directory, and a Helm rollback does not restore them.
+
+## Verify the upgrade
+
+- Confirm all required migrations completed and installed charts and images match the target versions.
+- Confirm agents, providers, MCP proxies, monitors, and environment mappings remain intact.
+- Invoke existing agents and exercise LLM and MCP proxy calls using existing credentials.
+- Rebuild and redeploy an agent, then test promotion to another environment.
+- Open pre-upgrade traces and confirm existing monitors continue to run.
+- Check gateway readiness, logs, and any release-specific configuration changes.
+
+## Recovery
+
+A Helm rollback changes Kubernetes release resources; it does not automatically reverse database migrations or restore persistent data. Use the recovery procedure for the target version. Keep the installation in maintenance mode until the restored application versions, schemas, credentials, and gateway state are consistent and verified.
+
+When requesting help, include the source and target versions, affected component, failed step, Helm status, and sanitized logs. Do not include database dumps, secret values, or tokens in an issue.

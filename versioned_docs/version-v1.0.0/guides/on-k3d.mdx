@@ -3,13 +3,19 @@ sidebar_position: 2
 ---
 
 import AmpInstallation from './_partials/_amp-installation.mdx';
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # On k3d (Locally)
 
 Install the Agent Manager on a local Kubernetes cluster using [k3d](https://k3d.io/) — a lightweight tool that runs Kubernetes inside Docker.
 
 :::tip Just want it running?
-The [Quick Start Guide](../get-started/quick-start.mdx) installs everything in a single command using a dev container. Use this page when you want to understand the full setup or need to customize it.
+Use the **Run One Command** tab under [Install](#install): one script creates the cluster and installs everything. Use the **Guided Install** tab when you want to understand the full setup or need to customize it. The [Quick Start Guide](../get-started/quick-start.mdx) runs the same installer inside a dev container, if you'd rather not install k3d, kubectl and Helm on your machine.
+:::
+
+:::info WSO2 subscription
+With a WSO2 subscription or evaluation, you install the WSO2-supported build from `registry.wso2.com`. Select the **WSO2 Subscription** tab wherever this guide shows one, and see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx) for your credentials and registry project.
 :::
 
 :::info Stronger agent isolation tiers
@@ -66,7 +72,9 @@ colima start --profile agent-manager \
 
 Choose `--cpu` and `--memory` now rather than adjusting them later. Changing either requires restarting the VM, which can leave an already-created k3d cluster unable to start. [Troubleshooting](#troubleshooting) covers the recovery if you hit this.
 
-Prefix the cluster creation command in Step 1 with `K3D_FIX_DNS=0`.
+On Apple silicon, install Rosetta 2 first (`softwareupdate --install-rosetta`). Without it, Colima runs amd64 images, including the images built for platform-hosted agents, under QEMU emulation, and a Python agent can take longer to start than its startup probe allows.
+
+For the guided install, prefix the cluster creation command in Step 1 with `K3D_FIX_DNS=0`. The one-command installer sets it for you.
 :::
 
 ### Required Ports
@@ -86,6 +94,50 @@ The following host ports must be free before installation. The Agent Manager ser
 | 11085 | OpenSearch HTTPS |
 
 ---
+
+## Install
+
+Pick how you want to install it:
+
+<Tabs groupId="k3d-installer" queryString>
+<TabItem value="one-command" label="Run One Command" default>
+
+One script creates the cluster and installs every plane, plus Agent Manager:
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3d-install.sh | bash
+```
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+```bash
+curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3d-install-subscription.sh | bash -s -- --project <project>
+```
+
+Replace `<project>` with your registry project: `wso2-agent-manager-evaluations` for an evaluation, or `wso2-agent-manager` for a subscription. The script asks for your registry credentials and installs the newest version published to that project. To install a particular version, add `--version`, for example `--version 1.0.0-u2`. See [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx#one-command) for its options.
+
+</TabItem>
+</Tabs>
+
+The script:
+
+1. Checks that Docker is running and that k3d, kubectl, Helm, curl and lsof are installed.
+2. Downloads the `1.0.0` release bundle into `~/.wso2-agent-manager/1.0.0/`.
+3. Creates the `amp-local` k3d cluster and installs the four OpenChoreo planes and Agent Manager. These are the same steps as the **Guided Install** tab.
+4. Prints the console URL and the `admin` login when it finishes.
+
+The install takes about 15-20 minutes, and it is safe to rerun if it stops part way. On Colima, the script sets `K3D_FIX_DNS=0` for you.
+
+When it completes, continue with [Verify and Access the Platform](#verify-and-access-the-platform).
+
+</TabItem>
+<TabItem value="guided" label="Guided Install">
+
+Install each plane step by step.
 
 ## Phase 1: OpenChoreo Platform
 
@@ -279,6 +331,29 @@ export INSTRUMENTATION_URL="http://default-default.gateway.localhost:19080/otel"
 :::info
 In k3d, every management endpoint is accessed through a plane gateway using a hostname: Thunder, the Console, and the API via the Control Plane kgateway on port 8080 (`thunder.amp.localhost`, `console.amp.localhost`, `api.amp.localhost`), and the Agent Manager Observer via the Observability Plane kgateway on port 11080 (`traces.amp.localhost`). These match the chart defaults and the Control Plane / Observability Plane OIDC configuration. No port-forwarding is needed; `*.localhost` names resolve to the loopback address in browsers and curl.
 :::
+
+With a WSO2 subscription or evaluation, also point the charts at your registry project and sign Helm in to `registry.wso2.com`:
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+Nothing to change. The charts come from `ghcr.io/wso2`.
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `1.0.0` for the release, or `1.0.0-u<N>` for update N. Phase 2 uses the same username and token to create the image pull secret.
+
+```bash
+export VERSION="<version>"
+export HELM_CHART_REGISTRY="registry.wso2.com/<project>/helm-charts"
+printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
+printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
+```
+
+</TabItem>
+</Tabs>
 
 ### Step 6: Install Thunder Extension (Identity Provider)
 
@@ -756,6 +831,9 @@ kubectl get pods -n amp-thunder-default-default
 ```
 :::
 
+</TabItem>
+</Tabs>
+
 ---
 
 ## Verify and Access the Platform
@@ -781,10 +859,14 @@ helm list -A | grep -E 'openchoreo|amp|gateway'
 | **Agent Manager Observer** | [http://traces.amp.localhost:11080](http://traces.amp.localhost:11080) |
 | **OTLP trace ingest (HTTP)** | http://default-default.gateway.localhost:19080/otel |
 
-**Console login:** the username is `admin`; the password was generated at install time. Retrieve it as shown in [Step 6](#step-6-install-thunder-extension-identity-provider).
+**Console login:** the username is `admin`; the password was generated at install time. Retrieve it with:
+
+```bash
+kubectl get secret amp-admin-credentials -n amp-thunder -o jsonpath='{.data.password}' | base64 -d
+```
 
 :::note HTTPS ingest is disabled by default on this setup, and enabling it doesn't cover the documented hosts
-[values-dp.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v1.0.0/deployments/single-cluster/values-dp.yaml), installed in [Step 8](#step-8-setup-data-plane), sets `gateway.tls.enabled: false` even though it already configures `httpsPort: 19443` and a `certificateRefs` entry pointing at the `gateway-tls` Secret (created earlier by cert-manager). With TLS disabled, the Data Plane's `gateway-default` Gateway/Service only get an `http` listener — there is no 19443 listener to connect to, so an HTTPS OTLP endpoint is not reachable on a default install.
+[values-dp.yaml](https://raw.githubusercontent.com/wso2/agent-manager/amp/v1.0.0/deployments/single-cluster/values-dp.yaml), installed in Step 8 of the guided install (the one-command installer applies the same file), sets `gateway.tls.enabled: false` even though it already configures `httpsPort: 19443` and a `certificateRefs` entry pointing at the `gateway-tls` Secret (created earlier by cert-manager). With TLS disabled, the Data Plane's `gateway-default` Gateway/Service only get an `http` listener — there is no 19443 listener to connect to, so an HTTPS OTLP endpoint is not reachable on a default install.
 
 Turning `gateway.tls.enabled` on would not make the OTLP host above reachable over HTTPS anyway: `gateway-tls`'s certificate only covers `*.agentmanager.localhost` and `*.am-gateway.localhost` (its configured `hostname` and SANs), not `*.gateway.localhost` — the domain `default-default.gateway.localhost` above actually uses. Reaching HTTPS on that specific host would additionally require reissuing the certificate with `*.gateway.localhost` in its `dnsNames` and pointing `gateway.tls.hostname` at it.
 
@@ -799,6 +881,12 @@ Delete the entire k3d cluster and all resources:
 
 ```bash
 k3d cluster delete amp-local
+```
+
+If you used the one-command installer and want to remove Agent Manager and OpenChoreo but keep the cluster, run the uninstall script it left behind instead:
+
+```bash
+bash ~/.wso2-agent-manager/1.0.0/deployments/quick-start/uninstall.sh
 ```
 
 ---
@@ -873,7 +961,7 @@ colima start --profile agent-manager \
   --cpu <cpus> --memory <gb>
 ```
 
-Then rerun [Step 1: Create k3d Cluster](#step-1-create-k3d-cluster) onward.
+Then rerun the one-command installer, or the guided install from Step 1: Create k3d Cluster onward.
 
 </details>
 

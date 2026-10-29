@@ -115,13 +115,48 @@ kubectl apply -f "${AMP_DIST}/deployments/k8s/gvisor-runtimeclass.yaml"
 # 2. Label and taint the node (find the name with: kubectl get nodes)
 kubectl label node <node-name> gvisor=true --overwrite
 kubectl taint node <node-name> gvisor=true:NoSchedule --overwrite
+```
 
-# 3. Let the Fluent Bit log DaemonSet tolerate the taint (so agent logs are collected)
+The label is what the RuntimeClass schedules onto; the taint keeps regular runc pods off the node.
+
+The taint also keeps the Fluent Bit log collector off the node, and without it agents there produce no runtime logs. Fluent Bit is a DaemonSet rendered by the `observability-logs-opensearch` Helm chart, so its toleration is a chart value. Check whether the release stores it:
+
+```bash
+helm get values observability-logs-opensearch -n openchoreo-observability-plane
+```
+
+Check the release values rather than the live DaemonSet: a toleration patched onto the DaemonSet (as earlier versions of the setup scripts did) shows up on the live object, but is lost when the DaemonSet is recreated.
+
+If `fluent-bit.tolerations` does not list `- operator: Exists` with no `key` or `effect`, set the value on the release:
+
+```bash
+helm upgrade observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --namespace openchoreo-observability-plane \
+  --version 0.5.3 \
+  --reuse-values \
+  --set "fluent-bit.tolerations[0].operator=Exists"
+```
+
+Pass the chart version that is already installed (the `CHART` column of `helm list -n openchoreo-observability-plane`): combining `--reuse-values` with a chart version change can carry over values the new chart does not expect.
+
+:::warning Keep the toleration on later upgrades
+The toleration is stored in the release's values, so it must be present on every upgrade that re-renders the DaemonSet. An upgrade of `observability-logs-opensearch` with `--reset-values`, or one that passes new `--set`/`-f` values without `--reuse-values`, drops it unless you pass `--set "fluent-bit.tolerations[0].operator=Exists"` again. Agents on the gVisor node then stop producing logs with no error.
+:::
+
+<details>
+<summary>Logs module not installed as a Helm release</summary>
+
+Only if `observability-logs-opensearch` is not a Helm release in your cluster, patch the DaemonSet directly:
+
+```bash
 kubectl patch daemonset fluent-bit -n openchoreo-observability-plane --type=json \
   -p='[{"op":"add","path":"/spec/template/spec/tolerations","value":[{"operator":"Exists"}]}]'
 ```
 
-The label is what the RuntimeClass schedules onto; the taint keeps regular runc pods off the node.
+This replaces the DaemonSet's whole tolerations list, and is lost whenever the DaemonSet is recreated (a reinstall of the logs module or a namespace teardown), so re-check the toleration after any such change.
+
+</details>
 
 :::tip Verify
 ```bash
@@ -222,7 +257,7 @@ The Fluent Bit DaemonSet must run on the tainted node. Check it covers the gViso
 kubectl get pods -n openchoreo-observability-plane -o wide | grep fluent-bit
 ```
 
-If no Fluent Bit pod is on the gVisor node, apply the toleration patch from Step 3.
+If no Fluent Bit pod is on the gVisor node, set the Fluent Bit toleration as described in [Step 3](#step-3-register-the-node-for-the-gvisor-tier).
 
 </details>
 

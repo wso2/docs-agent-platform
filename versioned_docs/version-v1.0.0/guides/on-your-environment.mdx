@@ -14,6 +14,10 @@ Set up a production-grade, single-cluster Agent Manager deployment on an existin
 The [Quick Start Guide](../get-started/quick-start.mdx) installs everything in a single command using a dev container with k3d, the [k3d guide](./on-k3d.mdx) covers a local cluster install, and the [VM guide](./on-a-vm.mdx) covers a single-machine install. Use this page when you are deploying to a real cluster.
 :::
 
+:::info WSO2 subscription
+With a WSO2 subscription or evaluation, you install the WSO2-supported build from `registry.wso2.com`. Select the **WSO2 Subscription** tab wherever this guide shows one, and see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx) for your credentials and registry project.
+:::
+
 :::info Stronger agent isolation tiers
 Agents run sandboxed under the standard **runc** runtime by default. Agent Manager also supports stronger per-environment isolation tiers — **gVisor** (userspace kernel) and **Kata Containers** (per-agent VM) — but they have hardware/OS requirements and need a dedicated node. For more information, see the [gVisor](./isolation-tiers/gvisor.mdx) and [Kata Containers](./isolation-tiers/kata.mdx) setup guides.
 :::
@@ -54,6 +58,7 @@ The main flow assumes you control a DNS zone. If you are evaluating on a cluster
 - **Amazon Web Services** (EKS)
 - **Google Cloud Platform** (GKE)
 - **Microsoft Azure** (AKS)
+- **Red Hat OpenShift** (including Azure Red Hat OpenShift) — see [Appendix: Red Hat OpenShift](#appendix-red-hat-openshift) for the OpenShift-specific settings
 - Any Kubernetes distribution with LoadBalancer support
 
 ### Required Tools
@@ -153,6 +158,29 @@ export THUNDER_INTERNAL_URL="http://amp-thunder-extension-service.${THUNDER_NS}.
 # Trace-export endpoint shown to agent developers (see the OTLP note below)
 export INSTRUMENTATION_URL="http://default-default.gateway.localhost:19080/otel"
 ```
+
+With a WSO2 subscription or evaluation, also point the charts at your registry project and sign Helm in to `registry.wso2.com`:
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
+
+Nothing to change. The charts come from `ghcr.io/wso2`.
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `1.0.0` for the release, or `1.0.0-u<N>` for update N. Phase 2 uses the same username and token to create the image pull secret.
+
+```bash
+export VERSION="<version>"
+export HELM_CHART_REGISTRY="registry.wso2.com/<project>/helm-charts"
+printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
+printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
+```
+
+</TabItem>
+</Tabs>
 
 :::note Hostname shape
 The certificates below are single-level wildcards (`*.<base>`), so every management hostname must sit directly under the base domain — no second-level names like `api.amp.<base>`.
@@ -1250,11 +1278,14 @@ helm upgrade observability-logs-opensearch \
   --timeout 10m
 
 # Metrics module
+# The chart defaults Prometheus to a LoadBalancer Service, which would put its
+# unauthenticated API on a public IP. Everything that queries it is in-cluster.
 helm upgrade --install observability-metrics-prometheus \
   oci://ghcr.io/openchoreo/helm-charts/observability-metrics-prometheus \
   --create-namespace \
   --namespace openchoreo-observability-plane \
   --version 0.6.1 \
+  --set kube-prometheus-stack.prometheus.service.type=ClusterIP \
   --timeout 10m
 
 # Tracing module (uses the custom OTel Collector ConfigMap)
@@ -1679,6 +1710,14 @@ Port-forwarding remains available as a debugging fallback for any individual ser
 
 </details>
 
+<details>
+<summary>Red Hat OpenShift (including ARO)</summary>
+
+- OpenShift's Security Context Constraints, built-in monitoring and DNS need extra settings at several steps — follow [Appendix: Red Hat OpenShift](#appendix-red-hat-openshift) alongside the main flow
+- On ARO, LoadBalancers return public IPs directly and `managed-csi` is the default StorageClass
+
+</details>
+
 ---
 
 ## Production Reference
@@ -1708,6 +1747,13 @@ Work down this table against an existing install. The **When** column matters: t
 | Stateless services running multiple replicas | [High availability](#high-availability-and-scaling) | Any time |
 | NetworkPolicies, RBAC, and Pod Security Standards applied | [Cluster security](#certificates-and-cluster-security) | Any time |
 | Stronger isolation tier chosen where agents run untrusted code | [Agent isolation](#agent-isolation) | Any time, per environment |
+| Only the three plane gateways are LoadBalancer Services | [Step 8](#step-8-setup-observability-plane) | Any time |
+
+The only LoadBalancer Services should be the `gateway-default` Service of each of the three planes. Anything else in this list is reachable from outside the cluster, so convert it to `ClusterIP`:
+
+```bash
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+```
 
 ### After a chart upgrade
 
@@ -2014,6 +2060,261 @@ export CURL_CA_BUNDLE
 Then run the script exactly as in the Corporate CA tab (with `PLATFORM_THUNDER_CA_PEM` set).
 
 The Thunder reinstall warning applies with full force here: if you tear down and recreate the cluster, the LoadBalancer IP — and therefore every hostname — changes, and Thunder must be reinstalled with the new values.
+
+</details>
+
+---
+
+## Appendix: Red Hat OpenShift
+
+Agent Manager runs on Red Hat OpenShift, including managed offerings such as Azure Red Hat OpenShift (ARO). The flow is the same as the main guide; OpenShift needs extra settings at a few steps, mostly because of its stricter pod security defaults, its built-in platform components (monitoring, DNS, image registry), and the Kubernetes version a given OpenShift release ships.
+
+This appendix was validated on **ARO, OpenShift 4.18 (Kubernetes 1.31)**.
+
+<details>
+<summary>OpenShift-specific setup and changes</summary>
+
+Each change is tagged with where it applies:
+
+| Tag | Applies to |
+|---|---|
+| **All OpenShift** | Every OpenShift cluster, any version or provider |
+| **OpenShift 4.18 (Kubernetes 1.31)** | OpenShift releases that ship Kubernetes 1.31 or earlier, which is below the guide's 1.32 minimum |
+| **ARO** | Azure Red Hat OpenShift only |
+| **Private registry** | Clusters that push agent images to a registry requiring credentials (for example Azure Container Registry) |
+
+Use `oc` or `kubectl` interchangeably for the commands below; the SCC commands need `oc`.
+
+### How OpenShift security affects the install
+
+**All OpenShift.** OpenShift admits pods through Security Context Constraints (SCCs). The default, `restricted-v2`, runs every pod as a random, namespace-assigned user ID and rejects pods that request a specific user ID, root, host access, or privilege. Most charts in this guide pin fixed non-root user IDs, and a few components need root or privilege, so you grant SCCs per namespace or service account **before** installing the charts that need them. Three built-in SCCs are used:
+
+| SCC | Allows | Used for |
+|---|---|---|
+| `nonroot-v2` | Any fixed user ID except root (0) | Most platform namespaces |
+| `anyuid` | Any user ID, including root | Two setup jobs that run as root |
+| `privileged` | Root, privileged containers, host paths, host network | Agent build steps, the Fluent Bit log collector |
+
+Images that expect to run as their own user (rather than OpenShift's random one) are pinned to that user through chart values in the steps below.
+
+### Prerequisites
+
+- **Kernel (All OpenShift).** RHCOS nodes run a 5.14 kernel, below the 6.3 needed for user-namespaced builds. Set `buildWorkflows.userNamespaces=false` on the Platform Resources chart (Phase 2, Step 4).
+- **Kubernetes version (OpenShift 4.18 (Kubernetes 1.31)).** The OpenChoreo control-plane CRDs need a patch before installing; see Step 5 under Phase 1 changes below.
+- **LoadBalancer check (All OpenShift).** The `nginx` image in the LoadBalancer test runs as root and is rejected by `restricted-v2`. Use the unprivileged image instead:
+
+  ```bash
+  kubectl create deploy lbtest --image=nginxinc/nginx-unprivileged:alpine --port=8080
+  kubectl expose deploy lbtest --port=80 --target-port=8080 --type=LoadBalancer
+  ```
+
+- **NetworkPolicy (All OpenShift).** OpenShift's default network plugin (OVN-Kubernetes) enforces NetworkPolicy, so the platform's policies take effect. Its DNS service listens on a different port from upstream Kubernetes, which two of those policies need adjusting for (Phase 2, Steps 4 and 6).
+- **Default StorageClass (ARO).** ARO ships `managed-csi` (Azure Disk) as the default class, which works as-is. Azure disks are zonal: a pod with persistent volumes can only run on a worker in its volume's zone, so keep at least one worker per zone.
+- **Node count (ARO).** ARO requires 3 control-plane nodes and at least 3 workers, and does not schedule workloads on control-plane nodes. All platform components run on the workers.
+
+### SCC grants
+
+**All OpenShift.** Grant these before the corresponding steps. Some namespaces do not exist until a later step creates them; `oc adm policy` refuses a namespace that does not exist yet, so those are granted with a ClusterRoleBinding instead, which takes effect when the namespace is created.
+
+```bash
+for ns in openchoreo-control-plane openchoreo-data-plane openchoreo-workflow-plane openchoreo-observability-plane amp-thunder wso2-amp; do
+  kubectl create namespace "$ns" --dry-run=client -o yaml | kubectl apply -f -
+  oc adm policy add-scc-to-group nonroot-v2 "system:serviceaccounts:$ns"
+done
+
+oc create clusterrolebinding agent-sandbox-system-nonroot-v2 \
+  --clusterrole=system:openshift:scc:nonroot-v2 \
+  --group=system:serviceaccounts:agent-sandbox-system
+
+oc create clusterrolebinding amp-thunder-default-default-nonroot-v2 \
+  --clusterrole=system:openshift:scc:nonroot-v2 \
+  --group=system:serviceaccounts:amp-thunder-default-default
+
+oc adm policy add-scc-to-user anyuid -z amp-hooks -n wso2-amp
+oc adm policy add-scc-to-user anyuid -z api-platform-default-default-bootstrap-sa -n openchoreo-data-plane
+oc adm policy add-scc-to-user privileged -z fluent-bit -n openchoreo-observability-plane
+
+oc create clusterrolebinding workflows-default-workflow-sa-privileged \
+  --clusterrole=system:openshift:scc:privileged \
+  --serviceaccount=workflows-default:workflow-sa
+```
+
+| Namespace / service account | SCC | Why |
+|---|---|---|
+| The four OpenChoreo plane namespaces, `amp-thunder`, `wso2-amp` | `nonroot-v2` | Pods pin fixed non-root user IDs (1000, 1001, 10001, 65532 and others) |
+| `agent-sandbox-system` | `nonroot-v2` | Sandbox controller runs as user ID 1000 |
+| `amp-thunder-<org>-<env>` | `nonroot-v2` | Per-environment Thunder runs as user ID 10001. Repeat for every environment you add |
+| `wso2-amp/amp-hooks` | `anyuid` | The JWT key generation job runs as root |
+| `openchoreo-data-plane/api-platform-default-default-bootstrap-sa` | `anyuid` | The gateway bootstrap job runs as root |
+| `openchoreo-observability-plane/fluent-bit` | `privileged` | Reads node log files through host paths |
+| `workflows-default/workflow-sa` | `privileged` | Agent build steps run privileged podman containers. Repeat for `workflows-<env>` of every environment you add |
+
+### Phase 1 changes
+
+#### Step 2: OpenBao
+
+**All OpenShift.** The OpenBao chart pins user ID 100 by default. Add `--set global.openshift=true` to the OpenBao `helm upgrade --install` command; the chart then leaves the user ID to OpenShift and needs no SCC grant.
+
+#### Step 5: OpenChoreo Control Plane
+
+**OpenShift 4.18 (Kubernetes 1.31).** The control-plane chart's CRDs fail to install with `CustomResourceDefinition ... is invalid ... undefined field 'namespace'`. Some of their validation rules refer to fields named `namespace` and `var`, which Kubernetes 1.31 and earlier treat as reserved words and only accept in the escaped form `__namespace__` / `__var__`. The escaped form is also valid on newer Kubernetes.
+
+Apply patched CRDs yourself, then install the chart with `--skip-crds`:
+
+```bash
+helm pull oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane --version 1.2.0 --untar -d oc-cp-chart
+
+sed -i.bak -E 's/has\(self\.var\)/has(self.__var__)/g; s/self\.scope\.namespace\)/self.scope.__namespace__)/g' \
+  oc-cp-chart/openchoreo-control-plane/crds/*.yaml
+rm -f oc-cp-chart/openchoreo-control-plane/crds/*.bak
+
+kubectl apply --server-side -f oc-cp-chart/openchoreo-control-plane/crds/
+```
+
+Then add `--skip-crds` to every control-plane `helm upgrade --install` in this guide. Helm never upgrades CRDs, so on a later control-plane chart upgrade repeat these commands with the new chart version.
+
+#### Step 8: Observability Plane
+
+**All OpenShift.** Three changes to the observability modules:
+
+1. **OpenSearch.** Its init container changes the data volume's owner as root, which `nonroot-v2` does not allow. The pod's `fsGroup` already makes the volume writable, so turn the init container off. Add to the logs module install:
+
+   ```bash
+   --set openSearch.persistence.enableInitChown=false
+   ```
+
+2. **Fluent Bit.** OpenShift's container runtime writes log files readable only by root, with an SELinux label unprivileged containers cannot read. The `privileged` SCC grant only permits privilege; the container must also request it. Add to the command that enables Fluent Bit:
+
+   ```bash
+   --set fluent-bit.securityContext.runAsUser=0 \
+   --set fluent-bit.securityContext.runAsNonRoot=false \
+   --set fluent-bit.securityContext.privileged=true \
+   --set fluent-bit.securityContext.allowPrivilegeEscalation=true
+   ```
+
+   Without this, every log query in the console stays empty while all pods look healthy.
+
+3. **Metrics module.** OpenShift ships its own Prometheus Operator and kube-state-metrics, whose cluster roles use the same names as this chart's, so the install fails with `ClusterRole "kube-state-metrics" ... exists and cannot be imported into the current release`. The chart's operator would also manage OpenShift's own `Prometheus` and `Alertmanager` resources. Rename the chart's components, keep its operator out of OpenShift's monitoring namespaces, and keep Prometheus off a public LoadBalancer. Add to the metrics module install:
+
+   ```bash
+   --set kube-prometheus-stack.prometheusOperator.fullnameOverride=openchoreo-prometheus-operator \
+   --set kube-prometheus-stack.kube-state-metrics.fullnameOverride=openchoreo-kube-state-metrics \
+   --set "kube-prometheus-stack.prometheusOperator.denyNamespaces={openshift-monitoring,openshift-user-workload-monitoring}" \
+   --set kube-prometheus-stack.prometheus.service.type=ClusterIP
+   ```
+
+   OpenShift owns the `monitoring.coreos.com` CRDs, so the chart's operator runs against OpenShift's versions; a warning such as `unknown field "spec.enableOTLPReceiver"` during install is expected and harmless.
+
+### Phase 2 changes
+
+#### Step 1: Gateway Operator
+
+**All OpenShift.** The gateway runtime image keeps its working directories owned by user ID 10001 and crash-loops (`Failed to bind to address unix:/var/run/api-platform/python-executor.sock ... Permission denied`) under OpenShift's random user ID. Pin it through the operator's gateway values. Add to the gateway operator install:
+
+```bash
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.runAsUser=10001 \
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.runAsGroup=10001 \
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.fsGroup=10001 \
+--set gateway.values.gateway.gatewayRuntime.deployment.podSecurityContext.runAsNonRoot=true
+```
+
+Set these on the **initial** install. If the gateway extension (Step 7) is installed while the runtime is crash-looping, the operator records the gateway as permanently failed and does not retry on its own.
+
+#### Step 2: Agent Manager
+
+**All OpenShift.** Two components need their user ID pinned. Add to the Agent Manager install:
+
+```bash
+--set agentManagerService.podSecurityContext.runAsUser=1000 \
+--set agentManagerService.podSecurityContext.runAsNonRoot=true \
+--set agentManagerService.podSecurityContext.fsGroup=1000 \
+--set console.securityContext.runAsUser=1001 \
+--set console.securityContext.runAsNonRoot=true \
+--set console.securityContext.allowPrivilegeEscalation=false \
+--set "console.securityContext.capabilities.drop={ALL}"
+```
+
+- The API pod's `wait-for-db` init container (used with the in-cluster database) runs an image that defaults to root and has no user ID of its own, so the pod-level user ID applies to it.
+- The console's web server writes its runtime configuration into a directory owned by user ID 1001.
+
+#### Step 4: Platform Resources
+
+**All OpenShift.** Add `--set buildWorkflows.userNamespaces=false` to the Platform Resources install (RHCOS kernel 5.14).
+
+After installing, apply two patches the chart has no values for:
+
+1. **Build checkout step.** It is the only non-privileged build step, so it runs under a random user ID with no home directory and git fails with `could not lock config file //.gitconfig`. Give it a writable `HOME`:
+
+   ```bash
+   kubectl patch clusterworkflowtemplate checkout-source --type=json \
+     -p '[{"op":"add","path":"/spec/templates/0/container/env/-","value":{"name":"HOME","value":"/tmp"}}]'
+   ```
+
+2. **Agent DNS egress.** OpenShift's DNS (`openshift-dns`) listens on port **5353** behind a Service on port 53. NetworkPolicies match the pod's real port, and the agent egress policy only allows 53, so agents cannot resolve any hostname (`Temporary failure in name resolution`). Allow 5353 as well:
+
+   ```bash
+   kubectl patch componenttype.openchoreo.dev agent-api -n default --type=json \
+     -p '[{"op":"add","path":"/spec/resources/0/template/spec/networkPolicy/egress/0/ports/-","value":{"port":5353,"protocol":"UDP"}},{"op":"add","path":"/spec/resources/0/template/spec/networkPolicy/egress/0/ports/-","value":{"port":5353,"protocol":"TCP"}}]'
+   ```
+
+   Agents deployed before this patch pick it up on their next deploy.
+
+**Private registry.** Agent component types do not set `imagePullSecrets`, so agent pods cannot authenticate to a private registry themselves. On OpenShift, add the registry's credentials to the cluster-wide pull secret, which every node uses for every image:
+
+```bash
+oc get secret/pull-secret -n openshift-config -o jsonpath='{.data.\.dockerconfigjson}' | base64 -d > cluster-pull-secret.json
+jq -s '.[0] * .[1]' cluster-pull-secret.json registry-dockerconfig.json > cluster-pull-secret.merged.json
+oc set data secret/pull-secret -n openshift-config --from-file=.dockerconfigjson=cluster-pull-secret.merged.json
+```
+
+`registry-dockerconfig.json` is your registry's `.dockerconfigjson` (for ACR, built from the registry's admin credentials). Keep every existing entry; on ARO the `arosvc.azurecr.io` entry must not be removed. OpenShift rolls the change out to all nodes without a reboot.
+
+#### Step 6: Evaluation Extension
+
+**All OpenShift.** The evaluation job's egress policy expects DNS in `kube-system` on port 53. Point it at OpenShift's DNS through chart values, adding to the evaluation extension install:
+
+```bash
+--set networkPolicy.evaluationJob.dns.namespace=openshift-dns \
+--set networkPolicy.evaluationJob.dns.podLabel.key=dns.operator.openshift.io/daemonset-dns \
+--set networkPolicy.evaluationJob.dns.podLabel.value=default
+```
+
+The DNS port is fixed at 53 in the chart, so add 5353 right after installing (the chart creates `workflows-default` and the policy itself):
+
+```bash
+kubectl patch networkpolicy amp-evaluation-job-egress -n workflows-default --type=json \
+  -p '[{"op":"add","path":"/spec/egress/0/ports/-","value":{"port":5353,"protocol":"UDP"}},{"op":"add","path":"/spec/egress/0/ports/-","value":{"port":5353,"protocol":"TCP"}}]'
+```
+
+#### After the first agent build
+
+**All OpenShift.** OpenShift adds an image-registry pull secret (`workflow-sa-dockercfg-...`) as the first entry in every service account's `secrets` list. Evaluation monitor workflows mount the service account's first secret as their API token, so they fail at start-up with `invalid configuration: no configuration has been provided`. Put the token Secret first:
+
+```bash
+DOCKERCFG=$(kubectl get sa workflow-sa -n workflows-default \
+  -o jsonpath='{.secrets[?(@.name!="workflow-sa.service-account-token")].name}')
+kubectl patch sa workflow-sa -n workflows-default --type=merge \
+  -p "{\"secrets\":[{\"name\":\"workflow-sa.service-account-token\"},{\"name\":\"${DOCKERCFG}\"}]}"
+```
+
+Repeat for `workflows-<env>` of every environment you add.
+
+#### Provision Thunder Identity Provider
+
+**ARO.** Thunder's volumes are created in a single availability zone, and attaching them can take a few minutes on Azure. Pass `WAIT_TIMEOUT=600s` to `add-environment-thunder.sh` so the script does not stop waiting before Thunder is ready. Remember the `amp-thunder-<org>-<env>` SCC grant for every environment you add.
+
+### After a chart upgrade
+
+Some OpenShift changes are applied with `kubectl` on top of what Helm renders, and an upgrade of the owning chart reverts them. Re-apply after upgrading:
+
+| Change | Owning chart | Applies to |
+|---|---|---|
+| Patched control-plane CRDs, install with `--skip-crds` | OpenChoreo Control Plane | OpenShift 4.18 (Kubernetes 1.31) |
+| `checkout-source` `HOME=/tmp` | Platform Resources | All OpenShift |
+| `agent-api` DNS port 5353 | Platform Resources | All OpenShift |
+| `amp-evaluation-job-egress` DNS port 5353 | Evaluation Extension | All OpenShift |
+
+The changes made through `--set` values persist across upgrades that use `--reuse-values`.
 
 </details>
 

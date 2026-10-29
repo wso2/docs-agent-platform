@@ -22,7 +22,7 @@ import styles from './styles.module.css';
 type SearchProvider = 'algolia' | 'lunr';
 
 const CACHE_KEY = 'docs-search-provider';
-const CACHE_TTL = 60 * 60 * 1000; // 10 minutes
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 function getCachedProvider(): SearchProvider | null {
   try {
@@ -61,13 +61,16 @@ async function isAlgoliaReachable(algolia: {
 
   try {
     const response = await fetch(
-      `https://${algolia.appId}-dsn.algolia.net/1/indexes`,
+      `https://${algolia.appId}-dsn.algolia.net/1/indexes/${encodeURIComponent(
+        algolia.indexName,
+      )}/query`,
       {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'X-Algolia-Application-Id': algolia.appId,
           'X-Algolia-API-Key': algolia.apiKey,
         },
+        body: JSON.stringify({query: '', hitsPerPage: 0}),
         signal: controller.signal,
       },
     );

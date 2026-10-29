@@ -1,7 +1,9 @@
 import React from 'react';
 import clsx from 'clsx';
+import Head from '@docusaurus/Head';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import { useWindowSize } from '@docusaurus/theme-common';
-import { useDoc } from '@docusaurus/plugin-content-docs/client';
+import { useDoc, useDocsVersion } from '@docusaurus/plugin-content-docs/client';
 import DocItemPaginator from '@theme/DocItem/Paginator';
 import DocVersionBanner from '@theme/DocVersionBanner';
 import DocVersionBadge from '@theme/DocVersionBadge';
@@ -32,6 +34,38 @@ function useDocTOC() {
   };
 }
 
+function DocStructuredData() {
+  const { metadata } = useDoc();
+  const version = useDocsVersion();
+  const { siteConfig } = useDocusaurusContext();
+  const permalink =
+    siteConfig.trailingSlash && !metadata.permalink.endsWith('/')
+      ? `${metadata.permalink}/`
+      : metadata.permalink;
+  const url = `${siteConfig.url}${permalink}`;
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: metadata.title,
+    description: metadata.description || undefined,
+    url,
+    mainEntityOfPage: url,
+    inLanguage: 'en',
+    version: version.label,
+    dateModified: metadata.lastUpdatedAt
+      ? new Date(metadata.lastUpdatedAt).toISOString()
+      : undefined,
+    isPartOf: { '@id': 'https://wso2.com/agent-platform/docs/#website' },
+    publisher: { '@id': 'https://wso2.com/#organization' },
+  };
+  return (
+    <Head>
+      <meta property="og:type" content="article" />
+      <script type="application/ld+json">{JSON.stringify(data)}</script>
+    </Head>
+  );
+}
+
 export default function DocItemLayout({ children }: { children: React.ReactNode }) {
   const docTOC = useDocTOC();
   const { metadata } = useDoc();
@@ -39,6 +73,7 @@ export default function DocItemLayout({ children }: { children: React.ReactNode 
   return (
     <div className="row">
       <div className={clsx('col', styles.docItemCol)}>
+        <DocStructuredData />
         <ContentVisibility metadata={metadata} />
         <DocVersionBanner />
         <div className={styles.docItemContainer}>

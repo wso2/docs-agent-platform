@@ -26,8 +26,8 @@ amctl agent [command]
 | [`build logs`](#amctl-agent-build-logs) | Show build logs (via the observer) |
 | [`logs`](#amctl-agent-logs) | Fetch runtime logs for a deployed agent (via the observer) |
 | [`metrics`](#amctl-agent-metrics) | Show CPU and memory metrics (via the observer) |
-| [`traces`](#amctl-agent-traces) | List runtime traces |
-| [`traces export`](#amctl-agent-traces-export) | Export a full trace payload |
+| [`traces`](#amctl-agent-traces) | List runtime traces, with filters |
+| [`traces export`](#amctl-agent-traces-export) | Export filtered traces with full span data as JSON |
 | [`trace`](#amctl-agent-trace) | Show span detail for a single trace |
 
 ## Options inherited from parent commands
@@ -81,6 +81,17 @@ amctl agent create checkout-api \
   --port 8080 \
   --openapi-spec openapi.yaml
 
+# A2A agent: needs only the port its A2A server listens on, no OpenAPI spec
+amctl agent create notes-agent \
+  --display-name "Notes Agent" \
+  --subtype a2a-agent \
+  --port 9099 \
+  --repo-url https://github.com/acme/notes-agent \
+  --build-type buildpack \
+  --language python \
+  --language-version 3.11 \
+  --run-command "python main.py"
+
 # Plain environment + secret references
 amctl agent create payments \
   --display-name "Payments" \
@@ -109,7 +120,7 @@ amctl agent create chatbot \
 |------|------|---------|-------------|
 | `--display-name` | string | _required_ | Human-readable name. |
 | `--description` | string | (none) | Free-text description. |
-| `--subtype` | string | (none) | Agent sub-type: `chat-api` or `custom-api`. |
+| `--subtype` | string | (none) | Agent sub-type: `chat-api`, `custom-api`, or `a2a-agent`. The A2A choice is fixed at creation: an agent cannot later change between `a2a-agent` and the other two. |
 | `--provisioning` | string | `internal` | `internal` (platform-managed) or `external`. |
 | `--repo-url` | string | (none) | Source repository URL. |
 | `--repo-branch` | string | (none) | Source branch. |
@@ -120,9 +131,9 @@ amctl agent create chatbot \
 | `--language-version` | string | (none) | Language version for buildpack builds. |
 | `--run-command` | string | (none) | Run command for buildpack builds. |
 | `--dockerfile` | string | (none) | Dockerfile path (Docker builds). |
-| `--port` | int | `8000` | Service port (1–65535). Applies only to `custom-api`. |
+| `--port` | int | `8000` | Service port (1 to 65535). Applies only to `custom-api` and `a2a-agent`; `chat-api` uses a fixed port. |
 | `--base-path` | string | (none) | Base path for the agent's HTTP service. |
-| `--openapi-spec` | string | (none) | Path to OpenAPI schema within the repo. |
+| `--openapi-spec` | string | (none) | Path to OpenAPI schema within the repo. Rejected for `a2a-agent`. |
 | `--no-auto-instrumentation` | bool | `false` | Disable automatic instrumentation. |
 | `--env` | strings | (none) | Environment variable as `KEY=VALUE`. Repeatable. Stored as plain text. |
 | `--env-secret` | strings | (none) | Sensitive env variable as `KEY=VALUE`. Repeatable. |
@@ -420,9 +431,9 @@ Memory  340Mi    512Mi    1.0Gi
 
 ## amctl agent traces
 
-List runtime traces for an agent, optionally filtered by a built-in condition.
+List traces for an agent. Filters run on the server across the whole time window and combine, so a trace must match every filter set. The filters match the Console's, as described in [Filter traces](../../concepts/observability.mdx#filter-traces).
 
-```
+```text
 amctl agent traces <agent> [flags]
 ```
 
@@ -430,42 +441,84 @@ amctl agent traces <agent> [flags]
 
 | Name | Description |
 |------|-------------|
-| `<agent>` | Agent name. Optional if the directory is linked. |
+| `<agent>` | Agent name. Optional if the directory is linked, or when `--from-url` is a URL or path that names the agent. |
 
 ### Examples
 
 ```bash
-# Last 2 hours of errored traces
-amctl agent traces support-bot --since 2h --condition error_status
+# Failed runs in the last day that called search_issues
+amctl agent traces support-bot --since 1d --status error --tool search_issues
 
-# Slow requests (over 60 seconds)
-amctl agent traces support-bot --condition high_latency --max-latency 60000
+# Traces where any tool call failed, with the Tools column showing which one
+amctl agent traces support-bot --tool-error
 
-# Tool failures
-amctl agent traces support-bot --condition tool_call_fails
+# Every trace in one conversation
+amctl agent traces support-bot --conversation 7f3c9a2e --since 7d
+
+# The list a teammate shared from the Console, then a link back to it
+amctl agent traces --from-url 'https://console.example.com/org/acme/project/triage/agents/support-bot/environment/dev/observability/traces?status=error&timeRange=3h' --console-url
 ```
+
+### Output
+
+A table with the columns `status`, `trace id`, `conversation`, `started`, `duration`, `tokens`, and `spans`. Optional columns follow:
+
+| Column | Flag | Description |
+|--------|------|-------------|
+| `model` | `--show-models` | The models each trace called. |
+| `tools` | `--show-tools` | The tools each trace called. A failed tool is marked `(failed)`. |
+| `mcp servers` | `--show-mcp-servers` | The MCP servers each trace used. |
+
+Filtering by `--model`, `--tool`, `--tool-error`, or `--mcp-server` also shows the matching column.
+
+On a busy agent, the search can stop before it covers the whole time window. A notice then appears below the table. If more traces can be loaded, the notice shows the command that fetches the next page. Otherwise, it suggests narrowing the time range.
+
+### Console links
+
+- `--console-url` prints the Console path for the same list. Append it to your Console's host.
+- `--from-url` lists the traces shown at a Console URL, taking its scope, filters, and time range (1 hour if the URL has none). Flags such as `--limit`, `--sort`, and `--since` override the URL.
 
 ### Options
 
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `--since` | string | `24h` | Time window. |
-| `--limit` | int | `10` | Maximum traces (1–100). |
+| `--since` | string | `24h` | Time window, for example `30m`, `1h`, `7d`. |
+| `--start` | string | (none) | Window start, RFC 3339. Needs `--end`, and cannot be used with `--since`. |
+| `--end` | string | (none) | Window end, RFC 3339. Needs `--start`. |
+| `--limit` | int | `10` | Maximum traces (1 to 100). |
 | `--sort` | string | `desc` | `asc` or `desc`. |
-| `--condition` | string | (none) | One of: `error_status`, `high_latency`, `high_token_usage`, `tool_call_fails`, `excessive_steps`. |
-| `--max-latency` | int | `30000` | Latency threshold in milliseconds (used with `high_latency`). |
-| `--max-tokens` | int | `10000` | Token threshold (used with `high_token_usage`). |
-| `--max-spans` | int | `40` | Span-count threshold (used with `excessive_steps`). |
+| `--status` | string | (none) | Only traces with this status: `error` or `ok`. |
+| `--min-duration` | duration | (none) | Only traces lasting at least this long, for example `500ms`, `30s`. |
+| `--min-tokens` | int | (none) | Only traces using at least this many tokens. |
+| `--min-spans` | int | (none) | Only traces with at least this many spans. |
+| `--model` | string | (none) | Only traces where a model name contains this value, ignoring case. Implies `--show-models`. |
+| `--conversation` | string | (none) | Only traces with exactly this conversation ID. |
+| `--no-conversation` | bool | `false` | Only traces with no conversation ID. Cannot be used with `--conversation`. |
+| `--tool` | string | (none) | Only traces that called a tool whose name contains this value, ignoring case. Implies `--show-tools`. |
+| `--tool-error` | bool | `false` | Only traces with a failed tool call. With `--tool`, that tool failed. Implies `--show-tools`. |
+| `--mcp-server` | string | (none) | Only traces that used an MCP server whose name contains this value, ignoring case. Implies `--show-mcp-servers`. |
+| `--show-models` | bool | `false` | Add the `model` column. |
+| `--show-tools` | bool | `false` | Add the `tools` column. |
+| `--show-mcp-servers` | bool | `false` | Add the `mcp servers` column. |
+| `--condition` | string | (none) | Shorthand for one filter: `error_status`, `high_latency`, `high_token_usage`, `tool_call_fails`, `excessive_steps`. |
+| `--max-latency` | int | `30000` | Latency threshold in milliseconds. `high_latency` matches traces above it. |
+| `--max-tokens` | int | `10000` | Token threshold. `high_token_usage` matches traces above it. |
+| `--max-spans` | int | `40` | Span-count threshold. `excessive_steps` matches traces above it. |
+| `--cursor` | string | (none) | Fetch the next page of an earlier search. The next-page command in the notice sets it for you. With `--json`, take the value from the response's `nextCursor` field, and keep the same window, sort, and filters. |
+| `--console-url` | bool | `false` | Print the Console path for this list. |
+| `--from-url` | string | (none) | Take the scope, filters, and window from a Console URL, its path, or its `?...` query. |
 | `--env` | string | (linked env) | Environment to query. |
 
 ---
 
 ## amctl agent traces export
 
-Export a single trace's full payload, including every span and span event. Suitable for offline analysis or attaching to an incident ticket.
+Export the traces that match a set of filters, with their spans, as JSON. Suitable for offline analysis or attaching to an incident ticket.
 
-```
-amctl agent traces export <agent> <trace-id> [flags]
+Each trace includes up to 10,000 spans. If any trace has more, the file holds its first 10,000, and the response sets `spansTruncated` to `true`.
+
+```text
+amctl agent traces export <agent> [flags]
 ```
 
 ### Arguments
@@ -473,21 +526,25 @@ amctl agent traces export <agent> <trace-id> [flags]
 | Name | Description |
 |------|-------------|
 | `<agent>` | Agent name. Optional if the directory is linked. |
-| `<trace-id>` | Trace ID, typically obtained from [`amctl agent traces`](#amctl-agent-traces). |
 
 ### Example
 
 ```bash
-amctl agent traces export support-bot 7c8f...e1 --since 1h > trace.json
+# Failed traces from the last hour that used the github MCP server
+amctl agent traces export support-bot --since 1h --status error --mcp-server github > traces.json
 ```
 
 ### Options
 
+`export` takes the same filter flags as [`amctl agent traces`](#amctl-agent-traces). It also takes:
+
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
-| `--since` | string | _required_ | Time window the trace was produced in. |
-| `--limit` | int | `100` | Maximum spans to include (1–100). |
-| `--sort` | string | `desc` | Span order: `asc` or `desc`. |
+| `--since` | string | _required_ | Time window, for example `1h`. Not required when `--start` and `--end` are set. |
+| `--start` | string | (none) | Window start, RFC 3339. Needs `--end`, and cannot be used with `--since`. |
+| `--end` | string | (none) | Window end, RFC 3339. Needs `--start`. |
+| `--limit` | int | `100` | Maximum traces to export (1 to 100). |
+| `--sort` | string | `desc` | `asc` or `desc`. |
 | `--env` | string | (linked env) | Environment to query. |
 
 ---
@@ -496,7 +553,7 @@ amctl agent traces export support-bot 7c8f...e1 --since 1h > trace.json
 
 Show span details for a single trace. With `--span`, expand a specific span to full detail.
 
-```
+```text
 amctl agent trace <agent> <trace-id> [flags]
 ```
 
@@ -504,17 +561,20 @@ amctl agent trace <agent> <trace-id> [flags]
 
 | Name | Description |
 |------|-------------|
-| `<agent>` | Agent name. Optional if the directory is linked. |
-| `<trace-id>` | Trace ID. |
+| `<agent>` | Agent name. Optional if the directory is linked, or when `--from-url` is a URL or path that names the agent. |
+| `<trace-id>` | Trace ID. Optional when the `--from-url` URL has a trace open. |
 
 ### Examples
 
 ```bash
 # Span summary
-amctl agent trace support-bot 7c8f...e1
+amctl agent trace support-bot 4bf92f3577b34da6a3ce929d0e0e4736
 
 # Full detail for a specific span
-amctl agent trace support-bot 7c8f...e1 --span a2b3...c4
+amctl agent trace support-bot 4bf92f3577b34da6a3ce929d0e0e4736 --span a2b3c4d5e6f70812
+
+# The trace open in a Console URL
+amctl agent trace --from-url 'https://console.example.com/org/acme/project/triage/agents/support-bot/environment/dev/observability/traces?timeRange=1d&selectedTrace=4bf92f3577b34da6a3ce929d0e0e4736'
 ```
 
 ### Options
@@ -522,8 +582,12 @@ amctl agent trace support-bot 7c8f...e1 --span a2b3...c4
 | Name | Type | Default | Description |
 |------|------|---------|-------------|
 | `--since` | string | `24h` | Time window to search. |
+| `--start` | string | (none) | Window start, RFC 3339. Needs `--end`, and cannot be used with `--since`. |
+| `--end` | string | (none) | Window end, RFC 3339. Needs `--start`. |
 | `--span` | string | (none) | Show full detail for the given span ID. |
 | `--limit` | int | `1000` | Maximum spans to return. |
+| `--console-url` | bool | `false` | Print the Console path that opens this trace. |
+| `--from-url` | string | (none) | Show the trace open in a Console URL (its `selectedTrace`), searched over the URL's time range, or 1 hour when it has none. |
 | `--env` | string | (linked env) | Environment to query. |
 
 ## See Also

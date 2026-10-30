@@ -129,6 +129,10 @@ Choose **Chat Agent**. That contract is `POST /chat` on port `8000`. It takes
 what the sample's `app.py` serves. Picking **Custom API Agent** here would make
 the console expect an OpenAPI spec instead.
 
+Leave **Readiness Check** on **TCP**. It decides when the agent starts getting
+traffic; see [Configure Agent Health Checks](../guides/configure-agent-health-checks.mdx)
+to change it later.
+
 ### Environment Variables
 
 The sample needs one variable to start. Add it, and mark it **Secret**:

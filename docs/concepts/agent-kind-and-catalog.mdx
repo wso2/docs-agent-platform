@@ -11,6 +11,8 @@ An **Agent Kind** is a reusable, versioned agent template. A way to publish a bu
 
 A kind is versioned and each version pins a specific build (a `buildName` and `imageId`) plus a **config schema**. The list of parameters a consumer must (or may) provide when creating an agent from that version, each marked as secret or not, mandatory or not, with an optional default value.
 
+A version also saves the source agent's [health checks](../guides/configure-agent-health-checks.mdx) as they are when the version is published, and every agent created from that version starts with them. Changing the source agent's health checks later does not change the version, so its agents keep checks that match its image. Versions published before health checks were configurable have no saved checks, and their agents get the defaults.
+
 
 ## Agent Catalog
 

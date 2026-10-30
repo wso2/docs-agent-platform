@@ -43,7 +43,8 @@ Clients reach the agent only through the gateway, so the gateway's CORS and auth
 3. Fill in **Name**, **GitHub Repository**, **Branch**, and **Project Path** for your agent, and choose its language and build settings.
 4. Under **Agent Type**, choose **A2A Agent**.
 5. In **Port**, enter the port your agent's A2A server listens on.
-6. Add the agent's environment variables, then click **Deploy**.
+6. Optional: in **Readiness Check**, select **HTTP GET: the path returns 2xx or 3xx** and keep the **Path** as `/.well-known/agent-card.json`. The agent then gets traffic only once it serves its card. See [Configure Agent Health Checks](./configure-agent-health-checks.mdx).
+7. Add the agent's environment variables, then click **Deploy**.
 
 There is no **OpenAPI Spec Path** or **Base Path** field for an A2A agent. It needs only a port.
 

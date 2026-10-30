@@ -396,7 +396,7 @@ Rate limiting and JWT authentication policies take their system parameters from 
 These are applied to the same extension release, the same way. Two cautions:
 
 - `jwtauth_v1.keymanagers` is a list. Setting one entry with `--set` replaces the whole list, so restate every key manager, as [On Your Environment](./on-your-environment.mdx#point-the-gateway-at-the-environments-thunder) does.
-- Rate limiting counters are held in memory by default and are not shared between gateway replicas. See [Gateway Hardening](./on-your-environment.mdx#gateway-hardening) for switching to Redis.
+- Rate limiting counters are held in memory by default and are not shared between gateway replicas. See [Gateway Hardening](./production-recommendations.mdx#gateway-hardening) for switching to Redis.
 
 For the full list of values, see the [gateway extension chart reference](../reference/helm-charts/wso2-amp-api-platform-gateway-extension.mdx).
 

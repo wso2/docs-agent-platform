@@ -1,3 +1,6 @@
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 {/* Shared partial: Agent Manager installation (Phase 2).
      Imported by on-k3d.mdx and on-your-environment.mdx.
      Props expected from parent:
@@ -13,9 +16,6 @@
          encryption keys it needs are created in Step 1 and passed through the
          operator, since the gateway requires them regardless of that setting.
 */}
-
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
 
 export const Prod = ({production, children}) => (production ? <>{children}</> : null);
 export const Dev = ({production, children}) => (production ? null : <>{children}</>);
@@ -92,6 +92,29 @@ Store the key with the rest of your platform secrets. It encrypts credentials th
 
 <Dev production={props.production}>
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version 0.11.0 \
+  --namespace ${DATA_PLANE_NS} \
+  --set logging.level=debug \
+  --set gatewayApi.installStandardCRDs=false \
+  --set gateway.helm.chartVersion=1.2.2 \
+  --set gateway.values.gateway.controller.image.repository=ghcr.io/wso2/api-platform/gateway-controller \
+  --set gateway.values.gateway.controller.image.tag=1.2.1 \
+  --set gateway.values.gateway.gatewayRuntime.image.repository=ghcr.io/wso2/api-platform/gateway-runtime \
+  --set gateway.values.gateway.gatewayRuntime.image.tag=1.2.1 \
+  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
+  --timeout 600s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm install gateway-operator \
   oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
@@ -109,9 +132,35 @@ helm install gateway-operator \
   --timeout 600s
 ```
 
+  </TabItem>
+</Tabs>
+
 </Dev>
 
 <Prod production={props.production}>
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version 0.11.0 \
+  --namespace ${DATA_PLANE_NS} \
+  --set logging.level=info \
+  --set gatewayApi.installStandardCRDs=false \
+  --set gateway.helm.chartVersion=1.2.2 \
+  --set gateway.values.gateway.controller.image.repository=ghcr.io/wso2/api-platform/gateway-controller \
+  --set gateway.values.gateway.controller.image.tag=1.2.1 \
+  --set gateway.values.gateway.gatewayRuntime.image.repository=ghcr.io/wso2/api-platform/gateway-runtime \
+  --set gateway.values.gateway.gatewayRuntime.image.tag=1.2.1 \
+  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
+  --timeout 600s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
 
 ```bash
 helm install gateway-operator \
@@ -129,6 +178,9 @@ helm install gateway-operator \
   --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
   --timeout 600s
 ```
+
+  </TabItem>
+</Tabs>
 
 </Prod>
 
@@ -189,6 +241,36 @@ The core platform: a Go API server, a React web console, and a database.
 
 <Dev production={props.production}>
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp \
+  oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --create-namespace \
+  --set console.config.instrumentationUrl="${INSTRUMENTATION_URL}" \
+  --set console.config.auth.baseUrl="${THUNDER_PUBLIC_URL}" \
+  --set console.config.auth.signInRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.auth.signOutRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.apiBaseUrl="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.amObserverPublicURL="${OBS_API_PUBLIC_URL}" \
+  --set console.ocIngress.hostname="${CONSOLE_PUBLIC_HOST}" \
+  --set agentManagerService.ocIngress.hostname="${API_PUBLIC_HOST}" \
+  --set agentManagerService.config.serverPublicURL="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.issuer="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.jwksUrl="${THUNDER_INTERNAL_URL}/oauth2/jwks" \
+  --set agentManagerService.config.oidc.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set agentManagerService.config.thunder.baseURL="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.thunder.resolveToHost="${THUNDER_INTERNAL_URL#http://}" \
+  --set agentManagerService.config.openChoreo.baseURL="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --timeout 1800s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm install amp \
   oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
@@ -212,6 +294,9 @@ helm install amp \
   --set agentManagerService.config.openChoreo.baseURL="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
   --timeout 1800s
 ```
+
+  </TabItem>
+</Tabs>
 
 Wait for all components:
 
@@ -243,6 +328,53 @@ kubectl create secret generic amp-db-credentials \
 ```
 
 Then install, wiring the external database and the platform client secrets generated earlier:
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp \
+  oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
+  --version ${VERSION} \
+  --namespace ${AMP_NS} \
+  --create-namespace \
+  --set console.config.instrumentationUrl="${INSTRUMENTATION_URL}" \
+  --set console.config.auth.baseUrl="${THUNDER_PUBLIC_URL}" \
+  --set console.config.auth.signInRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.auth.signOutRedirectURL="${CONSOLE_PUBLIC_URL}/login" \
+  --set console.config.apiBaseUrl="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.amObserverPublicURL="${OBS_API_PUBLIC_URL}" \
+  --set console.ocIngress.hostname="${CONSOLE_PUBLIC_HOST}" \
+  --set agentManagerService.ocIngress.hostname="${API_PUBLIC_HOST}" \
+  --set agentManagerService.config.serverPublicURL="${API_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.issuer="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.keyManager.jwksUrl="${THUNDER_INTERNAL_URL}/oauth2/jwks" \
+  --set agentManagerService.config.oidc.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set agentManagerService.config.oidc.clientSecret="${AMP_API_CLIENT_SECRET}" \
+  --set agentManagerService.config.thunder.baseURL="${THUNDER_PUBLIC_URL}" \
+  --set agentManagerService.config.thunder.resolveToHost="${THUNDER_INTERNAL_URL#http://}" \
+  --set agentManagerService.config.thunder.clientSecret="${AMP_SYSTEM_CLIENT_SECRET}" \
+  --set agentManagerService.config.openChoreo.baseURL="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --set agentManagerService.config.tlsEnabled=true \
+  --set agentManagerService.replicaCount=2 \
+  --set agentManagerService.autoscaling.minReplicas=2 \
+  --set console.replicaCount=2 \
+  --set agentManagerService.config.openbao.existingSecret=amp-openbao-token \
+  --set agentManagerService.config.workflowPlaneOpenbao.existingSecret=amp-openbao-token \
+  --set agentManagerService.config.workflowPlaneOpenbao.existingSecretKey=workflow-plane-openbao-token \
+  --set postgresql.enabled=false \
+  --set postgresql.external.host="your-db.example.com" \
+  --set postgresql.external.port=5432 \
+  --set postgresql.external.database=agentmanager \
+  --set postgresql.external.username=agentmanager \
+  --set postgresql.external.existingSecret=amp-db-credentials \
+  --set postgresql.external.existingSecretPasswordKey=password \
+  --set postgresql.external.sslMode=require \
+  --timeout 1800s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
 
 ```bash
 helm install amp \
@@ -284,6 +416,9 @@ helm install amp \
   --set postgresql.external.sslMode=require \
   --timeout 1800s
 ```
+
+  </TabItem>
+</Tabs>
 
 Wait for all components — with an external database no PostgreSQL StatefulSet is deployed, so there is nothing to wait for there:
 
@@ -363,6 +498,26 @@ kubectl get pods -n ${AMP_NS}
 
 Agents run as **sandboxed pods** managed by the [Agent Sandbox](https://agent-sandbox.sigs.k8s.io/) controller (`SandboxTemplate` / `SandboxWarmPool` resources) instead of plain Deployments. This module is **required** — without it, agent deployments cannot be rendered.
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm upgrade --install --server-side=false agent-sandbox \
+  oci://ghcr.io/openchoreo/helm-charts/agent-sandbox \
+  --version 0.1.1 \
+  --namespace ${DATA_PLANE_NS} \
+  --create-namespace \
+  --wait \
+  --timeout 10m \
+  --set namespace=openchoreo-control-plane \
+  --set dataPlaneNamespace=${DATA_PLANE_NS} \
+  --set dataPlaneServiceAccount=cluster-agent-dataplane \
+  --set upstream.version=v0.4.6
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm upgrade --install agent-sandbox \
   oci://ghcr.io/openchoreo/helm-charts/agent-sandbox \
@@ -376,6 +531,9 @@ helm upgrade --install agent-sandbox \
   --set dataPlaneServiceAccount=cluster-agent-dataplane \
   --set upstream.version=v0.4.6
 ```
+
+  </TabItem>
+</Tabs>
 
 Wait for the controller:
 
@@ -409,6 +567,21 @@ Creates the default Organization, Project, Environment, DeploymentPipeline, and 
 
 <Dev production={props.production}>
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp-platform-resources \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
+  --version ${VERSION} \
+  --namespace ${DEFAULT_NS} \
+  --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
+  --timeout 1800s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm install amp-platform-resources \
   oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
@@ -418,9 +591,31 @@ helm install amp-platform-resources \
   --timeout 1800s
 ```
 
+  </TabItem>
+</Tabs>
+
 </Dev>
 
 <Prod production={props.production}>
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp-platform-resources \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \
+  --version ${VERSION} \
+  --namespace ${DEFAULT_NS} \
+  --set global.oauth.tokenUrl="${THUNDER_INTERNAL_URL}/oauth2/token" \
+  --set global.oauth.hostHeader="amp-thunder-extension-service.${THUNDER_NS}.svc.cluster.local" \
+  --set global.apiServer.url="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
+  --set global.apiServer.hostHeader="openchoreo-api.openchoreo-control-plane.svc.cluster.local" \
+  --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
+  --timeout 1800s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
 
 ```bash
 helm install amp-platform-resources \
@@ -434,6 +629,9 @@ helm install amp-platform-resources \
   --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
   --timeout 1800s
 ```
+
+  </TabItem>
+</Tabs>
 
 :::warning These four values default to k3d addresses
 `global.oauth.tokenUrl` and `global.apiServer.url` default to `http://host.k3d.internal:8080`, which the single-cluster k3d layout reaches through the Docker host and routes by `Host` header. On any other cluster that name does not resolve, and the failure surfaces only when an agent is built: the workflow's `generate-workload` step prints `Failed to get access token:` with an empty body — a connection failure, not an authentication one — and the build ends with `cannot save parameter /mnt/vol/workload-cr.yaml`.
@@ -455,7 +653,29 @@ export const RegistryConfig = ({expanded}) => {
   const content = (
     <>
       <p>The chart defaults are configured for a local k3d cluster with an in-cluster registry at <code>host.k3d.internal:10082</code>. For other environments, override the registry settings:</p>
-      <pre><code className="language-bash">{`# Example: external registry with a base domain
+      <Tabs groupId="helm-version">
+        <TabItem value="helm4" label="Helm 4" default>
+        <pre><code className="language-bash">{`# Example: external registry with a base domain
+helm install --server-side=false amp-platform-resources \\
+  oci://\${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \\
+  --version \${VERSION} \\
+  --namespace \${DEFAULT_NS} \\
+  --set global.baseDomain="yourdomain.com" \\
+  --set global.defaultResources.registry.tlsVerify=true \\
+  --timeout 1800s
+# Registry endpoint will be: registry.yourdomain.com
+
+# Example: explicit registry endpoint
+helm install --server-side=false amp-platform-resources \\
+  oci://\${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \\
+  --version \${VERSION} \\
+  --namespace \${DEFAULT_NS} \\
+  --set global.registry.endpoint="your-registry.example.com:5000" \\
+  --set global.defaultResources.registry.tlsVerify=true \\
+  --timeout 1800s`}</code></pre>
+        </TabItem>
+        <TabItem value="helm3" label="Helm 3">
+        <pre><code className="language-bash">{`# Example: external registry with a base domain
 helm install amp-platform-resources \\
   oci://\${HELM_CHART_REGISTRY}/wso2-amp-platform-resources-extension \\
   --version \${VERSION} \\
@@ -473,6 +693,8 @@ helm install amp-platform-resources \\
   --set global.registry.endpoint="your-registry.example.com:5000" \\
   --set global.defaultResources.registry.tlsVerify=true \\
   --timeout 1800s`}</code></pre>
+        </TabItem>
+      </Tabs>
       <table>
         <thead><tr><th>Value</th><th>Default</th><th>Description</th></tr></thead>
         <tbody>
@@ -512,6 +734,26 @@ Deploys the observer service that queries and serves trace, log, and metrics dat
 
 <Dev production={props.production}>
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp-observability-traces \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-observability-extension \
+  --version ${VERSION} \
+  --namespace ${OBSERVABILITY_NS} \
+  --set amObserver.ocIngress.hostname="${OBS_API_PUBLIC_HOST}" \
+  --set amObserver.publicUrl="${OBS_API_PUBLIC_URL}" \
+  --set amObserver.auth.issuer="${THUNDER_PUBLIC_URL}" \
+  --timeout 1800s
+
+kubectl wait --for=condition=Available \
+  deployment/amp-observer -n ${OBSERVABILITY_NS} --timeout=600s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm install amp-observability-traces \
   oci://${HELM_CHART_REGISTRY}/wso2-amp-observability-extension \
@@ -526,11 +768,36 @@ kubectl wait --for=condition=Available \
   deployment/amp-observer -n ${OBSERVABILITY_NS} --timeout=600s
 ```
 
+  </TabItem>
+</Tabs>
+
 </Dev>
 
 <Prod production={props.production}>
 
 `amObserver.observer.idpClientSecret` is the observer's own outbound identity for calls to the OpenChoreo observer, and must match the `am-observer-client` secret seeded into Thunder. It can instead be supplied through `amObserver.observer.existingSecret` (keys `existingSecretClientIdKey`/`existingSecretClientSecretKey`, default `idpClientId`/`idpClientSecret`) if you prefer to keep it out of Helm release history, the same option `thunder.clientSecret` has above:
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp-observability-traces \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-observability-extension \
+  --version ${VERSION} \
+  --namespace ${OBSERVABILITY_NS} \
+  --set amObserver.ocIngress.hostname="${OBS_API_PUBLIC_HOST}" \
+  --set amObserver.publicUrl="${OBS_API_PUBLIC_URL}" \
+  --set amObserver.auth.issuer="${THUNDER_PUBLIC_URL}" \
+  --set amObserver.observer.idpClientSecret="${AM_OBSERVER_CLIENT_SECRET}" \
+  --set amObserver.replicaCount=2 \
+  --timeout 1800s
+
+kubectl wait --for=condition=Available \
+  deployment/amp-observer -n ${OBSERVABILITY_NS} --timeout=600s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
 
 ```bash
 helm install amp-observability-traces \
@@ -547,6 +814,9 @@ helm install amp-observability-traces \
 kubectl wait --for=condition=Available \
   deployment/amp-observer -n ${OBSERVABILITY_NS} --timeout=600s
 ```
+
+  </TabItem>
+</Tabs>
 
 </Prod>
 
@@ -566,6 +836,20 @@ entry from the values above; set them explicitly only if they must differ.
 
 Installs workflow templates for running automated evaluations (accuracy, safety, reasoning, tool usage) against agent traces.
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp-evaluation-extension \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
+  --version ${VERSION} \
+  --namespace ${BUILD_CI_NS} \
+  --timeout 1800s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm install amp-evaluation-extension \
   oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
@@ -573,6 +857,9 @@ helm install amp-evaluation-extension \
   --namespace ${BUILD_CI_NS} \
   --timeout 1800s
 ```
+
+  </TabItem>
+</Tabs>
 
 :::info
 Evaluation jobs publish scores using the `amp-publisher-client` OAuth2 credentials bootstrapped by the Thunder extension. The client secret is fetched from OpenBao at workflow runtime (`secret/amp-publisher-client-secret`) and must match the value set on `thunder.bootstrap.ampPublisherClient.clientSecret`.
@@ -587,6 +874,21 @@ kubectl -n default get endpoints kubernetes
 
 `networkPolicy.evaluationJob.apiServer.cidrs` defaults to all of RFC1918, which covers that address on most private clusters but also spans your pod and service CIDRs. Add this to the command above to narrow it to your control-plane subnet:
 
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false amp-evaluation-extension \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
+  --version ${VERSION} \
+  --namespace ${BUILD_CI_NS} \
+  --timeout 1800s \
+  --set "networkPolicy.evaluationJob.apiServer.cidrs[0]=<control-plane-subnet>"
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
 ```bash
 helm install amp-evaluation-extension \
   oci://${HELM_CHART_REGISTRY}/wso2-amp-evaluation-extension \
@@ -596,6 +898,9 @@ helm install amp-evaluation-extension \
   --set "networkPolicy.evaluationJob.apiServer.cidrs[0]=<control-plane-subnet>"
 ```
 
+  </TabItem>
+</Tabs>
+
 Setting it is required if `kubernetes` resolves to a **public** endpoint (public GKE/AKS control planes) or to `100.64.0.0/10`. The default will not match those, and every evaluation will publish its scores and then report FAILED.
 :::
 
@@ -604,6 +909,25 @@ Setting it is required if `kubernetes` resolves to a **public** endpoint (public
 Registers the API Platform Gateway with the Agent Manager and deploys the gateway stack. **Install this last** — it requires the Agent Manager API to be healthy and Thunder to be ready for token exchange.
 
 <Dev production={props.production}>
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm install --server-side=false api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --set agentManager.orgName=default \
+  --set gateway.environment=default \
+  --timeout 1800s
+
+kubectl wait --for=condition=complete job/api-platform-default-default-bootstrap \
+  -n ${DATA_PLANE_NS} --timeout=300s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
 
 ```bash
 helm install api-platform-default-default \
@@ -618,11 +942,43 @@ kubectl wait --for=condition=complete job/api-platform-default-default-bootstrap
   -n ${DATA_PLANE_NS} --timeout=300s
 ```
 
+  </TabItem>
+</Tabs>
+
 </Dev>
 
 <Prod production={props.production}>
 
 The bootstrap job authenticates to the Agent Manager API as `amp-api-client`, so it needs the secret you seeded into Thunder. Keep it out of Helm release history with a Secret reference:
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+kubectl create secret generic gateway-idp-credentials \
+  --namespace ${DATA_PLANE_NS} \
+  --from-literal=client-id=amp-api-client \
+  --from-literal=client-secret="${AMP_API_CLIENT_SECRET}"
+
+helm install --server-side=false api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --set agentManager.orgName=default \
+  --set gateway.environment=default \
+  --set gateway.type=BOTH \
+  --set developmentMode=false \
+  --set gateway.vhost="https://default-default.${AGENTS_DOMAIN}" \
+  --set gateway.hostname="default-default.${AGENTS_DOMAIN}" \
+  --set agentManager.idp.existingSecret=gateway-idp-credentials \
+  --timeout 1800s
+
+kubectl wait --for=condition=complete job/api-platform-default-default-bootstrap \
+  -n ${DATA_PLANE_NS} --timeout=300s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
 
 ```bash
 kubectl create secret generic gateway-idp-credentials \
@@ -647,13 +1003,16 @@ kubectl wait --for=condition=complete job/api-platform-default-default-bootstrap
   -n ${DATA_PLANE_NS} --timeout=300s
 ```
 
+  </TabItem>
+</Tabs>
+
 :::warning Set the vhost now — it cannot be changed later
 `gateway.vhost` and `gateway.hostname` default to the local k3d addresses (`http://default-default.gateway.localhost:19080`). The bootstrap job writes them into Agent Manager at **first registration only**: on every later run it finds the gateway already present, logs `already exists`, and exits without reconciling the record. A `helm upgrade` with corrected values changes nothing, and there is no error to notice — the console simply keeps showing the `.localhost:19080` virtual host, which is what an operator would copy when wiring an external caller.
 
 Correcting it after the fact means deleting the gateway registration and re-registering, so get these right on the first install.
 :::
 
-`gateway.type=BOTH` registers this gateway to serve both inbound and outbound traffic, which is what a single-gateway environment needs. It matches the chart default and is set explicitly here because the role is written once at registration and never rewritten — see [Gateway roles and topology](#gateway-roles-and-topology) for the split alternative and its constraints.
+`gateway.type=BOTH` registers this gateway to serve both inbound and outbound traffic, which is what a single-gateway environment needs. It matches the chart default and is set explicitly here because the role is written once at registration and never rewritten — see [Gateway roles and topology](../production-recommendations.mdx#gateway-roles-and-topology) for the split alternative and its constraints.
 
 `developmentMode=false` turns off the relaxed security checks the chart enables by default. It depends on the encryption key from [Step 1](#step-1-gateway-operator): without one the install fails immediately with `encryptionKeys must be enabled: at-rest encryption is mandatory`. Set it here rather than hardening afterwards, so the gateway is never registered in a relaxed state.
 

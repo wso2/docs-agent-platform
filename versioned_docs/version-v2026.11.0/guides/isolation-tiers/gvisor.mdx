@@ -215,7 +215,7 @@ If `fluent-bit.tolerations` does not list `- operator: Exists` with no `key` or 
 helm upgrade observability-logs-opensearch \
   oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
   --namespace openchoreo-observability-plane \
-  --version 0.5.3 \
+  --version 0.5.5 \
   --reuse-values \
   --set "fluent-bit.tolerations[0].operator=Exists"
 ```

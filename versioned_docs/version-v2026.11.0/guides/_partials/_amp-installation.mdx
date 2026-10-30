@@ -53,6 +53,19 @@ done
 
 Evaluation monitors run in `workflows-default`, the workflow namespace of the `default` organization.
 
+Create the gateway's own pull secret, `wso2-gateway-registry-credentials`, in `${DATA_PLANE_NS}`. The gateway operator reads it to pull the gateway chart, and every gateway pod lists it to pull the gateway images. Besides the usual `.dockerconfigjson`, it carries the credentials as plain `username` and `password` keys, which is the form the operator reads:
+
+```bash
+kubectl create namespace "${DATA_PLANE_NS}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic wso2-gateway-registry-credentials \
+  --namespace "${DATA_PLANE_NS}" \
+  --type=kubernetes.io/dockerconfigjson \
+  --from-literal=.dockerconfigjson="$(printf '{"auths":{"registry.wso2.com":{"auth":"%s"}}}' "$(printf '%s:%s' "$AMP_REGISTRY_USERNAME" "$AMP_REGISTRY_PASSWORD" | base64 | tr -d '\n')")" \
+  --from-literal=username="$AMP_REGISTRY_USERNAME" \
+  --from-literal=password="$AMP_REGISTRY_PASSWORD" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
 </TabItem>
 </Tabs>
 
@@ -89,6 +102,9 @@ This applies whatever `developmentMode` is set to. Earlier gateway releases auto
 
 Store the key with the rest of your platform secrets. It encrypts credentials the gateway holds, and losing it means those entries cannot be decrypted.
 :::
+
+<Tabs groupId="distribution" queryString>
+<TabItem value="community" label="Community" default>
 
 <Dev production={props.production}>
 
@@ -131,6 +147,70 @@ helm install gateway-operator \
 ```
 
 </Prod>
+
+</TabItem>
+<TabItem value="subscription" label="WSO2 Subscription">
+
+The gateway for this release, `2026.10.0`, is published only to your registry project. The operator itself still comes from `ghcr.io`, and pulls the gateway chart and images from `GATEWAY_REGISTRY`, set in the earlier **WSO2 Subscription** tab, with the `wso2-gateway-registry-credentials` secret. The controller in this gateway release serves its health check on the `admin` port under `/api/admin/v1/health`, so the probes are set as well.
+
+<Dev production={props.production}>
+
+```bash
+helm install gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version 0.11.3 \
+  --namespace ${DATA_PLANE_NS} \
+  --set logging.level=debug \
+  --set gatewayApi.installStandardCRDs=false \
+  --set gateway.helm.chartName=oci://${GATEWAY_REGISTRY}/helm-charts/gateway \
+  --set gateway.helm.chartVersion=2026.10.0 \
+  --set gateway.helm.registryCredentialsSecret.name=wso2-gateway-registry-credentials \
+  --set "gateway.values.imagePullSecrets[0]=wso2-gateway-registry-credentials" \
+  --set gateway.values.gateway.controller.image.repository=${GATEWAY_REGISTRY}/gateway-controller \
+  --set gateway.values.gateway.controller.image.tag=2026.10.0 \
+  --set gateway.values.gateway.gatewayRuntime.image.repository=${GATEWAY_REGISTRY}/gateway-runtime \
+  --set gateway.values.gateway.gatewayRuntime.image.tag=2026.10.0 \
+  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
+  --set gateway.values.gateway.controller.deployment.livenessProbe.httpGet.path=/api/admin/v1/health \
+  --set gateway.values.gateway.controller.deployment.livenessProbe.httpGet.port=admin \
+  --set gateway.values.gateway.controller.deployment.readinessProbe.httpGet.path=/api/admin/v1/health \
+  --set gateway.values.gateway.controller.deployment.readinessProbe.httpGet.port=admin \
+  --timeout 600s
+```
+
+</Dev>
+
+<Prod production={props.production}>
+
+```bash
+helm install gateway-operator \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
+  --version 0.11.3 \
+  --namespace ${DATA_PLANE_NS} \
+  --set logging.level=info \
+  --set gatewayApi.installStandardCRDs=false \
+  --set gateway.helm.chartName=oci://${GATEWAY_REGISTRY}/helm-charts/gateway \
+  --set gateway.helm.chartVersion=2026.10.0 \
+  --set gateway.helm.registryCredentialsSecret.name=wso2-gateway-registry-credentials \
+  --set "gateway.values.imagePullSecrets[0]=wso2-gateway-registry-credentials" \
+  --set gateway.values.gateway.controller.image.repository=${GATEWAY_REGISTRY}/gateway-controller \
+  --set gateway.values.gateway.controller.image.tag=2026.10.0 \
+  --set gateway.values.gateway.gatewayRuntime.image.repository=${GATEWAY_REGISTRY}/gateway-runtime \
+  --set gateway.values.gateway.gatewayRuntime.image.tag=2026.10.0 \
+  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
+  --set gateway.values.gateway.controller.deployment.livenessProbe.httpGet.path=/api/admin/v1/health \
+  --set gateway.values.gateway.controller.deployment.livenessProbe.httpGet.port=admin \
+  --set gateway.values.gateway.controller.deployment.readinessProbe.httpGet.path=/api/admin/v1/health \
+  --set gateway.values.gateway.controller.deployment.readinessProbe.httpGet.port=admin \
+  --timeout 600s
+```
+
+</Prod>
+
+</TabItem>
+</Tabs>
 
 :::note Pin the gateway chart, do not inherit it
 `gateway.helm.chartVersion` decides which gateway chart the operator deploys, and it is the only thing that decides it — the `APIGateway` resource carries no chart version. Inheriting the operator's default has historically produced a chart whose templates do not render the controller's control-plane address, giving a gateway that installs, programs, and serves traffic while never registering with Agent Manager — so it never appears in the gateway list. Pin the chart explicitly, as above.

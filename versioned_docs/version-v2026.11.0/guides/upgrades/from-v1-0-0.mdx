@@ -16,6 +16,7 @@ Release 2026.11.0 is available only from `registry.wso2.com`, so every chart and
 | ThunderID moves from 1.0.0 to 1.0.2 | Platform Thunder and each environment Thunder are separate releases. | Upgrade each instance separately. |
 | kgateway moves from v2.2.1 to v2.3.11 | The `kgateway-crds` chart updates the kgateway CRDs. | Upgrade `kgateway-crds`, then `kgateway`. |
 | The Observability Plane enables an ingress NetworkPolicy | Monitor runs and run logs fail with `Connection refused` unless the Agent Manager observer is exempt. Log collection moves to a TLS passthrough route. | Upgrade the Observability Plane with the values in [Upgrade platform dependencies](./platform-dependencies.mdx#set-the-observability-plane-ingress-values). |
+| The observability modules move to logs 0.5.5, tracing 0.8.0, and metrics 0.8.1 | OpenSearch moves from 3.3.0 to 3.9.0 and cannot be rolled back without a snapshot. The Prometheus Operator CRDs change, and Prometheus and Alertmanager move to PersistentVolumeClaims, so earlier metrics are not kept. | Take an OpenSearch snapshot, confirm a default StorageClass, and apply the Prometheus Operator CRDs before the upgrade, as described in [Upgrade platform dependencies](./platform-dependencies.mdx#step-5-upgrade-the-observability-modules). |
 | Gateway Operator moves from chart 0.11.0 to 0.11.3 | Only the `llmprovidertemplates` CRD changes. Upgrading the operator does not redeploy existing gateways. | Apply the CRDs, upgrade the operator, and then trigger each gateway explicitly (Step 7). |
 | API Platform gateway moves from images 1.2.1 to 2026.10.0 | The gateway controller's SQLite schema moves from version 4 to version 6, and the new controller refuses a version 4 database. Agent Manager does not resend gateway configuration to an empty controller. | Upgrade each controller database to version 5 in place before its gateway redeploys (Step 7). Gateway 2026.10.0 then migrates it to version 6 on its first start. Do not delete it. |
 | Charts and images move from `ghcr.io` to `registry.wso2.com` | Charts, Agent Manager images, and the gateway chart and images need registry credentials and pull Secrets. | Complete Step 1, including the pull Secrets. |
@@ -163,7 +164,7 @@ kubectl --context "$GATEWAY_CONTEXT" get secret gateway-encryption-keys -n "$GW_
 
 Record a baseline: invoke representative agents, and note existing traces, monitor results, and API keys in use.
 
-## Step 3: Upgrade OpenChoreo and Thunder
+## Step 3: Upgrade OpenChoreo, the observability modules, and Thunder
 
 Follow [Upgrade platform dependencies](./platform-dependencies.mdx) through its environment Thunder step. Leave the Gateway Operator at 0.11.0 until Step 6.
 

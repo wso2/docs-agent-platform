@@ -1,7 +1,7 @@
 ---
 title: Upgrade platform dependencies
 sidebar_label: Platform dependencies
-description: Upgrade OpenChoreo, platform and environment ThunderID, and Gateway Operator as part of the Agent Manager migration.
+description: Upgrade OpenChoreo, the observability modules, platform and environment ThunderID, and Gateway Operator as part of the Agent Manager migration.
 ---
 
 This page is part of the [v1.0.0 upgrade guide](./from-v1-0-0.mdx). Run it from Step 3 of that guide, in the same shell.
@@ -16,6 +16,9 @@ The WSO2 Agent Manager version is not the version of every dependency. Set each 
 | `openchoreo-data-plane` | 1.2.0 | 1.2.8 | Upgrade each installation. |
 | `openchoreo-workflow-plane` | 1.2.0 | 1.2.8 | The default cluster agent CPU and memory resources double. |
 | `openchoreo-observability-plane` | 1.2.0 | 1.2.8 | Re-apply the `client_id` patch. Set the NetworkPolicy exemption and the OpenSearch passthrough listener. |
+| `observability-logs-opensearch` | 0.5.3 | 0.5.5 | Moves OpenSearch from 3.3.0 to 3.9.0, which cannot be rolled back without a snapshot. |
+| `observability-tracing-opensearch` | 0.6.0 | 0.8.0 | The default release name is `observability-traces-opensearch`. |
+| `observability-metrics-prometheus` | 0.6.1 | 0.8.1 | Apply the Prometheus Operator CRDs first. Prometheus and Alertmanager move to PersistentVolumeClaims. |
 | `wso2-amp-thunder-extension` | v1.0.0 | 2026.11.0 | Its bundled ThunderID chart moves from 1.0.0 to 1.0.2. |
 | Environment `thunderid` releases | 1.0.0 | 1.0.2 | Upgrade every environment instance separately. |
 | `wso2-amp-platform-resources-extension` | v1.0.0 | 2026.11.0 | Upgrade before `wso2-agent-manager`. |
@@ -35,9 +38,6 @@ The target installer keeps these pins from v1.0.0. Verify them and keep their co
 
 | Component | Pin | Notes |
 | --- | --- | --- |
-| `observability-logs-opensearch` | 0.5.3 | Keep the version. Step 4 upgrades it with new log routing values. |
-| `observability-tracing-opensearch` | 0.6.0 | The default release name is `observability-traces-opensearch`. |
-| `observability-metrics-prometheus` | 0.6.1 | Verify metrics and persistence. |
 | `cert-manager` | v1.19.2 | Verify certificates and issuers. |
 | `external-secrets` | 1.3.2 | Verify secret synchronization. |
 | Kubernetes Gateway API CRDs | v1.4.1, experimental channel | Not a Helm release. |
@@ -51,7 +51,7 @@ Complete the backups in the main guide first. Also back up:
 
 - OpenChoreo custom resources in all namespaces, including projects, components, environments, deployment pipelines, release bindings, and plane registrations.
 - Each plane's Helm values, generated credentials, and cluster-agent certificates.
-- OpenSearch, Prometheus, registry, and workflow data, using each store's own backup procedure.
+- OpenSearch, Prometheus, registry, and workflow data, using each store's own backup procedure. Step 5 requires an OpenSearch snapshot.
 - Every Thunder instance's database volume, signing and encryption material, and client Secrets. Also record issuer URLs and CA bundle ConfigMaps.
 - Gateway Operator CRDs and APIGateway custom resources.
 
@@ -188,7 +188,7 @@ The values file sets the Fluent Bit OpenSearch host, port 11443, and the SNI hos
 
 The values file points Fluent Bit at the gateway's in-cluster address, `gateway-default.openchoreo-observability-plane.svc.cluster.local`. Fluent Bit that runs in another cluster cannot resolve it. For each such cluster, set `fluent-bit.openSearchHost` to an address of the Observability Plane gateway that the cluster can reach on port 11443, and keep `fluent-bit.openSearchVHost` set to the listener hostname.
 
-Apply the route, then point the logs module at it:
+Apply the route, then point the logs module at it. This upgrade keeps the installed chart version, so `--reuse-values` is safe here. Step 5 moves the module to 0.5.5:
 
 ```bash
 kubectl --context "$OC_CONTEXT" apply -f upgrade-backup/opensearch-tls-route.yaml
@@ -208,7 +208,66 @@ kubectl --context "$OC_CONTEXT" rollout restart daemonset/fluent-bit -n openchor
 - Workflow Plane: the cluster agent and controller are healthy, and a representative build succeeds.
 - Observability Plane: the observer is healthy, and logs, metrics, and traces arrive. Monitor runs work again after the observability extension upgrade in Step 5 of the main guide, which adds the exempt label to the observer.
 
-## Step 5: Upgrade platform Thunder to 1.0.2
+## Step 5: Upgrade the observability modules
+
+The logs, tracing, and metrics modules are OpenChoreo community modules installed as separate Helm releases in the Observability Plane namespace. Upgrade them after the Observability Plane and its log routing in Step 4, and before the Agent Manager observability extension. The logs module keeps the routing values from Step 4, because `--reset-then-reuse-values` keeps every value you supplied.
+
+Before you start:
+
+- Take an [OpenSearch snapshot](https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/index/). The logs module moves OpenSearch from 3.3.0 to 3.9.0. Once OpenSearch 3.9.0 has opened the data, 3.3.0 cannot start on it: `helm rollback` succeeds, but OpenSearch fails to start. Restoring the snapshot is the only way back. The tracing module stores traces in the same OpenSearch.
+- Confirm that the cluster has a default StorageClass with `kubectl get storageclass`. The metrics module now stores Prometheus and Alertmanager data on PersistentVolumeClaims of 10 Gi and 1 Gi. Without a default StorageClass, the claims stay `Pending` and the pods never start. Metrics collected before the upgrade are not kept, because 0.6.1 stored them on an `emptyDir` volume.
+- Upgrade with `--reset-then-reuse-values`, which needs Helm 3.14 or later. Do not use `--reuse-values`. It keeps the previous chart's defaults, so OpenSearch stays on 3.3.0, and the logs chart refuses to render because Fluent Bit 5.x no longer serves the old readiness probe path.
+
+Save each module's values:
+
+```bash
+export OC_REG="oci://ghcr.io/openchoreo/helm-charts"
+export OBS_NS="openchoreo-observability-plane"
+umask 077
+mkdir -p upgrade-backup
+
+for release in observability-logs-opensearch observability-traces-opensearch observability-metrics-prometheus; do
+  helm get values "$release" -n "$OBS_NS" -o yaml > "upgrade-backup/${release}-user-values.yaml"
+done
+```
+
+Upgrade the logs module. OpenSearch restarts once, and logs written while it is down are dropped. OpenSearch 3.9.0 uses about twice the CPU of 3.3.0 while it starts, so upgrade when the nodes have spare CPU:
+
+```bash
+helm upgrade observability-logs-opensearch "$OC_REG/observability-logs-opensearch" \
+  --version 0.5.5 -n "$OBS_NS" \
+  --reset-then-reuse-values --timeout 15m --wait
+kubectl get pods -n "$OBS_NS" -o jsonpath='{..image}' | tr ' ' '\n' | grep -E 'opensearch:|fluent-bit:' | sort -u
+```
+
+The images should be `opensearchproject/opensearch:3.9.0` and `cr.fluentbit.io/fluent/fluent-bit:5.1.5`. The Fluent Bit toleration for isolation-tier nodes is a user-supplied value, so the upgrade keeps it.
+
+The metrics module moves the Prometheus Operator from v0.88.1 to v0.94.2, and Helm does not upgrade CRDs. Apply the CRDs that the target chart bundles, then upgrade the chart. `--force-conflicts` is needed because Helm owns the CRDs it installed:
+
+```bash
+helm show crds "$OC_REG/observability-metrics-prometheus" --version 0.8.1 \
+  | kubectl apply --server-side --force-conflicts -f -
+helm upgrade observability-metrics-prometheus "$OC_REG/observability-metrics-prometheus" \
+  --version 0.8.1 -n "$OBS_NS" \
+  --reset-then-reuse-values --timeout 15m --wait
+kubectl get pvc -n "$OBS_NS"
+```
+
+Prometheus, Alertmanager, the operator, and kube-state-metrics restart once. Both new claims should be `Bound`.
+
+Upgrade the tracing module. It keeps using the `amp-opentelemetry-collector-config` ConfigMap, and the OpenTelemetry Collector moves from 0.154.0 to 0.163.2:
+
+```bash
+helm upgrade observability-traces-opensearch "$OC_REG/observability-tracing-opensearch" \
+  --version 0.8.0 -n "$OBS_NS" \
+  --reset-then-reuse-values --timeout 15m --wait
+```
+
+If you mirror images to a private registry, mirror the new tags first. The metrics and tracing adapter and setup images move from `ghcr.io/openchoreo` to `cr.openchoreo.dev/openchoreo`, Prometheus uses the `-distroless` tag, and the logs module pins `busybox:1.37.0` for its Fluent Bit init container.
+
+After the three upgrades, open an agent in the Console and confirm that new logs, metrics, and traces appear.
+
+## Step 6: Upgrade platform Thunder to 1.0.2
 
 The Agent Manager Thunder extension bundles the platform Thunder instance. The target chart sets the Thunder image to 1.0.2 by default:
 
@@ -223,7 +282,7 @@ If your values override `thunder.deployment.image.tag`, update it to `1.0.2`. Th
 
 Verify existing users and clients, Console sign-in and sign-out, token refresh, discovery and JWKS, and the credentials used by OpenChoreo and Agent Manager.
 
-## Step 6: Upgrade every environment Thunder instance
+## Step 7: Upgrade every environment Thunder instance
 
 Each environment has its own release of the upstream `thunderid` chart. The installer names the release and its namespace `amp-thunder-<org>-<env>`. Upgrading `amp-thunder-extension` does not change them.
 
@@ -262,7 +321,7 @@ Apply these CRDs during Step 6 of the main guide, not earlier. Only the `llmprov
 
 ## Recovery
 
-A Helm rollback does not restore CRDs or persistent data. Recover a failed stage using its backed-up data, chart revision, and credentials. For OpenChoreo, roll back the plane and re-apply the `client_id` patch. Never restore identity data without its signing and encryption material. Confirm dependency health and sign-in before you continue with Agent Manager recovery.
+A Helm rollback does not restore CRDs or persistent data. Recover a failed stage using its backed-up data, chart revision, and credentials. For OpenChoreo, roll back the plane and re-apply the `client_id` patch. For the logs module, roll back the release and then restore the OpenSearch snapshot from Step 5, because OpenSearch 3.3.0 cannot open data that 3.9.0 has written. Never restore identity data without its signing and encryption material. Confirm dependency health and sign-in before you continue with Agent Manager recovery.
 
 ## References
 
@@ -271,3 +330,6 @@ A Helm rollback does not restore CRDs or persistent data. Recover a failed stage
 - [Environment Thunder installer](https://github.com/wso2/agent-manager/blob/amp/v2026.11.0/deployments/scripts/add-environment-thunder.sh)
 - [OpenChoreo 1.2.8 release](https://github.com/openchoreo/openchoreo/releases/tag/v1.2.8)
 - [OpenChoreo upgrade overview](https://openchoreo.dev/docs/platform-engineer-guide/upgrades/overview/)
+- [Logs module 0.5.5 upgrade notes](https://github.com/openchoreo/community-modules/blob/observability-logs-opensearch-0.5.5/observability-logs-opensearch/README.md#upgrading-to-055)
+- [Metrics module 0.8.1 upgrade notes](https://github.com/openchoreo/community-modules/blob/observability-metrics-prometheus-0.8.1/observability-metrics-prometheus/README.md#upgrading)
+- [Tracing module 0.8.0](https://github.com/openchoreo/community-modules/blob/observability-tracing-opensearch-0.8.0/observability-tracing-opensearch/README.md)

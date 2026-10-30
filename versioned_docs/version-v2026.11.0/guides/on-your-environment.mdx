@@ -169,11 +169,12 @@ Nothing to change. The charts come from `ghcr.io/wso2`.
 </TabItem>
 <TabItem value="subscription" label="WSO2 Subscription">
 
-Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `2026.11.0` for the release, or `2026.11.0-u<N>` for update N. Phase 2 uses the same username and token to create the image pull secret.
+Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `2026.11.0` for the release, or `2026.11.0-u<N>` for update N. `GATEWAY_REGISTRY` is where Phase 2 pulls the API Platform gateway from, and Phase 2 uses the same username and token to create the image pull secrets.
 
 ```bash
 export VERSION="<version>"
-export HELM_CHART_REGISTRY="registry.wso2.com/<project>/helm-charts"
+export HELM_CHART_REGISTRY="registry.wso2.com/<project>/sts/helm-charts"
+export GATEWAY_REGISTRY="registry.wso2.com/<project>/sts"
 printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
 printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
 printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
@@ -1263,7 +1264,7 @@ helm upgrade --install observability-logs-opensearch \
   oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
   --create-namespace \
   --namespace openchoreo-observability-plane \
-  --version 0.5.3 \
+  --version 0.5.5 \
   --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
   --set adapter.openSearchSecretName="opensearch-admin-credentials" \
   --set openSearch.persistence.size=100Gi \
@@ -1276,7 +1277,7 @@ helm upgrade --install observability-logs-opensearch \
 helm upgrade observability-logs-opensearch \
   oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
   --namespace openchoreo-observability-plane \
-  --version 0.5.3 \
+  --version 0.5.5 \
   --reuse-values \
   --set fluent-bit.enabled=true \
   --timeout 10m
@@ -1286,14 +1287,13 @@ helm upgrade observability-logs-opensearch \
 # The values file widens the kube-state-metrics label allowlist. Only labels on
 # that list reach the metrics store, and usage attribution needs them: without
 # it, build and evaluation pods are indistinguishable once collected and their
-# durations are summed into a single figure. It also keeps Prometheus on a
-# ClusterIP Service: the chart defaults to a LoadBalancer, which would put its
-# unauthenticated API on a public IP.
+# durations are summed into a single figure. It also pins Prometheus to a
+# ClusterIP Service, so its unauthenticated API is never put on a public IP.
 helm upgrade --install observability-metrics-prometheus \
   oci://ghcr.io/openchoreo/helm-charts/observability-metrics-prometheus \
   --create-namespace \
   --namespace openchoreo-observability-plane \
-  --version 0.6.1 \
+  --version 0.8.1 \
   --values "${AMP_DIST}/deployments/values/observability-metrics-prometheus.yaml" \
   --timeout 10m
 
@@ -1302,7 +1302,7 @@ helm upgrade --install observability-traces-opensearch \
   oci://ghcr.io/openchoreo/helm-charts/observability-tracing-opensearch \
   --create-namespace \
   --namespace openchoreo-observability-plane \
-  --version 0.6.0 \
+  --version 0.8.0 \
   --set openSearch.enabled=false \
   --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
   --set opentelemetry-collector.configMap.existingName="amp-opentelemetry-collector-config" \

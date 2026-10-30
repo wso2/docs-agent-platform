@@ -5,7 +5,7 @@ description: Install the WSO2-supported build of Agent Manager from registry.wso
 
 # Install with a WSO2 Subscription
 
-A WSO2 subscription, or an evaluation of one, gives you the WSO2-supported build of WSO2 Agent Manager. It is the same platform as the community release, with updates that carry fixes on top of the release. Its Helm charts and images are published to `registry.wso2.com` and signed by WSO2. You install it with the [k3d](./on-k3d.mdx) or [On Your Environment](./on-your-environment.mdx) guide, using the changes on this page.
+WSO2 Agent Manager 2026.11.0 is a short-term support (STS) release, available only with a WSO2 subscription or an evaluation of one. WSO2 publishes its Helm charts and images to `registry.wso2.com`, signs them, and follows the release with updates that carry fixes. You install it with the [k3d](./on-k3d.mdx) or [On Your Environment](./on-your-environment.mdx) guide, using the changes on this page.
 
 ## Get Your Registry Credentials
 
@@ -23,15 +23,18 @@ The rest of this page writes the registry project as `<project>`, and calls the 
 
 ## What Changes From the Community Install
 
-| | Community | WSO2 subscription |
+STS releases sit under `sts/` in your registry project, apart from the long-term support releases at the root of the project.
+
+| | Community | WSO2 subscription (2026.11.0) |
 |---|---|---|
-| Helm charts | `oci://ghcr.io/wso2/<chart>` | `oci://registry.wso2.com/<project>/helm-charts/<chart>` |
-| Agent Manager images | `ghcr.io/wso2/<image>` | `registry.wso2.com/<project>/<image>` |
-| Chart version | `2026.11.0` | `2026.11.0` for the release, `2026.11.0-u<N>` for update N |
-| Image tag | `v2026.11.0` | `2026.11.0` for the release, `2026.11.0.<N>` for update N |
+| Helm charts | `oci://ghcr.io/wso2/<chart>` | `oci://registry.wso2.com/<project>/sts/helm-charts/<chart>` |
+| Agent Manager images | `ghcr.io/wso2/<image>` | `registry.wso2.com/<project>/sts/<image>` |
+| API Platform gateway chart and images | `ghcr.io/wso2/api-platform/...` | `registry.wso2.com/<project>/sts/helm-charts/gateway`, `registry.wso2.com/<project>/sts/gateway-controller`, and `registry.wso2.com/<project>/sts/gateway-runtime`, version `2026.10.0` |
+| Chart version | Not published | `2026.11.0` for the release, `2026.11.0-u<N>` for update N |
+| Image tag | Not published | `2026.11.0` for the release, `2026.11.0.<N>` for update N |
 | Credentials | None | Registry username and token |
 
-The charts in your project already point at the images in the same project, and they reference an image pull secret named `wso2-registry-credentials`. The `helm install` commands in the guides therefore stay the same. Only the Agent Manager images move. The instrumentation image (`amp-python-instrumentation-provider`) and third-party images, such as OpenChoreo, ThunderID, and cert-manager, still come from their public registries.
+The charts in your project already point at the images in the same project, and they reference an image pull secret named `wso2-registry-credentials`. The `helm install` commands in the guides therefore stay the same. The API Platform gateway is pulled with a second pull secret, `wso2-gateway-registry-credentials`, which the gateway operator also reads to pull the gateway chart. The instrumentation image (`amp-python-instrumentation-provider`) and third-party images, such as OpenChoreo, ThunderID, and cert-manager, still come from their public registries.
 
 WSO2 publishes the 2026.11.0 release to your project, followed by updates to it. The release is version `2026.11.0`, and update N is version `2026.11.0-u<N>`. For example, update 2 is `2026.11.0-u2`, with chart version `2026.11.0-u2` and image tag `2026.11.0.2`. This page calls either one your version. Install the newest version published to your project, unless WSO2 asks you to install a particular one.
 
@@ -45,7 +48,7 @@ To see which versions are published to your project, list the tags of the `wso2-
 
 ```bash
 oras login registry.wso2.com
-oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep -v '\.sig$' | sort -V
+oras repo tags registry.wso2.com/<project>/sts/helm-charts/wso2-agent-manager | grep -v '\.sig$' | sort -V
 ```
 
 `oras login` asks for your registry username and token. Run `oras logout registry.wso2.com` when you are done, so the login is not kept on your machine.
@@ -53,7 +56,7 @@ oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep
 Without ORAS installed, run the same commands in a temporary container. Nothing is kept after it exits:
 
 ```bash
-docker run --rm -it --entrypoint sh ghcr.io/oras-project/oras:v1.2.3 -c 'oras login registry.wso2.com && oras repo tags registry.wso2.com/<project>/helm-charts/wso2-agent-manager | grep -v "\.sig$" | sort -V'
+docker run --rm -it --entrypoint sh ghcr.io/oras-project/oras:v1.2.3 -c 'oras login registry.wso2.com && oras repo tags registry.wso2.com/<project>/sts/helm-charts/wso2-agent-manager | grep -v "\.sig$" | sort -V'
 ```
 
 The list starts with the release, `2026.11.0`, followed by its updates in order, so the last version is the newest. The `.sig` tags that `grep` removes are the signatures described in [Verify Image Signatures](#verify-image-signatures-optional).
@@ -78,8 +81,8 @@ The script asks for your registry username and token, and reads the token withou
 
 1. Checks the same prerequisites as the [community one-command install](./on-k3d.mdx#install).
 2. Signs in to `registry.wso2.com` with your credentials and finds your version: the one you named, or the newest published to your project.
-3. Downloads the 2026.11.0 release bundle from GitHub, the same one the community install uses, into `~/.wso2-agent-manager/subscription/<project>/<image tag>/`.
-4. Creates the `amp-local` cluster and installs Agent Manager, pulling every chart and Agent Manager image from your project.
+3. Downloads the 2026.11.0 release bundle from GitHub into `~/.wso2-agent-manager/subscription/<project>/<image tag>/`. The bundle holds only the installer scripts and configuration; it contains no charts or images.
+4. Creates the `amp-local` cluster and installs Agent Manager, pulling every chart, Agent Manager image, and the API Platform gateway from `registry.wso2.com/<project>/sts/`.
 
 | Option | Description |
 |---|---|
@@ -96,14 +99,36 @@ When the install finishes, it prints the Console URL, the admin sign-in, and the
 Follow the [k3d guide](./on-k3d.mdx) and select the **WSO2 Subscription** tab where it appears:
 
 - **Step 5: Configuration Variables** sets the chart version and registry, and signs Helm in to `registry.wso2.com`.
-- **Phase 2** creates the `wso2-registry-credentials` pull secret before Agent Manager is installed.
+- **Phase 2** creates the `wso2-registry-credentials` and `wso2-gateway-registry-credentials` pull secrets before Agent Manager is installed, and installs the gateway operator from your project.
 
 ## Install on Your Environment
 
 Follow the [On Your Environment](./on-your-environment.mdx) guide and select the **WSO2 Subscription** tab where it appears:
 
 - **Plan Your Deployment** sets the chart version and registry, and signs Helm in to `registry.wso2.com`.
-- **Phase 2** creates the `wso2-registry-credentials` pull secret before Agent Manager is installed.
+- **Phase 2** creates the `wso2-registry-credentials` and `wso2-gateway-registry-credentials` pull secrets before Agent Manager is installed, and installs the gateway operator from your project.
+
+## Add an Environment
+
+Each environment you add gets its own API Platform gateway, which also comes from your project. Run `add-environment.sh` from the extracted release bundle, with the registry settings and your credentials, instead of the command the Console generates. The script needs `lib-registry-auth.sh`, which sits next to it in the bundle, to create the pull secrets in the new environment's namespaces.
+
+On k3d, the one-command install extracted the bundle to `~/.wso2-agent-manager/subscription/<project>/<image tag>/`. In the On Your Environment guide, it is `${AMP_DIST}`. Start from the command the Console's **Create Environment** drawer generates, keep its variables, and add the registry settings:
+
+```bash
+helm registry login registry.wso2.com
+AMP_IMAGE_REGISTRY=registry.wso2.com/<project>/sts \
+GATEWAY_REGISTRY=registry.wso2.com/<project>/sts \
+CHART_REF=oci://registry.wso2.com/<project>/sts/helm-charts/wso2-amp-api-platform-gateway-extension \
+CHART_VERSION=<version> \
+AMP_REGISTRY_CREDENTIALS_FILE=~/amp-registry.creds \
+ENV_NAME=<env-name> \
+DISPLAY_NAME="<display-name>" \
+AGENT_MANAGER_TOKEN=<token> \
+AGENT_MANAGER_URL=<agent-manager-url> \
+  bash <bundle>/deployments/scripts/add-environment.sh   # plus any other variables from the Console's command
+```
+
+Use your version for `CHART_VERSION`: the Console's command names the release, `2026.11.0`, even after you upgrade to an update. `AMP_REGISTRY_CREDENTIALS_FILE` is the credentials file from [Provide the Credentials Without Prompts](#provide-the-credentials-without-prompts). Without it, the script asks for your registry username and token. Set `GATEWAY_REGISTRY` even on the `wso2-agent-manager` project: when it is unset, the gateway always comes from `wso2-agent-manager`, which an evaluation's credentials cannot read.
 
 ## Provide the Credentials Without Prompts
 
@@ -132,7 +157,13 @@ kubectl get pods -n wso2-amp -o jsonpath='{range .items[*]}{.spec.containers[*].
 kubectl get pods -n openchoreo-observability-plane -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | grep amp-
 ```
 
-Each image should start with `registry.wso2.com/<project>/`. The instrumentation image that platform-hosted agents use stays on `ghcr.io/wso2`, which is expected.
+Each image should start with `registry.wso2.com/<project>/sts/`. The instrumentation image that platform-hosted agents use stays on `ghcr.io/wso2`, which is expected.
+
+Check that the gateway runs the `2026.10.0` images from your project:
+
+```bash
+kubectl get pods -n openchoreo-data-plane -o jsonpath='{range .items[*]}{.spec.containers[*].image}{"\n"}{end}' | grep gateway-
+```
 
 To see which version is installed, check the chart version of the `amp` release:
 
@@ -162,8 +193,8 @@ Sign in to the registry, then verify an image and a chart:
 printf 'Registry username: ' && read -r AMP_REGISTRY_USERNAME
 printf 'Registry token: ' && stty -echo && read -r AMP_REGISTRY_PASSWORD; stty echo; echo
 printf '%s' "$AMP_REGISTRY_PASSWORD" | docker login registry.wso2.com --username "$AMP_REGISTRY_USERNAME" --password-stdin
-cosign verify --key cosign.pub registry.wso2.com/<project>/amp-api:<image tag>
-cosign verify --key cosign.pub registry.wso2.com/<project>/helm-charts/wso2-agent-manager:<chart version>
+cosign verify --key cosign.pub registry.wso2.com/<project>/sts/amp-api:<image tag>
+cosign verify --key cosign.pub registry.wso2.com/<project>/sts/helm-charts/wso2-agent-manager:<chart version>
 ```
 
 Use the image tag and chart version of your version from [What Changes From the Community Install](#what-changes-from-the-community-install). For update 2, they are `2026.11.0.2` and `2026.11.0-u2`.
@@ -183,3 +214,7 @@ Check the pod's events with `kubectl describe pod`. The usual causes are:
 - The `wso2-registry-credentials` secret is missing from that pod's namespace.
 - The secret was created for a registry host other than `registry.wso2.com`.
 - The username was not quoted when the secret or credentials file was created, so the shell expanded its `$`.
+
+### Gateway Pods Stay in ImagePullBackOff, or the Gateway Never Installs
+
+The gateway pulls with `wso2-gateway-registry-credentials`, not `wso2-registry-credentials`. Check that the secret exists in `openchoreo-data-plane` and in the namespace of each environment you added, and that it carries `username` and `password` keys as well as `.dockerconfigjson`: the gateway operator reads the plain keys to pull the gateway chart. On an evaluation, also check that `GATEWAY_REGISTRY` named `wso2-agent-manager-evaluations`.

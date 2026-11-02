@@ -49,7 +49,7 @@ Two employees are included with the sample so you can try it out right after dep
 | | **Platform-Hosted** | **Externally-Hosted** |
 |---|---|---|
 | Who builds and runs it | Agent Manager, from the GitHub repository | You, on your own machine |
-| Tracing | Automatic, no code changes | The `ballerinax/amp` module, configured with an API key you generate |
+| Tracing | Automatic when **Enable auto instrumentation** is on (the default). Agent Manager supplies the tracing settings and API key | You turn it on in `Config.toml` and set the endpoint and an API key you generate as environment variables |
 | How you chat with it | The built in **Try It** window | HTTP requests to `localhost:8000` |
 
 See [Internal and External Agent](../concepts/internal-and-external-agent.mdx) for the full comparison.
@@ -60,6 +60,10 @@ See [Internal and External Agent](../concepts/internal-and-external-agent.mdx) f
 <TabItem value="platform" label="Platform-Hosted Agent" default>
 
 * An OpenAI API key. The agent uses it to power its conversations.
+
+:::note
+Platform-hosted Ballerina agents must use Ballerina `2201.13.x`. The Ballerina buildpack supports only that version. The sample already sets `distribution = "2201.13.4"` in `Ballerina.toml`. Use `2201.14.x` only for an externally-hosted agent.
+:::
 
 </TabItem>
 <TabItem value="external" label="Externally-Hosted Agent">
@@ -100,7 +104,7 @@ See [Internal and External Agent](../concepts/internal-and-external-agent.mdx) f
 
 ### Step 4: Choose Ballerina as the Build Type
 
-Select **Ballerina**. You will not see the **Language Version** or **Start Command** fields that other languages ask for. The platform reads the sample's Ballerina version on its own and knows how to build and run it directly.
+Select **Ballerina**. You will not see the **Language Version** or **Start Command** fields that other languages ask for. The platform reads the Ballerina version from the `distribution` field in the sample's `Ballerina.toml` and knows how to build and run it directly. That version must be `2201.13.x`, the only version the Ballerina buildpack supports.
 
 Leave **Enable auto instrumentation** turned on. This lets Agent Manager automatically set up tracing for the agent, so its conversations and tool calls show up under **Observability** with no extra setup on your part.
 
@@ -155,7 +159,7 @@ Review your settings and click **Deploy**. The build compiles the sample and pac
     | **Description (optional)** | `Ballerina employee leave request assistant` |
 5. Click **Register**.
 
-The **Setup Agent** panel opens. Set **Language** to **Ballerina** in the top right  to see the **Zero-code Instrumentation Guide** for Ballerina. Keep the panel open, since you need the API key and endpoint it shows in the steps below. If you close it, reopen it with **Setup Agent** on the agent's overview page.
+The **Setup Agent** panel opens. In the top right, set **Language** to **Ballerina** and **Version** to your Ballerina version (`2201.13.x` or `2201.14.x+`) to see the **Zero-code Instrumentation Guide** for it. Keep the panel open, since you need the API key and endpoint it shows in the steps below. If you close it, reopen it with **Setup Agent** on the agent's overview page.
 
 ### Step 2: Get the Sample Code
 
@@ -242,7 +246,7 @@ export BAL_CONFIG_VAR_BALLERINA_OTEL_TRACESEXPORTERHEADERS="x-amp-api-key=<your-
 export BAL_CONFIG_VAR_OPENAIAPIKEY="<your-openai-api-key>"
 ```
 
-The Setup Agent panel shows the `2201.13.x` variable names, so type these instead. Add `/v1/traces` to the end of the endpoint. The built-in exporter sends to the exact address you give it. The API key travels in the `x-amp-api-key` header.
+The first two lines match step 4 of the Setup Agent panel when **Version** is `2201.14.x+`, so you can copy them from there. The endpoint ends in `/v1/traces` because the built-in exporter sends to the exact address you give it. The API key travels in the `x-amp-api-key` header.
 
 </TabItem>
 </Tabs>
@@ -342,7 +346,7 @@ The traces under **Observability** depend on three pieces. The sample already ha
 | The `observabilityIncluded` build option | `Ballerina.toml` | The sample |
 | Tracing settings, collector address, and API key | The running agent's configuration | Agent Manager, when **Enable auto instrumentation** is on |
 
-The sample imports the module for its side effect only, which is why the import ends in `as _`:
+The sample is built on Ballerina `2201.13.x` (`distribution = "2201.13.4"` in `Ballerina.toml`), so it traces through the `ballerinax/amp` module. It imports the module for its side effect only, which is why the import ends in `as _`:
 
 ```ballerina
 import ballerinax/amp as _;
@@ -361,9 +365,10 @@ At runtime Agent Manager turns tracing on with `amp` as the tracing provider. It
 
 For an agent you write yourself and deploy through Agent Manager:
 
-1. Add `import ballerinax/amp as _;` to one of your `.bal` files. This needs Ballerina `2201.13.x` or newer.
-2. Add `observabilityIncluded = true` under `[build-options]` in `Ballerina.toml`.
-3. Keep **Enable auto instrumentation** turned on when you create the agent.
+1. Set `distribution` in `Ballerina.toml` to a `2201.13.x` version. The Ballerina buildpack supports only `2201.13.x`.
+2. Add `import ballerinax/amp as _;` to one of your `.bal` files.
+3. Add `observabilityIncluded = true` under `[build-options]` in `Ballerina.toml`.
+4. Keep **Enable auto instrumentation** turned on when you create the agent.
 
 That is all. The tracing settings and credentials come from Agent Manager.
 

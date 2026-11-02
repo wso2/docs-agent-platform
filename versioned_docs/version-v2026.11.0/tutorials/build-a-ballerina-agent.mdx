@@ -1,0 +1,144 @@
+---
+sidebar_position: 1
+---
+
+# Deploy the Ballerina Leave Assistant Sample
+
+WSO2 Agent Manager includes a ready to deploy sample agent written in Ballerina, called the Leave Assistant. It shows how a Ballerina agent runs on the platform's Ballerina buildpack, using a realistic HR scenario built around employee leave requests.
+
+This guide explains what the sample does and walks you through deploying it. You do not need to write or change any code to follow it.
+
+The sample lives in the platform's GitHub repository, at `samples/leave-assistant-agent`.
+
+## What the Leave Assistant Does
+
+The Leave Assistant is a chat agent that manages employee leave requests. An employee can check their leave balance, request time off, list their existing requests, or cancel one. A manager can approve or reject a request that is waiting for a decision.
+
+The agent enforces real rules on its own, not just record keeping:
+
+* Annual leave of three days or fewer, and all sick leave, are approved automatically as long as the employee has enough balance.
+* Longer annual leave requests, and every unpaid leave request, are held as pending until a manager approves or rejects them.
+* Cancelling or rejecting a request refunds any balance that had been deducted for it.
+* Asking for more days than an employee has left is turned down with a clear explanation, not partially approved.
+
+### Available Tools
+
+| Tool | What it does |
+|---|---|
+| Check leave balance | Looks up how many annual and sick leave days an employee has left |
+| Request leave | Files a new leave request, and either approves it right away or marks it pending, depending on the rules above |
+| List leave requests | Shows every request an employee has filed, past and present |
+| Cancel a leave request | Withdraws a request and refunds any balance it had used |
+| Approve a leave request | Lets a manager approve a request that is waiting for a decision |
+| Reject a leave request | Lets a manager turn down a request that is waiting for a decision, and refunds any balance used |
+
+### Sample Employees
+
+Two employees are included with the sample so you can try it out right after deploying:
+
+| Employee id | Name | Annual leave balance | Sick leave balance |
+|---|---|---|---|
+| `E-3001` | Priya Fernando | 14 days | 7 days |
+| `E-3002` | Kasun Silva | 3 days | 7 days |
+
+## Prerequisites
+
+* An OpenAI API key. The agent uses it to power its conversations.
+
+## Deploy the Sample
+
+### Step 1: Start Creating the Agent
+
+1. Open your project in Agent Manager and go to **Agents**.
+2. Click **Add Agent**.
+3. Select **Platform-Hosted Agent**.
+4. Choose **Source Code** as the source type.
+
+### Step 2: Fill in Agent Details
+
+| Field | Value |
+|---|---|
+| **Display Name** | `Leave Assistant` |
+| **Description** | `Ballerina employee leave request assistant` |
+
+### Step 3: Fill in Repository Details
+
+| Field | Value |
+|---|---|
+| **GitHub Repository** | `https://github.com/wso2/agent-manager` |
+| **Branch** | `main` |
+| **Project Path** | `samples/leave-assistant-agent` |
+
+### Step 4: Choose Ballerina as the Build Type
+
+Select **Ballerina**. You will not see the **Language Version** or **Start Command** fields that other languages ask for. The platform reads the sample's Ballerina version on its own and knows how to build and run it directly.
+
+Leave **Enable auto instrumentation** turned on. This lets Agent Manager automatically set up tracing for the agent, so its conversations and tool calls show up under **Observability** with no extra setup on your part.
+
+### Step 5: Choose Chat Agent as the Interface Type
+
+Choose **Chat Agent**, not **Custom API Agent**. The sample already exposes the standard chat interface Agent Manager expects, so choosing Chat Agent gives you the built in **Try It** chat window immediately, with nothing further to configure. Custom API Agent is for agents that expose their own custom endpoints and would require you to supply an OpenAPI specification, which this sample does not use.
+
+### Step 6: Set the Environment Variable
+
+The agent needs your OpenAI API key to run. Add it as an environment variable:
+
+1. Under **Environment Variables**, click **Add**.
+2. In the **Key** field, enter `BAL_CONFIG_VAR_OPENAIAPIKEY`.
+3. In the **Value** field, paste your OpenAI API key.
+4. Turn on **Mark as Secret** so the key is stored securely.
+
+:::info Why this name looks unusual
+Ballerina agents read their configuration from environment variables with a `BAL_CONFIG_VAR_` prefix, rather than a plain name like `OPENAI_API_KEY`. This is the one setup detail that differs between a Ballerina agent and agents written in other languages. Use the exact key name above. If it is entered differently, the agent will not receive the API key and will fail to respond.
+:::
+
+### Step 7: Add File Mounts (Optional)
+
+The Leave Assistant sample does not need any files mounted to run, so you can skip this step. It is included here so you know how to do it if you build your own Ballerina agent later and it needs one.
+
+1. Under **File Mounts**, click **Add File**.
+2. Enter a **File Name** to identify the file.
+3. Enter the **Mount Path**, the absolute location inside the agent's container where the file should appear, for example `/etc/config/settings.toml`.
+4. Paste or type the file's **Content**.
+5. Turn on **Mark as Secret** if the file contains sensitive information.
+
+Mounting a file only places it inside the container. Ballerina does not automatically read configuration out of a mounted file the way it reads environment variables, so the agent's code has to explicitly open and read the file to use its contents.
+
+### Step 8: Deploy
+
+Review your settings and click **Deploy**. The build compiles the sample and packages it into a container image. This usually takes a few minutes.
+
+## Try the Agent
+
+Once the deployment finishes, open the agent and click **Try It**. Some things to try:
+
+```text
+What is my leave balance? My employee id is E-3001
+```
+
+```text
+I am E-3001, request 2 days annual leave starting tomorrow
+```
+
+```text
+I am E-3002, request 4 days annual leave starting Friday
+```
+
+The last one should come back as a clear rejection, since E-3002 only has 3 annual days left.
+
+Open the **Observability** tab afterward to see which tool the agent called for each message.
+
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| The runtime log shows a warning that `Config.toml` was not found | This is expected and can be ignored. It only applies to running the agent on a local machine, not to a deployed agent. |
+| The agent does not respond, or an error mentions the API key | Confirm the environment variable is named exactly `BAL_CONFIG_VAR_OPENAIAPIKEY`, with no typos. |
+| The deployment stays on "Deploying" for a long time | Open the **Build** tab and confirm the build itself finished successfully before assuming something is wrong with the agent. |
+
+## See Also
+
+| Guide | What it covers |
+|---|---|
+| [Create Your First Agent](create-your-first-agent.mdx) | The general agent creation flow, for any language |
+| [Monitor Your Agent](observe-first-agent.mdx) | Setting up and reading traces for a newly deployed agent |

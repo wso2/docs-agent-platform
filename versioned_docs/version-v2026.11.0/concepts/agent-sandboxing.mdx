@@ -1,0 +1,27 @@
+---
+title: Agent Sandboxing
+---
+
+# Agent Sandboxing
+
+Agent Sandboxing is how Agent Manager isolates a running agent's code from the underlying host. A spectrum of increasingly strict runtime tiers, chosen per [environment](./environment.mdx), that only applies to Platform-Hosted agents (the platform doesn't control the runtime of an [Externally-Hosted agent](./internal-and-external-agent.mdx)).
+
+## Three Tiers
+
+| Tier | Isolation mechanism | Trade-off |
+|---|---|---|
+| **runc** *(default)* | Standard container runtime; shares the host kernel | No special hardware needed; every agent gets this by default (hardened security context, network policy, warm pool) |
+| **gVisor** | A userspace kernel (`runsc`) intercepts syscalls before they reach the host kernel | Stronger isolation than runc, no special hardware, but adds syscall interception overhead |
+| **Kata Containers** | Each agent boots in its own lightweight VM with a separate guest kernel | Strongest isolation — no shared kernel at all — but requires nested virtualization (`/dev/kvm`) on the node |
+
+## Isolation Tier Is an Environment-Level Setting
+
+You don't choose a tier per agent — you choose it once when creating an [environment](./environment.mdx), and every agent deployed or promoted into that environment runs under that tier. Adding a stronger-tier node to your cluster doesn't affect existing runc environments; only new environments (or environments explicitly configured for that tier) schedule pods onto it.
+
+Under the hood, the tier is implemented as a Kubernetes `RuntimeClass`: deploying or promoting an agent into a gVisor or Kata environment sets `runtimeClassName` on its pod spec, and that RuntimeClass's own scheduling rules place the pod on a node dedicated to that tier.
+
+:::info Stronger agent isolation tiers
+Agents run sandboxed under the standard **runc** runtime by default. Agent Manager also supports stronger per-environment isolation tiers — **gVisor** (userspace kernel) and **Kata Containers** (per-agent VM) — but they have hardware/OS requirements and need a dedicated node. For more information, see the [gVisor](../guides/isolation-tiers/gvisor.mdx) and [Kata Containers](../guides/isolation-tiers/kata.mdx) setup guides.
+:::
+
+For the setup steps and hardware requirements for each tier, see [gVisor](../guides/isolation-tiers/gvisor.mdx) and [Kata Containers](../guides/isolation-tiers/kata.mdx) in Guides.

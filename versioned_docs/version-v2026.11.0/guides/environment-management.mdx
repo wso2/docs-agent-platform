@@ -1,0 +1,233 @@
+---
+sidebar_position: 2
+---
+
+# Manage Environments and Deployment Pipelines
+
+Environments and deployment pipelines are organization-level constructs that control *where* your agents run and *how* they are promoted from one stage to the next (for example `Development → Staging → Production`).
+
+- An **environment** represents a runtime context (e.g., `dev`, `test`, `staging`, `production`) where agents are deployed and executed.
+- A **deployment pipeline** defines an ordered promotion path across those environments.
+- Each **project** is assigned one deployment pipeline, and agents in that project are **promoted** along its path.
+
+Both environments and deployment pipelines live under the **Infrastructure** section of the organization-level navigation.
+
+## Prerequisites
+
+- Admin access to the WSO2 Agent Manager Console.
+- A terminal with `kubectl` and `helm` configured against your cluster (environments are provisioned and removed by a script that installs/uninstalls an API Platform Gateway via Helm).
+- At least one [AI Gateway](../concepts/gateway.mdx) active. The installer registers one per environment.
+
+---
+
+## Managing Environments
+
+### Navigate to Environments
+
+1. Log in to the WSO2 Agent Manager Console.
+2. Go to the organization level by closing the projects section in the top navigation.
+3. In the left sidebar, click **Environments** under the **INFRASTRUCTURE** section.
+
+   > The Environments page lists every environment with its display name, associated gateway, and whether it is a production environment.
+
+### Create an environment
+
+Environments are provisioned by a script that creates the environment in Agent Manager and installs its API Platform Gateway via Helm. The Console builds the command for you.
+
+1. Click **Create Environment**.
+2. Fill in the environment details.
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Display Name** | Human-readable name shown throughout the Console. | `Production` |
+   | **Identity Service Handle** | Optional unique DNS label for this environment's ThunderID URL. Use 3–63 lowercase letters, digits, or hyphens; leave it blank to let Agent Manager generate an unguessable handle. | `x7f2q9kzab` |
+   | **Isolation Tier** | Container runtime isolation for agents deployed to this environment. The dropdown lists three sandboxing tiers of increasing strength — `Sandboxing T1 (runc)` (default), `Sandboxing T2 (gVisor)`, and `Sandboxing T3 (Kata Containers)`. Stronger tiers need a dedicated node set up first; see [Isolation tiers](#isolation-tiers) below. | `Sandboxing T1 (runc)` |
+   | **Production environment** | Mark this environment as production. Production environments are typically the last stage of a pipeline. | — |
+
+3. Copy the generated command using the copy icon. Your access token is substituted into the command automatically when you copy.
+4. Run the command from a terminal that has `kubectl` and `helm` configured against your cluster.
+
+   The script creates the environment in Agent Manager and provisions an API Platform Gateway for that environment via Helm.
+
+   > The script is idempotent — it is safe to re-run. Once it completes, the new environment appears in the list.
+
+### Isolation tiers
+
+Every environment has an **isolation tier** that decides which container runtime its agents run under. The tier is chosen at environment creation time and cannot be changed afterwards.
+
+The Console presents the tiers as three sandboxing levels of increasing strength, each marked by its own shield icon. The environment list shows the tier as a **Sandboxing T1**–**T3** shield chip, and on an agent's Deploy and Overview pages (and in a pipeline's promotion chain) a shield icon next to the environment name identifies its tier — hover over it to see the tier and runtime, e.g. *Sandboxing Tier 2 — gVisor*.
+
+| Console label | Tier value | Runtime | Isolation | Requirements |
+|------|------|---------|-----------|--------------|
+| **Sandboxing T1** (default) | `runc` | Standard container runtime | Sandboxed pod, shared host kernel | None — works everywhere |
+| **Sandboxing T2** | `gvisor` | gVisor (`runsc`) | Userspace kernel intercepts syscalls | A dedicated x86_64 node — see the [gVisor guide](./isolation-tiers/gvisor.mdx) |
+| **Sandboxing T3** | `kata` | Kata Containers (`kata-qemu`) | Per-agent VM with its own guest kernel | A dedicated node with KVM — see the [Kata guide](./isolation-tiers/kata.mdx) |
+
+To create an environment with a stronger tier, set up the node first (per the guides above), then pick the tier from the **Isolation Tier** dropdown in the **Create Environment** drawer. The generated command automatically includes the matching `ISOLATION_TIER` variable — for `runc` (the default) no variable is added. Selecting gVisor or Kata also shows a warning with a link to the corresponding node setup guide.
+
+If you script environment creation directly instead of using the Console, set the variable yourself:
+
+```bash
+ISOLATION_TIER=gvisor \
+  ENV_NAME=... DISPLAY_NAME=... AGENT_MANAGER_TOKEN=... \
+  bash add-environment.sh
+```
+
+Agents deployed or promoted to that environment automatically run under the tier's runtime — no agent-side changes are needed.
+
+### Gateway topology
+
+Every environment gets an API Platform Gateway. Its **topology** decides whether one gateway handles both directions of traffic, or two gateways split the roles — an *ingress* gateway for traffic arriving at the agents deployed in the environment, and an *egress* gateway for the calls those agents make out to LLMs, MCP servers, and other APIs.
+
+| Topology | Helm releases installed | Namespaces | Registered gateway type |
+|---|---|---|---|
+| `single` (default) | `api-platform-<org>-<env>` | `<org>-<env>` | `BOTH` |
+| `split` | `api-platform-<org>-<env>` and `api-platform-<org>-<env>-egress` | `<org>-<env>` and `<org>-<env>-egress` | `INGRESS` and `EGRESS` |
+
+In split topology each release is a complete gateway of its own — its own `APIGateway` resource, its own runtime, its own routing hostname (`<env>-<org>.gateway.localhost` for ingress, `<env>-<org>-egress.gateway.localhost` for egress) — and each registers with Agent Manager separately, with its own cluster-local runtime URL.
+
+A gateway's type is fixed when it first registers and cannot be changed afterward, so an environment's topology cannot be switched in place. To move an existing environment to split topology, delete it and create it again.
+
+:::warning
+Split topology shortens the maximum `ENV_NAME` by 7 characters, to leave room for the `-egress` suffix on the second release's Kubernetes resource names. The limit is `22 - len(ORG_NAME)` characters, minus a further 7 in split topology — for the default organization `default` that leaves **8 characters**, so `ENV_NAME=production` is rejected. Use a shorter name such as `prod`.
+
+The name the Console generates for you is not bounded by the split limit, so shorten it if you are creating a split environment.
+:::
+
+The **Create Environment** drawer has no topology option, and the command it generates always creates a single-topology environment. If you script environment creation directly instead of using the Console, set the variable yourself:
+
+```bash
+GATEWAY_TOPOLOGY=split \
+  ENV_NAME=... DISPLAY_NAME=... AGENT_MANAGER_TOKEN=... \
+  bash add-environment.sh
+```
+
+Deletion needs no equivalent flag: the delete command detects the egress release and namespace and removes them along with the ingress gateway, and does nothing extra for a single-topology environment.
+
+### Delete an environment
+
+1. On the Environments page, open the **Delete** action for the environment you want to remove.
+2. Copy the generated command and run it from a terminal configured against your cluster (again with `kubectl` and `helm` configured).
+
+   The script uninstalls the environment's API Platform Gateway Helm release and then deletes the environment in Agent Manager.
+
+   > **Warning:** Deleting an environment is permanent and cannot be undone. Any agent deployed to the environment will no longer be reachable, and the deployment will be permanently deleted. Every agent's settings for the environment (CORS, endpoint authentication, and instrumentation settings) are deleted too, so an environment you create again with the same name starts from the defaults.
+
+:::note
+An environment cannot be deleted while it is still referenced by a deployment pipeline. Remove it from any pipeline first.
+:::
+
+### Access the Environment ThunderID Console
+
+Creating an environment does more than register it in Agent Manager. The same command also
+provisions a dedicated ThunderID instance for that environment, which is what issues
+[AgentID](../concepts/agentid.mdx) credentials to every agent deployed there.
+
+The command's terminal output ends with the console details for the new instance:
+
+```text
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Thunder ID Console - production
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  URL:      http://x7f2q9kzab.amp.localhost:8080/console
+  Username: admin
+  Password: <a freshly generated password>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Save the password before you close the terminal. It is generated once when the environment is
+created, and is not displayed again.
+
+| Field | Where it comes from |
+|---|---|
+| **URL** | `http://<handle>.<base domain>:8080/console` for a local installation, or an `https://` address on a VM or cluster with TLS enabled. `<handle>` is the unguessable handle registered for this environment (user-chosen or server-generated). |
+| **Username** | Always `admin`, scoped to this environment's ThunderID instance only. |
+| **Password** | Randomly generated the first time the environment is provisioned, then reused on every re-run of the same command. |
+
+:::tip
+If you lose the password, you do not need to recreate the environment. It is stored in a
+Kubernetes secret named `amp-thunder-<org>-<env>-admin-credentials`, in the namespace of the
+same name, and can be read again with:
+
+```bash
+kubectl get secret amp-thunder-<org>-<env>-admin-credentials \
+  -n amp-thunder-<org>-<env> \
+  -o jsonpath="{.data.password}" | base64 -d
+```
+:::
+
+Log in to this console to inspect the environment's ThunderID instance directly, for example to
+look up an agent's OAuth application by name. Day-to-day AgentID operations such as
+provisioning, viewing, rotating, and revoking a credential are done through Agent Manager
+instead, as described in [AgentID](../concepts/agentid.mdx), so you do not need to work in this
+console for routine tasks.
+
+---
+
+## Managing Deployment Pipelines
+
+A deployment pipeline defines the promotion path agents follow across environments. 
+
+### Navigate to Deployment Pipelines
+
+1. At the organization level, open the left sidebar.
+2. Click **Deployment Pipelines** under the **INFRASTRUCTURE** section.
+
+   > The page lists each pipeline with its promotion chain rendered.
+
+### Create a deployment pipeline
+
+1. Click **Create Pipeline**.
+2. Under **Pipeline Details**, enter:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Display Name** | Human-readable name for the pipeline (required). | `Production Pipeline` |
+   | **Description** | Optional description. | `Dev to Prod promotion path` |
+
+3. In the pipeline chain editor, add environments in the order agents should be promoted through them. The chain must contain at least one environment and must form a single linear path.
+4. Click **Create**.
+
+### Delete a deployment pipeline
+
+1. On the Deployment Pipelines page, hover over the pipeline row and click the **Delete**  icon.
+2. Confirm in the dialog.
+
+   > **Warning:** Deleting a pipeline cannot be undone. Reassign any project that uses the pipeline to a different one first.
+
+:::note
+A deployment pipeline cannot be deleted while it is still referenced by a project. Reassign any project that uses it to a different pipeline first (see [updating a project's deployment pipeline](#update-a-projects-deployment-pipeline)).
+:::
+
+---
+
+## Update a project's deployment pipeline
+
+Every project is assigned a deployment pipeline, which determines the environments its agents can be promoted through.
+
+1. At the organization level, open the **Projects** list.
+2. Open the **Edit** action for the project you want to change.
+3. In the **Edit Project** drawer, open the **Deployment Pipeline** dropdown. Each option shows the pipeline name and its promotion chain.
+4. Select the pipeline you want and click **Update Project**.
+
+   > A deployment pipeline is required for a project. Changing it changes the promotion path available to all agents in the project.
+
+---
+
+## Promote an agent
+
+Promoting an agent deploys it from one environment to the next environment in the project's deployment pipeline.
+
+1. Open the agent and go to its **Deploy** page. Each environment in the pipeline is shown as a card.
+2. On the source environment's card, click **Promote**.
+
+   > The **Promote** button appears only when the environment has a downstream target in the project's pipeline and the agent is currently **Active** in that environment.
+
+3. In the **Promote** drawer:
+   - **Target Environment** — if the source has more than one possible next environment, select the target.
+   - **Configuration** — choose how the target is configured:
+     - Enable **Use config from source environment** to inherit the source environment's environment variables and file mounts.
+     - Leave it disabled to set environment-specific **Environment Variables** and **File Mounts** for the target environment.
+4. Click **Promote**.
+
+The same build is deployed to the target environment with the configuration you supplied. Repeat the process to advance the agent along the rest of the pipeline.

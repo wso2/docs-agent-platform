@@ -1,0 +1,96 @@
+---
+sidebar_position: 13
+---
+
+# Retrieve AgentID Credentials for an Externally-Hosted Agent
+
+An Externally-Hosted agent runs outside WSO2 Agent Manager, so the platform has no pod to
+inject its [AgentID](../concepts/agentid.mdx) credential into. Instead, you generate the
+credential from the console and configure your agent with it yourself. This guide walks through
+generating, using, and rotating that credential.
+
+## Prerequisites
+
+- An Externally-Hosted agent, registered in a project.
+- Console access with permission to update the agent.
+
+Unlike Platform-Hosted agents, an Externally-Hosted agent has no deploy or promote step: AgentID
+provisioning starts for every environment in your organization as soon as the agent is created.
+
+## Step 1: Open the Agent's Overview Page
+
+Navigate to **Projects → &lt;your project&gt; → Agents → &lt;your agent&gt;**. Each environment
+appears as its own card, with an **Agent ID** section — but note that the identifier shown there
+is a separate, internal Thunder Agent ID, not the OAuth `client_id` you'll actually configure your
+agent with:
+
+- **Not created for this environment yet**: this environment was added to the project's pipeline
+  after the agent was already created, so nothing has provisioned an identity for that combination
+  yet. Click **Create Agent ID** on the card to provision one.
+- **Provisioning identity…**: the identity is being created. This clears on its own within a few
+  minutes; no action is needed.
+- **Provisioning Status: Failed**: click **Retry** on the card, or check the identity settings for
+  details if it keeps failing.
+- **Agent ID: &lt;value&gt;**: provisioning has completed, and this is that environment's Thunder Agent ID.
+
+The Client ID and Client Secret you actually need aren't on this card. Click **View all** (or use
+the agent's own left-hand navigation) to open the agent-level **Agent ID** page — that's where the
+rest of this guide happens.
+
+## Step 2: Get the Client Credentials
+
+If your agent runs in more than one environment, use the environment selector in the page header
+(labeled `<Environment Name> Environment`) to pick the right one — everything below is scoped to
+whichever environment is selected.
+
+On the **Overview** tab, under **Client Credentials**, the Client ID shows as soon as an identity
+exists; the Client Secret stays masked until you reveal one. Click **Regenerate Secret** — that's
+the button's label the first time too, there's no separate "Generate" step — and the new
+`client_id`/`client_secret` pair appears immediately above it.
+
+Copy both values now. This is your only chance to see the secret; Agent Manager never stores it
+anywhere: the environment's ThunderID instance mints it fresh for this one response, and there is
+nothing left to retrieve afterward. If you navigate away before copying it, click **Regenerate
+Secret** again; the old one still works until you do.
+
+## Step 3: Configure Your Agent
+
+The same **Overview** tab has an **OAuth2 Endpoints** section right below the credentials, showing
+the **Issuer URL**, **Token Endpoint**, and **JWKS Endpoint** for this environment — copy them
+directly from there, no need to derive anything from a separate console URL.
+
+Set these as configuration or environment variables for your externally-hosted agent process, in
+whatever form your deployment uses:
+
+- `clientId` and `clientSecret` from Step 2.
+- The **Token Endpoint** from above.
+- The scopes your agent should request, as documented in your organization's AgentID policy.
+
+From there, your agent mints and uses tokens exactly the same way a Platform-Hosted agent does:
+request a token with the `client_credentials` grant, passing the target MCP server's own URL as
+the `resource` parameter (RFC 8707, OAuth 2.0 target-resource indication). ThunderID scopes the
+minted token to that one resource, so a token minted for one MCP server isn't valid for another.
+If your agent calls more than one MCP server, mint and cache a token **per resource**, not a
+single global token. Cache the token, then attach it as a bearer token on calls to the gateway.
+See
+[Step 2 and Step 3 of the Platform-Hosted guide](./use-agentid-in-platform-hosted-agents.mdx#step-2-mint-and-cache-a-token)
+for the exact request shape and a caching example.
+
+## Rotating the Credential
+
+If you need a new secret, for example because the old one may have leaked, click
+**Regenerate Secret** again. This works at any time, not just the first time, and it immediately
+invalidates the previous secret and shows you the new pair the same way as Step 2.
+
+Update your agent's configuration with the new secret and restart it. Tokens minted with the old
+secret before the rotation remain valid until they expire, since Thunder cannot invalidate a
+token it has already issued.
+
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| The environment card shows "Provisioning identity…" for a long time | Provisioning retries automatically for a while before failing. If it does not clear within about fifteen minutes, check the identity settings for an error. |
+| The environment card shows "Not created for this environment yet" | This environment was added to the pipeline after the agent was created. Click **Create Agent ID** on the card to provision it. |
+| **Regenerate Secret** fails | The agent's identity has not finished provisioning for this environment yet, or provisioning failed. Wait for an Agent ID to show on the card, or check the identity settings for details. |
+| Token request fails with `invalid_client` | The `clientId`/`clientSecret` pair in your agent's configuration is stale, most likely because someone generated a new one afterward. Generate a fresh pair and update your agent's configuration. |

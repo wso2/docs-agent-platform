@@ -15,31 +15,31 @@ The WSO2 Agent Manager version is not the version of every dependency. Set each 
 | `openchoreo-control-plane` | 1.2.0 | 1.2.8 | Upgrade first. Re-apply the `client_id` patch afterwards. |
 | `openchoreo-data-plane` | 1.2.0 | 1.2.8 | Upgrade each installation. |
 | `openchoreo-workflow-plane` | 1.2.0 | 1.2.8 | The default cluster agent CPU and memory resources double. |
-| `openchoreo-observability-plane` | 1.2.0 | 1.2.8 | Re-apply the `client_id` patch. A new ingress NetworkPolicy is enabled by default. |
-| `wso2-amp-thunder-extension` | v1.0.0 | 0.0.0-dev | Its bundled ThunderID chart moves from 1.0.0 to 1.0.1. |
-| Environment `thunderid` releases | 1.0.0 | 1.0.1 | Upgrade every environment instance separately. |
+| `openchoreo-observability-plane` | 1.2.0 | 1.2.8 | Re-apply the `client_id` patch. Set the NetworkPolicy exemption and the OpenSearch passthrough listener. |
+| `wso2-amp-thunder-extension` | v1.0.0 | 0.0.0-dev | Its bundled ThunderID chart moves from 1.0.0 to 1.0.2. |
+| Environment `thunderid` releases | 1.0.0 | 1.0.2 | Upgrade every environment instance separately. |
 | `wso2-amp-platform-resources-extension` | v1.0.0 | 0.0.0-dev | Upgrade before `wso2-agent-manager`. |
 | `wso2-agent-manager` | v1.0.0 | 0.0.0-dev | Applies database migrations 0044 to 0050. |
 | `wso2-amp-observability-extension` | v1.0.0 | 0.0.0-dev | Upgrade after the Observability Plane. |
 | `wso2-amp-evaluation-extension` | v1.0.0 | 0.0.0-dev | Upgrade after the Workflow Plane. |
 | `wso2-amp-api-platform-gateway-extension` | v1.0.0 | 0.0.0-dev | Upgrade once for each gateway. |
+| `kgateway-crds`, `kgateway` | v2.2.1 | v2.3.11 | Upgrade `kgateway-crds` first. This is separate from the WSO2 Gateway Operator. |
 | `gateway-operator` | 0.11.0 | 0.11.3 | Chart 0.11.3 runs operator image 0.11.1. |
-| Operator-managed API Platform gateway | Chart 1.2.2, images 1.2.1 | Chart and images 2026.09.24 | Pinned in the operator values. Existing gateways need an explicit redeploy. |
+| Operator-managed API Platform gateway | Chart 1.2.2, images 1.2.1 | `GW_VERSION`: 2026.09.24 from `ghcr.io`, or the subscription release's gateway from the WSO2 registry | Pinned in the operator values. Existing gateways need an explicit redeploy. |
 
 The OpenChoreo CRDs are identical in 1.2.0 and 1.2.8, so the OpenChoreo upgrade needs no CRD step.
 
 ### Unchanged components
 
-The target installer keeps these pins from v1.0.0. Verify them and keep their configuration. Do not upgrade them as part of this procedure.
+The target installer keeps these pins from v1.0.0. Verify them and keep their configuration. Do not move them to a new version as part of this procedure.
 
 | Component | Pin | Notes |
 | --- | --- | --- |
-| `observability-logs-opensearch` | 0.5.3 | Verify logs and storage. |
+| `observability-logs-opensearch` | 0.5.3 | Keep the version. Step 4 upgrades it with new log routing values. |
 | `observability-tracing-opensearch` | 0.6.0 | The default release name is `observability-traces-opensearch`. |
 | `observability-metrics-prometheus` | 0.6.1 | Verify metrics and persistence. |
 | `cert-manager` | v1.19.2 | Verify certificates and issuers. |
 | `external-secrets` | 1.3.2 | Verify secret synchronization. |
-| `kgateway-crds`, `kgateway` | v2.2.1 | This is separate from the WSO2 Gateway Operator. |
 | Kubernetes Gateway API CRDs | v1.4.1, experimental channel | Not a Helm release. |
 | `openbao` | 0.25.6 | Keep its storage, unseal state, and authentication configuration. |
 | Local `docker-registry` | Not pinned by the installer | Record the installed version and keep its storage. |
@@ -65,7 +65,21 @@ The standard v1.0.0 installation runs OpenChoreo 1.2.0, and this page covers the
 
 If your installation runs OpenChoreo 1.1.x or earlier, first complete the [OpenChoreo 1.1 to 1.2 migration](https://openchoreo.dev/docs/platform-engineer-guide/upgrades/v1.1-to-v1.2/). That guide describes Gateway API, kgateway, and observability module versions that differ from the Agent Manager pins above. Confirm the dependency versions with the platform maintainers before you run it.
 
-## Step 3: Upgrade the OpenChoreo planes to 1.2.8
+## Step 3: Upgrade kgateway to v2.3.11
+
+kgateway is the network gateway for the OpenChoreo planes. The `kgateway-crds` chart ships its CRDs as templates, so `helm upgrade` updates them. Upgrade it before `kgateway`. Set `OC_CONTEXT` to the context of the cluster that runs kgateway, which is the Control Plane cluster in the default installation:
+
+```bash
+export OC_CONTEXT="<control-plane-context>"
+helm upgrade kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
+  --version v2.3.11 -n openchoreo-control-plane --kube-context "$OC_CONTEXT" \
+  --reset-then-reuse-values --timeout 5m --wait
+helm upgrade kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
+  --version v2.3.11 -n openchoreo-control-plane --kube-context "$OC_CONTEXT" \
+  --reset-then-reuse-values --timeout 5m --wait
+kubectl --context "$OC_CONTEXT" get pods -n openchoreo-control-plane | grep kgateway
+```
+## Step 4: Upgrade the OpenChoreo planes to 1.2.8
 
 Upgrade one plane at a time, in this order, and verify each one before you continue:
 
@@ -131,36 +145,72 @@ kubectl rollout restart deployment/observer -n openchoreo-observability-plane
 kubectl rollout status deployment/observer -n openchoreo-observability-plane --timeout=120s
 ```
 
-### Check the Observability Plane NetworkPolicy
+### Set the Observability Plane ingress values
 
-OpenChoreo 1.2.8 adds `networkPolicy.enabled: true` to the Observability Plane chart. It restricts ingress to every pod in the plane's namespace to traffic from the same namespace. Pods named `gateway-default` and `opentelemetry-collector` are exempt. The Agent Manager observer (`amp-observer`) runs in this namespace and receives calls from Agent Manager in the `wso2-amp` namespace and from evaluation jobs.
+OpenChoreo 1.2.8 enables an ingress NetworkPolicy in the Observability Plane chart. It accepts traffic only from pods in the plane's namespace, except pods whose `app.kubernetes.io/name` is listed in `networkPolicy.unrestrictedIngressAppNames`. The Agent Manager observer runs in that namespace and is called from the `wso2-amp` namespace and from evaluation jobs. Without an exemption, monitor runs and run logs fail with `Connection refused`.
 
-After the upgrade, open a trace in the Console and run a monitor. If either fails on a cluster that enforces NetworkPolicy, allow the calling namespaces with `networkPolicy.additionalIngress`:
+Upgrade the Observability Plane with these values in addition to your existing ones. They exempt the observer and add the TLS passthrough listener that the OpenSearch route in the next step uses. Replace the hostname if your installation does not use the quick-start domains.
 
-```yaml
+```bash
+cat > upgrade-backup/observability-plane-target-values.yaml <<'EOF'
 networkPolicy:
-  additionalIngress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: wso2-amp
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: workflows-default
+  unrestrictedIngressAppNames:
+    - gateway-default
+    - opentelemetry-collector
+    - wso2-amp-observability-extension
+gateway:
+  tlsPassthrough:
+    enabled: true
+    hostname: "opensearch.observability.openchoreo.localhost"
+    port: 11443
+EOF
+
+helm upgrade openchoreo-observability-plane "$OC_REG/openchoreo-observability-plane" \
+  --version "$OC_VERSION" -n openchoreo-observability-plane --kube-context "$OC_CONTEXT" \
+  --reset-then-reuse-values -f upgrade-backup/observability-plane-target-values.yaml \
+  --timeout 15m --wait
 ```
 
-Evaluation jobs run in the `workflows-<org>` namespace, which is `workflows-default` for the default organization. Add one entry for each organization.
+Use this command for the Observability Plane instead of the generic one above, then re-apply the observer `client_id` patch. The observer pods receive the matching `wso2-amp-observability-extension` label when you upgrade the observability extension in Step 5 of the main guide.
+
+### Route log collection through the Observability Plane gateway
+
+Fluent Bit now sends logs to OpenSearch through the Observability Plane gateway's TLS passthrough listener, which also serves Fluent Bit running in other clusters. Download the route and the logs module values:
+
+```bash
+curl -fsSL -o upgrade-backup/opensearch-tls-route.yaml \
+  https://raw.githubusercontent.com/wso2/agent-manager/amp/v0.0.0-dev/deployments/values/opensearch-tls-route.yaml
+curl -fsSL -o upgrade-backup/observability-logs-opensearch.yaml \
+  https://raw.githubusercontent.com/wso2/agent-manager/amp/v0.0.0-dev/deployments/values/observability-logs-opensearch.yaml
+```
+
+The values file sets the Fluent Bit OpenSearch host, port 11443, and the SNI hostname. If you changed the listener hostname in the previous step, edit both files now: set `spec.hostnames` in `opensearch-tls-route.yaml` and `fluent-bit.openSearchVHost` in `observability-logs-opensearch.yaml` to the same hostname.
+
+The values file points Fluent Bit at the gateway's in-cluster address, `gateway-default.openchoreo-observability-plane.svc.cluster.local`. Fluent Bit that runs in another cluster cannot resolve it. For each such cluster, set `fluent-bit.openSearchHost` to an address of the Observability Plane gateway that the cluster can reach on port 11443, and keep `fluent-bit.openSearchVHost` set to the listener hostname.
+
+Apply the route, then point the logs module at it:
+
+```bash
+kubectl --context "$OC_CONTEXT" apply -f upgrade-backup/opensearch-tls-route.yaml
+
+helm upgrade observability-logs-opensearch \
+  oci://ghcr.io/openchoreo/helm-charts/observability-logs-opensearch \
+  --version 0.5.3 -n openchoreo-observability-plane --kube-context "$OC_CONTEXT" \
+  --reuse-values -f upgrade-backup/observability-logs-opensearch.yaml \
+  --set fluent-bit.enabled=true --timeout 10m
+kubectl --context "$OC_CONTEXT" rollout restart daemonset/fluent-bit -n openchoreo-observability-plane
+```
 
 ### Check each plane
 
 - Control Plane: the API responds, controllers are healthy, and existing projects, components, and release bindings reconcile.
 - Data Plane: the cluster agent connects, and existing workloads and routes work.
 - Workflow Plane: the cluster agent and controller are healthy, and a representative build succeeds.
-- Observability Plane: the observer is healthy, and logs, metrics, and traces arrive.
+- Observability Plane: the observer is healthy, and logs, metrics, and traces arrive. Monitor runs work again after the observability extension upgrade in Step 5 of the main guide, which adds the exempt label to the observer.
 
-## Step 4: Upgrade platform Thunder to 1.0.1
+## Step 5: Upgrade platform Thunder to 1.0.2
 
-The Agent Manager Thunder extension bundles the platform Thunder instance. The target chart sets the Thunder image to 1.0.1 by default:
+The Agent Manager Thunder extension bundles the platform Thunder instance. The target chart sets the Thunder image to 1.0.2 by default:
 
 ```bash
 helm upgrade amp-thunder-extension "$REG/wso2-amp-thunder-extension" \
@@ -169,11 +219,11 @@ helm upgrade amp-thunder-extension "$REG/wso2-amp-thunder-extension" \
 kubectl get pods -n amp-thunder -o jsonpath='{..image}' | tr ' ' '\n' | sort -u
 ```
 
-If your values override `thunder.deployment.image.tag`, update it to `1.0.1`. The extension's bootstrap job runs only at install time, so this upgrade does not change existing Thunder clients.
+If your values override `thunder.deployment.image.tag`, update it to `1.0.2`. The extension's bootstrap job runs only at install time, so this upgrade does not change existing Thunder clients or resource servers. New installations name the Agent Manager MCP resource server `amp-agent-manager-mcp-resource-srv`; an upgraded installation keeps `amp-agent-manager-mcp-resource-server`.
 
 Verify existing users and clients, Console sign-in and sign-out, token refresh, discovery and JWKS, and the credentials used by OpenChoreo and Agent Manager.
 
-## Step 5: Upgrade every environment Thunder instance
+## Step 6: Upgrade every environment Thunder instance
 
 Each environment has its own release of the upstream `thunderid` chart. The installer names the release and its namespace `amp-thunder-<org>-<env>`. Upgrading `amp-thunder-extension` does not change them.
 
@@ -195,10 +245,10 @@ kubectl --context "$ENV_CONTEXT" get deployment "${ENV_THUNDER_RELEASE}-deployme
 
 helm upgrade "$ENV_THUNDER_RELEASE" \
   oci://ghcr.io/thunder-id/helm-charts/thunderid \
-  --version 1.0.1 -n "$ENV_THUNDER_NS" \
+  --version 1.0.2 -n "$ENV_THUNDER_NS" \
   --kube-context "$ENV_CONTEXT" \
   --reset-then-reuse-values \
-  --set-string deployment.image.tag=1.0.1 \
+  --set-string deployment.image.tag=1.0.2 \
   --timeout 15m --wait
 ```
 
@@ -216,8 +266,8 @@ A Helm rollback does not restore CRDs or persistent data. Recover a failed stage
 
 ## References
 
-- [Target Agent Manager installer](https://github.com/wso2/agent-manager/blob/amp/v0.0.0-snapshot-20261023-ed55c6f/deployments/quick-start/install.sh)
+- [Target Agent Manager installer](https://github.com/wso2/agent-manager/blob/amp/v0.0.0-dev/deployments/quick-start/install.sh)
 - [Agent Manager v1.0.0 installer](https://github.com/wso2/agent-manager/blob/amp/v1.0.0/deployments/quick-start/install.sh)
-- [Environment Thunder installer](https://github.com/wso2/agent-manager/blob/amp/v0.0.0-snapshot-20261023-ed55c6f/deployments/scripts/add-environment-thunder.sh)
+- [Environment Thunder installer](https://github.com/wso2/agent-manager/blob/amp/v0.0.0-dev/deployments/scripts/add-environment-thunder.sh)
 - [OpenChoreo 1.2.8 release](https://github.com/openchoreo/openchoreo/releases/tag/v1.2.8)
 - [OpenChoreo upgrade overview](https://openchoreo.dev/docs/platform-engineer-guide/upgrades/overview/)

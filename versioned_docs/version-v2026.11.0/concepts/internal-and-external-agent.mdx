@@ -1,0 +1,34 @@
+---
+title: Internal and External Agent
+---
+
+# Internal and External Agent
+
+Every agent in WSO2 Agent Manager is one of two types, chosen when it's created and not changeable afterward: **Platform-Hosted** (internal) or **Externally-Hosted** (external).
+
+## Platform-Hosted Agents
+
+A Platform-Hosted agent's full lifecycle is owned by Agent Manager. The platform builds it from a source repository (or a published [Agent Kind](./agent-kind-and-catalog.mdx)), deploys it to each [environment](./environment.mdx) in its project's [deployment pipeline](./deployment-pipeline.mdx), and can promote or suspend it (see [Agent and Agent Life Cycle](./agent-lifecycle.mdx)).
+
+Because the platform controls the running pod, it can inject configuration directly into it. LLM provider credentials, MCP proxy connection details, and its [AgentID](./agentid.mdx) credential all appear as environment variables the agent code reads at runtime, with no manual wiring required.
+
+## Externally-Hosted Agents
+
+An Externally-Hosted agent already runs somewhere outside Agent Manager. It can be locally, on your own infrastructure, or in a third-party cloud. Agent Manager doesn't build, deploy, promote, or suspend it and registering one only gives the platform a record to attach observability and governance to.
+
+The practical differences that follow from this:
+
+- **No deploy or promote step.** There's nothing for the platform to deploy, so [AgentID](./agentid.mdx) credential provisioning for every environment in the organization begins as soon as the agent is registered, rather than being tied to a deploy.
+- **You wire configuration in yourself.** Since there's no pod to inject into, the platform instead hands you connection details to configure — an API key and OTel endpoint for instrumentation, and endpoint URLs plus API keys for any LLM Service Provider or MCP Proxy the agent uses.
+- **Callers reach it at its own address.** The exception is an externally-hosted A2A agent, which can be routed through an environment's gateway so that gateway API keys, CORS, and authentication apply to it. See [Register an External A2A Agent](../guides/register-an-external-a2a-agent.mdx).
+- **Observability requires instrumenting it.** No traces appear until the agent is connected via the `amp-instrumentation` package (or the manual `init_otel()` path) — see [AMP Instrumentation](../guides/amp-instrumentation.mdx).
+
+## Where the Distinction Shows Up
+
+Both agent types share the same [organization-level resources](./llm-service-provider.mdx) (LLM providers, MCP proxies, gateways) and the same governance model (RBAC, evaluation, [AgentID](./agentid.mdx)). What the type changes is how much of the agent's operation the platform runs for you
+
+For a Platform-Hosted agent, all of it happens inside Agent Manager: you point it at a source repository and the platform builds the image, provisions the workload into the project's namespace, deploys it to each environment in the [deployment pipeline](./deployment-pipeline.mdx), and handles promotion and suspension from the same place. There is no separate CI system, registry, or deployment tooling to operate. For an Externally-Hosted agent none of that applies, you own the build and the deployment.
+
+Platform-Hosted agents are wired automatically, since the platform controls the pod and injects credentials and endpoints as environment variables. Externally-Hosted agents are wired manually where the platform hands you the connection details and you configure them into wherever the agent runs.
+
+Choose Platform-Hosted when you want the platform to operate the agent end to end, and Externally-Hosted when the agent must run somewhere you already control and you only need Agent Manager for governance and observability over it.

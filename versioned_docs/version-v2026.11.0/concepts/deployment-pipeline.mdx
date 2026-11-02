@@ -1,0 +1,21 @@
+---
+title: Deployment Pipeline
+---
+
+# Deployment Pipeline
+
+A Deployment Pipeline defines the order of [environments](./environment.mdx) that agents in a [project](./project.mdx) are allowed to move through. For example, requiring a built artifact to be deployed to staging before that deployment can be promoted to production. Every project is bound to exactly one deployment pipeline.
+
+## Built on OpenChoreo's Deployment Pipeline Abstraction
+
+Agent Manager's deployment pipelines are [OpenChoreo Deployment Pipelines](https://openchoreo.dev/docs/concepts/platform-abstractions/#deploymentpipeline). OpenChoreo defines a DeploymentPipeline as something that "defines the allowed progression paths for applications moving through environments", representing "the organization's software delivery process as a declarative configuration, encoding promotion rules and quality gates." A pipeline can specify parallel paths and conditional progressions based on application characteristics, not just a single linear chain of environments.
+
+## How It Governs Promotion
+
+- An agent version is deployed to one environment at a time, following the order the project's pipeline allows.
+- Moving an agent from one environment to the next is a **promotion**, permissioned separately from the initial deploy.
+- Deploying, promoting, and changing an agent's deployment state each require a scope for the *kind* of environment being targeted: `amp:agent:env-non-production` for ordinary environments, and `amp:agent:env-production` **in addition to it** for those flagged `isProduction` — the production grant stacks on the non-production one rather than replacing it, and reaches nothing on its own. Changing the deployment state also requires `amp:agent:suspend`, the capability beside the environment axis. So the access-control boundary follows the production flag rather than a position in the pipeline — someone can be allowed to push all the way to staging without being allowed into production, whatever the pipeline's shape.
+
+## Relationship to Projects and Environments
+
+A **[Project](./project.mdx)** references exactly one deployment pipeline; the pipeline itself references the **[Environments](./environment.mdx)** it governs promotion across.

@@ -1,0 +1,176 @@
+# Observer MCP Server
+
+WSO2 Agent Manager (AMP) ships a second Model Context Protocol (MCP) server — `am-obs-mcp` — hosted by `agent-manager-observer`. Where the [main MCP server](./mcp-server.mdx) covers the agent lifecycle (projects, agents, builds, deployments), this server lets MCP-capable AI assistants inspect a deployed agent's runtime logs, build logs, metrics, and traces.
+
+## Overview
+
+The observer MCP server is exposed by `agent-manager-observer` at the `/mcp` path on the observer's public URL. It speaks MCP over Streamable HTTP and is protected by the same bearer-token authentication as the observer's REST API (`/api/v1/logs`, `/api/v1/metrics`, `/api/v1/build-logs`, `/api/v1/traces`) — an access token obtained through the same OAuth 2.0 Authorization Code + PKCE flow used for `agent-manager-service`, against the bundled Thunder identity provider.
+
+Unlike the main MCP server's tools, every `am-obs-mcp` tool call is scoped by an explicit, required `organization` parameter (the caller states which organization it wants data for) rather than deriving it from token claims. The one exception is `get_span_details`, which looks a span up by trace ID and span ID alone.
+
+## Available Tools
+
+The observer MCP server provides **7 tools** organized into two toolsets: Observability (runtime logs, build logs, metrics) and Tracing (traces and spans).
+
+Every tool call is authorized against the token's scopes — the trace tools require `amp:observability:trace-read`, and `get_runtime_logs`/`get_build_logs`/`get_metrics` require `amp:observability:log-read`/`build-log-read`/`metric-read` respectively — mirroring the REST routes' per-route checks. Publisher (`amp-publisher-*`) tokens are always confined to trace reads. These scopes are part of the platform-wide model documented in [Authorization](./authorization.mdx).
+
+<details>
+<summary><strong>Observability Toolset (3 tools)</strong></summary>
+
+#### `get_runtime_logs`
+
+Return runtime logs for an agent — the application logs emitted by a deployed agent — filterable by time window, log level, sort order, or text search.
+
+| Parameter       | Required | Description                                                                                                |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `organization`   | Yes      | Organization name.                                                                                          |
+| `project`        | Yes      | Project name.                                                                                               |
+| `agent`          | Yes      | Agent name.                                                                                                 |
+| `environment`    | Yes      | Environment name.                                                                                           |
+| `start_time`     | No       | Start time in RFC3339 format. Defaults to 24h before `end_time`/now. Cannot be in the future. Window cannot exceed 14 days. |
+| `end_time`       | No       | End time in RFC3339 format. Defaults to now.                                                                |
+| `limit`          | No       | Max number of log entries to return. Must be positive; requests over the 10000 cap are rejected (not clamped).             |
+| `sort_order`     | No       | `asc` or `desc`. Defaults to the upstream route's default when omitted.                                     |
+| `log_levels`     | No       | Filter to one or more of `INFO`, `DEBUG`, `WARN`, `ERROR` (case-insensitive).                                |
+| `search_phrase`  | No       | Free-text search phrase to match against log content.                                                       |
+
+#### `get_build_logs`
+
+Return logs for a specific build of an internal agent — the step-by-step output produced while packaging the agent source into a runnable image.
+
+| Parameter      | Required | Description             |
+| -------------- | -------- | ------------------------ |
+| `organization` | Yes      | Organization name.        |
+| `build_name`   | Yes      | Name of the build to fetch logs for. |
+
+#### `get_metrics`
+
+Return CPU and memory usage, request and limit metrics for an agent over a selected time range — runtime resource consumption for a deployment in a specific environment.
+
+| Parameter     | Required | Description                                                                                |
+| ------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `organization`| Yes      | Organization name.                                                                          |
+| `project`     | Yes      | Project name.                                                                                |
+| `agent`       | Yes      | Agent name.                                                                                  |
+| `environment` | Yes      | Environment name.                                                                            |
+| `start_time`  | No       | Start time in RFC3339 format. Defaults to 24h before `end_time`/now. Window cannot exceed 14 days. |
+| `end_time`    | No       | End time in RFC3339 format. Defaults to now.                                                 |
+
+</details>
+
+<details>
+<summary><strong>Tracing Toolset (4 tools)</strong></summary>
+
+#### `list_traces`
+
+Returns a summary view of recent traces for an agent within a time window. A trace is a single end-to-end execution record for an agent request.
+
+| Parameter     | Required | Description                                                                                 |
+| ------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `organization`| Yes      | Organization name.                                                                           |
+| `project`     | Yes      | Project name.                                                                                 |
+| `agent`       | Yes      | Agent name.                                                                                   |
+| `environment` | Yes      | Environment name.                                                                             |
+| `start_time`  | No       | Start time in RFC3339 format. Defaults to 24h before `end_time`/now. Window cannot exceed 30 days. |
+| `end_time`    | No       | End time in RFC3339 format. Defaults to now.                                                  |
+| `limit`       | No       | Maximum number of traces to return. Defaults to 10, up to 1000. |
+| `sort_order`  | No       | `asc` (oldest first) or `desc` (newest first). Defaults to `desc`.                            |
+| `status`      | No       | Root span status: `ok` or `error`. |
+| `min_duration_ms` | No   | Minimum trace duration, in milliseconds. |
+| `min_tokens`  | No       | Minimum total tokens. A trace with no token usage never matches. |
+| `min_span_count` | No    | Minimum number of spans. |
+| `model`       | No       | A model name contains this text, ignoring case. |
+| `conversation_id` | No   | Exact conversation ID. |
+| `missing`     | No       | Only traces missing these fields. Accepts `conversation_id`. |
+| `tool`        | No       | A tool name contains this text, ignoring case. |
+| `tool_error`  | No       | Only traces where a tool call failed. With `tool` set, that tool failed. |
+| `mcp_server`  | No       | An MCP server name contains this text, ignoring case. |
+| `include_models` | No    | Add the models used to each trace. Off by default. |
+| `include_tools` | No     | Add the tools called, and those that failed, to each trace. Off by default. |
+| `include_mcp_servers` | No | Add the MCP servers used to each trace. Off by default. |
+| `cursor`      | No       | `nextCursor` from the previous result, for the next page. Keep the other inputs unchanged. |
+
+A trace must match every filter set. They are the same filters as the Console's, described in [Filter traces](../concepts/observability.mdx#filter-traces). The result sets `truncated` when the search stopped before covering the whole window, with `lookedBackTo` for how far it got. Pass `nextCursor` as `cursor` to continue.
+
+#### `get_traces`
+
+Returns the traces for an agent including full span details within a time window. A trace contains spans that record the internal steps of an execution.
+
+Takes the same scope, time window, and filter parameters as `list_traces`, without the `include_*` inputs and `cursor`. It returns up to 100 traces by default. Set `limit` to get more, up to 1000. Here `truncated` is also set when a trace's spans were cut.
+
+#### `get_trace_details`
+
+Return the metadata plus its full span list for one trace.
+
+| Parameter     | Required | Description                                                                                 |
+| ------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `organization`| Yes      | Organization name.                                                                           |
+| `project`     | Yes      | Project name.                                                                                 |
+| `agent`       | Yes      | Agent name.                                                                                   |
+| `environment` | Yes      | Environment name.                                                                             |
+| `trace_id`    | Yes      | Trace ID to fetch.                                                                             |
+| `start_time`  | No       | Start time in RFC3339 format. Defaults to 24h before `end_time`/now. Window cannot exceed 30 days. |
+| `end_time`    | No       | End time in RFC3339 format. Defaults to now.                                                  |
+
+There is no `limit` or `sort_order` input — the tool always requests the server's full per-request span cap in chronological (`asc`) order, since its job is "show me this trace" rather than a paginated span list.
+
+#### `get_span_details`
+
+Return the execution details for a single span — a single step within a trace execution, such as an LLM call, tool invocation, or retriever lookup, including its timing, inputs, outputs, and attributes.
+
+| Parameter | Required | Description                    |
+| --------- | -------- | ------------------------------- |
+| `trace_id`| Yes      | Trace ID containing the span.   |
+| `span_id` | Yes      | Span ID to fetch.               |
+
+`get_span_details` has no `organization` parameter: the underlying lookup is scoped by trace/span ID alone and never consults organization or namespace scoping.
+
+</details>
+
+## Finding the Observer MCP Server URL
+
+The observer MCP server URL follows the public URL of `agent-manager-observer`:
+
+```
+<observer-public-url>/mcp
+```
+
+If you don't know the observer's public URL, `agent-manager-service` publishes it through its unauthenticated service-configuration discovery endpoint:
+
+```bash
+curl http://api.amp.localhost:8080/api/v1/config
+```
+
+```json
+{ "observerBaseUrl": "http://traces.amp.localhost:11080" }
+```
+
+Append `/mcp` to the returned `observerBaseUrl` to get the full MCP server URL, e.g.:
+
+```
+http://traces.amp.localhost:11080/mcp
+```
+
+If you have changed the observer's public URL from the default, substitute that value.
+
+This endpoint is registered in Thunder as its own dedicated resource server, `amp-observer-mcp-resource-server`, separate from the main MCP server's resource server — see the [main MCP server reference](./mcp-server.mdx#default-oauth-client) for why each `/mcp` endpoint needs its own identifier rather than sharing one.
+
+## Configuring AI Assistants
+
+The observer MCP server has its own dedicated pre-registered OAuth client — `am-obs-mcp`, with pinned callback port `33419` — distinct from the [main MCP server](./mcp-server.mdx#default-oauth-client)'s `am-mcp`/`33418`. The `am-obs-mcp` client is allowed only the OIDC scopes plus the four `amp:observability:*-read` scopes, so a token obtained for the main MCP server cannot be reused here (and vice versa). Follow the [Configuring AI Assistants](./mcp-server.mdx#configuring-ai-assistants) instructions there, substituting the observer MCP server URL, client ID, and callback port, for example:
+
+*Migrating from an earlier setup that used the shared `am-mcp` client: remove and re-add the server registration with `am-obs-mcp` — existing `am-mcp` sessions lose the observability scopes on token refresh and observer tool calls start returning 403.*
+
+*Upgrading an existing install: the observability scopes in the token come from permissions registered on the observer MCP resource server in Thunder, seeded by the bootstrap job only — on existing installs, re-run the bootstrap job (it replaces legacy MCP resource servers automatically and seeds the permissions); a `helm upgrade` alone will not re-seed, and without the permissions tokens carry an empty scope list and every tool call returns 403.*
+
+```bash
+claude mcp add --transport http agent-manager-observer http://traces.amp.localhost:11080/mcp \
+  --client-id am-obs-mcp \
+  --callback-port 33419
+```
+
+## Next Steps
+
+- Try a few prompts in Claude Code, e.g. *"Show me the last 10 traces for agent X"*, *"Get the runtime logs for agent X in the dev environment"*, *"What are the CPU and memory metrics for agent X over the last hour?"*.
+- Ask for filtered traces in plain language, e.g. *"Find the failed traces for agent X in dev from the last day that called `search_issues`"*, or *"List agent X's traces from the last 3 hours that took over 10 seconds and used the github MCP server"*.
+- See [MCP Server](./mcp-server.mdx) for the agent-lifecycle tools (projects, agents, builds, deployments).

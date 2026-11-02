@@ -14,9 +14,6 @@
          operator, since the gateway requires them regardless of that setting.
 */}
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 export const Prod = ({production, children}) => (production ? <>{children}</> : null);
 export const Dev = ({production, children}) => (production ? null : <>{children}</>);
 
@@ -29,15 +26,7 @@ The Agent Manager installs as a set of Helm charts on top of OpenChoreo. The com
 Thunder (identity provider) must be installed before proceeding — see the Thunder installation step in Phase 1. The variables `THUNDER_PUBLIC_URL`, `THUNDER_INTERNAL_URL`, `CONSOLE_PUBLIC_URL`, `API_PUBLIC_URL`, `OBS_API_PUBLIC_URL`, `CONSOLE_PUBLIC_HOST`, `API_PUBLIC_HOST`, `OBS_API_PUBLIC_HOST`, and `INSTRUMENTATION_URL` must be set from the Configuration Variables section. The production steps below additionally use `AGENTS_DOMAIN` — the domain deployed agents are served on, `agents.<your base domain>` — to build the gateway's hostname and virtual host. The `*_PUBLIC_HOST` variables carry the bare hostname (no scheme or port) and become the HTTPRoute hostnames on the plane gateways.
 :::
 
-<Tabs groupId="distribution" queryString>
-<TabItem value="community" label="Community" default>
-
-The community images are public, so no image pull secret is needed.
-
-</TabItem>
-<TabItem value="subscription" label="WSO2 Subscription">
-
-Create the `wso2-registry-credentials` image pull secret in the namespaces that run Agent Manager images, with the registry username and token from the earlier **WSO2 Subscription** tab:
+Create the `wso2-registry-credentials` image pull secret in the namespaces that run Agent Manager images, with the registry username and token from the Configuration Variables step:
 
 ```bash
 for ns in "${AMP_NS}" "${OBSERVABILITY_NS}" workflows-default; do
@@ -65,9 +54,6 @@ kubectl create secret generic wso2-gateway-registry-credentials \
   --from-literal=password="$AMP_REGISTRY_PASSWORD" \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
-
-</TabItem>
-</Tabs>
 
 ---
 
@@ -103,55 +89,7 @@ This applies whatever `developmentMode` is set to. Earlier gateway releases auto
 Store the key with the rest of your platform secrets. It encrypts credentials the gateway holds, and losing it means those entries cannot be decrypted.
 :::
 
-<Tabs groupId="distribution" queryString>
-<TabItem value="community" label="Community" default>
-
-<Dev production={props.production}>
-
-```bash
-helm install gateway-operator \
-  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
-  --version 0.11.0 \
-  --namespace ${DATA_PLANE_NS} \
-  --set logging.level=debug \
-  --set gatewayApi.installStandardCRDs=false \
-  --set gateway.helm.chartVersion=1.2.2 \
-  --set gateway.values.gateway.controller.image.repository=ghcr.io/wso2/api-platform/gateway-controller \
-  --set gateway.values.gateway.controller.image.tag=1.2.1 \
-  --set gateway.values.gateway.gatewayRuntime.image.repository=ghcr.io/wso2/api-platform/gateway-runtime \
-  --set gateway.values.gateway.gatewayRuntime.image.tag=1.2.1 \
-  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
-  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
-  --timeout 600s
-```
-
-</Dev>
-
-<Prod production={props.production}>
-
-```bash
-helm install gateway-operator \
-  oci://ghcr.io/wso2/api-platform/helm-charts/gateway-operator \
-  --version 0.11.0 \
-  --namespace ${DATA_PLANE_NS} \
-  --set logging.level=info \
-  --set gatewayApi.installStandardCRDs=false \
-  --set gateway.helm.chartVersion=1.2.2 \
-  --set gateway.values.gateway.controller.image.repository=ghcr.io/wso2/api-platform/gateway-controller \
-  --set gateway.values.gateway.controller.image.tag=1.2.1 \
-  --set gateway.values.gateway.gatewayRuntime.image.repository=ghcr.io/wso2/api-platform/gateway-runtime \
-  --set gateway.values.gateway.gatewayRuntime.image.tag=1.2.1 \
-  --set gateway.values.gateway.controller.encryptionKeys.enabled=true \
-  --set gateway.values.gateway.controller.encryptionKeys.secretName=gateway-encryption-keys \
-  --timeout 600s
-```
-
-</Prod>
-
-</TabItem>
-<TabItem value="subscription" label="WSO2 Subscription">
-
-The gateway for this release, `2026.10.0`, is published only to your registry project. The operator itself still comes from `ghcr.io`, and pulls the gateway chart and images from `GATEWAY_REGISTRY`, set in the earlier **WSO2 Subscription** tab, with the `wso2-gateway-registry-credentials` secret. The controller in this gateway release serves its health check on the `admin` port under `/api/admin/v1/health`, so the probes are set as well.
+The gateway for this release, `2026.10.0`, is published only to your registry project. The operator itself still comes from `ghcr.io`, and pulls the gateway chart and images from `GATEWAY_REGISTRY`, set in the Configuration Variables step, with the `wso2-gateway-registry-credentials` secret. The controller in this gateway release serves its health check on the `admin` port under `/api/admin/v1/health`, so the probes are set as well.
 
 <Dev production={props.production}>
 
@@ -208,14 +146,17 @@ helm install gateway-operator \
 ```
 
 </Prod>
-
-</TabItem>
-</Tabs>
 
 :::note Pin the gateway chart, do not inherit it
 `gateway.helm.chartVersion` decides which gateway chart the operator deploys, and it is the only thing that decides it — the `APIGateway` resource carries no chart version. Inheriting the operator's default has historically produced a chart whose templates do not render the controller's control-plane address, giving a gateway that installs, programs, and serves traffic while never registering with Agent Manager — so it never appears in the gateway list. Pin the chart explicitly, as above.
 
-Pin the container images too. The chart version and the image tags move independently: `1.2.2` is the newest published gateway chart and its defaults point at `1.2.0` images, while `1.2.1` controller and runtime images are published without a matching chart. Setting `chartVersion` alone would therefore leave you on `1.2.0` images, so the four `image.repository`/`image.tag` values above carry the runtime to `1.2.1`. Check the pod images after installing rather than trusting the chart version alone.
+Pin the container images too. The chart version and the image tags are set separately, so `chartVersion` alone can leave the gateway on the chart's default images, which point at a public registry that does not carry this release. The four `image.repository`/`image.tag` values above pull the controller and runtime at `2026.10.0` from your project. Check the pod images after installing rather than trusting the chart version alone.
+
+These are the versions the gateway extension chart of your version is tested with. The chart records them in its `gatewayRelease` values, which the one-command installer reads, and an update can move them. To see them for your version:
+
+```bash
+helm show values "oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension" --version "${VERSION}" | grep -A3 '^gatewayRelease:'
+```
 
 `gateway.values` is the operator's passthrough into that chart: anything set under it is merged into the values the gateway is deployed with, which is how the encryption keys above are wired.
 :::

@@ -71,7 +71,7 @@ The tags use `--set-string` because `--set` turns a tag that looks like a number
 `--reuse-values` preserves the settings the operator was installed with, such as the gateway chart version and the encryption key secret name. Without them the gateway cannot start: it requires its encryption keys.
 
 :::warning Setup scripts reset the image
-On a quick-start or k3d install, `deployments/setup/ensure-gateway-operator.sh` reinstalls the operator on every setup run with the stock values and without `--reuse-values`. The image tag comes from `GATEWAY_IMAGE_VERSION` in `deployments/setup/env.sh`, but the image repository is written into the script itself. Change both in your copy of the scripts, or re-run this step after every setup run.
+On a quick-start or k3d install, `deployments/setup/ensure-gateway-operator.sh` reinstalls the operator on every setup run with the stock values and without `--reuse-values`. The image tag comes from the `gatewayRelease` values of the gateway extension chart, and the image repository from `GATEWAY_REGISTRY`. Change both in your copy, or re-run this step after every setup run.
 :::
 
 :::warning
@@ -128,10 +128,10 @@ helm list -n ${GATEWAY_NS}
 ```
 NAME                             NAMESPACE         REVISION  CHART
 api-platform-default-default     default-default   2         wso2-amp-api-platform-gateway-extension-2026.11.0
-api-platform-default-default-gw  default-default   1         gateway-2026.09.24
+api-platform-default-default-gw  default-default   1         gateway-2026.10.0
 ```
 
-The one you want is the release whose `CHART` column starts with `gateway-`. The other is the extension release, which does not run the pods. Note its chart version from the same column (`2026.09.24` above); the upgrade must use it.
+The one you want is the release whose `CHART` column starts with `gateway-`. The other is the extension release, which does not run the pods. Note its chart version from the same column (`2026.10.0` above); the upgrade must use it.
 
 In `openchoreo-data-plane`, other platform releases such as `gateway-operator` are listed too. Match on the `-gw` name of the environment's extension release.
 
@@ -139,9 +139,11 @@ The operator names the gateway release `<apigateway-name>-gw` only while that fi
 
 ### Upgrade the Gateway Release
 
+The gateway chart for this release is published to your registry project, so Helm must be signed in to `registry.wso2.com` (see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx)):
+
 ```bash
 helm upgrade <gateway-release> \
-  oci://ghcr.io/wso2/api-platform/helm-charts/gateway \
+  oci://registry.wso2.com/<project>/sts/helm-charts/gateway \
   --version <chart-version> \
   --namespace ${GATEWAY_NS} \
   --reuse-values \

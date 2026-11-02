@@ -70,7 +70,8 @@
     "qs": "^6.16.0",
     "tinypool": "^2.2.0",
     "colord": "^2.10.0",
-    "joi": "^18.2.8",
+    "joi": "^18.3.1",
+    "follow-redirects": "^1.16.2",
     "gray-matter": {
       "js-yaml": "^3.15.0"
     },

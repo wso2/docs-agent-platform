@@ -7,7 +7,7 @@ title: Evaluation Extension
 A Helm chart to add Evaluation functionality for the Agent Management Platform, by Deploying and Configuring Monitor evaluation workflows.
 
 ```bash
-helm install amp-evaluation-extension oci://ghcr.io/wso2/wso2-amp-evaluation-extension \
+helm install amp-evaluation-extension oci://registry.wso2.com/<project>/sts/helm-charts/wso2-amp-evaluation-extension \
   --namespace <namespace> --create-namespace \
   --values my-values.yaml
 ```
@@ -19,7 +19,7 @@ helm install amp-evaluation-extension oci://ghcr.io/wso2/wso2-amp-evaluation-ext
 | `ampEvaluation` | AMP Evaluation image configuration | object |  |
 | `ampEvaluation.workflowNamespace` | Namespace OpenChoreo runs this environment's Argo workflows in. The evaluation job namespace is derived from it as "workflows-&lt;value&gt;". | string | `"default"` |
 | `ampEvaluation.image` | Docker image configuration for monitor evaluation | object |  |
-| `ampEvaluation.image.repository` | Image repository For local development: will be pushed to local registry For production: ghcr.io/wso2/amp-evaluation-monitor | string | `"ghcr.io/wso2/amp-evaluation-monitor"` |
+| `ampEvaluation.image.repository` | Image repository For local development: will be pushed to local registry For production: `registry.wso2.com/<project>/sts/amp-evaluation-monitor` | string | `"registry.wso2.com/<project>/sts/amp-evaluation-monitor"` |
 | `ampEvaluation.image.tag` | Image tag IMPORTANT: For production, this should match the amp-evaluation SDK version used in dbMigration.evaluatorGenerator.image.tag in the wso2-agent-manager chart. Example: If using amp-evaluation==0.1.5, set this to "0.1.5" | string | `"2026.11.0"` |
 | `ampEvaluation.image.pullPolicy` | Image pull policy | string | `"IfNotPresent"` |
 | `ampEvaluation.useLocalRegistry` | Whether to use local registry or external image When true, image will be prefixed with registry endpoint When false, uses repository:tag directly (for k3d imported images or external registries) | boolean | `false` |

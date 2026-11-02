@@ -7,7 +7,7 @@ title: Agent Manager
 Helm chart for WSO2 Agent Management Platform - Deploy, manage, and govern AI agents at scale
 
 ```bash
-helm install agent-manager oci://ghcr.io/wso2/wso2-agent-manager \
+helm install agent-manager oci://registry.wso2.com/<project>/sts/helm-charts/wso2-agent-manager \
   --namespace <namespace> --create-namespace \
   --values my-values.yaml
 ```
@@ -20,7 +20,7 @@ helm install agent-manager oci://ghcr.io/wso2/wso2-agent-manager \
 | `agentManagerService.enabled` | Install the control-plane API. | boolean | `true` |
 | `agentManagerService.replicaCount` | Number of pod replicas to run | integer | `1` |
 | `agentManagerService.image` | Container image for the control-plane API. | object |  |
-| `agentManagerService.image.repository` | Container image repository | string | `"ghcr.io/wso2/amp-api"` |
+| `agentManagerService.image.repository` | Container image repository | string | `"registry.wso2.com/<project>/sts/amp-api"` |
 | `agentManagerService.image.tag` | Container image tag. Defaults to the chart's appVersion when empty | string | `"2026.11.0"` |
 | `agentManagerService.image.pullPolicy` | Image pull policy (`Always`, `IfNotPresent`, or `Never`) | string | `"IfNotPresent"` |
 | `agentManagerService.service` | Reachable externally via the control-plane gateway (see ocIngress); set type to LoadBalancer to restore a dedicated external endpoint. | object |  |
@@ -213,7 +213,7 @@ helm install agent-manager oci://ghcr.io/wso2/wso2-agent-manager \
 | `console.enabled` | Install the console. | boolean | `true` |
 | `console.replicaCount` | Number of pod replicas to run | integer | `1` |
 | `console.image` | Container image for the console. | object |  |
-| `console.image.repository` | Container image repository | string | `"ghcr.io/wso2/amp-console"` |
+| `console.image.repository` | Container image repository | string | `"registry.wso2.com/<project>/sts/amp-console"` |
 | `console.image.tag` | Container image tag. Defaults to the chart's appVersion when empty | string | `"2026.11.0"` |
 | `console.image.pullPolicy` | Image pull policy (`Always`, `IfNotPresent`, or `Never`) | string | `"Always"` |
 | `console.service` | Reachable externally via the control-plane gateway (see ocIngress); set type to LoadBalancer to restore a dedicated external endpoint. | object |  |
@@ -290,7 +290,7 @@ helm install agent-manager oci://ghcr.io/wso2/wso2-agent-manager \
 | `dbMigration` | Database Migration Job Configuration | object |  |
 | `dbMigration.enabled` | Run the migration job. | boolean | `true` |
 | `dbMigration.image` | Container image for the migration job. | object |  |
-| `dbMigration.image.repository` | Container image repository | string | `"ghcr.io/wso2/amp-api"` |
+| `dbMigration.image.repository` | Container image repository | string | `"registry.wso2.com/<project>/sts/amp-api"` |
 | `dbMigration.image.tag` | Container image tag. Defaults to the chart's appVersion when empty | string | `"2026.11.0"` |
 | `dbMigration.image.pullPolicy` | Image pull policy (`Always`, `IfNotPresent`, or `Never`) | string | `"IfNotPresent"` |
 | `dbMigration.resources` | Compute resources for the migration job. | object |  |

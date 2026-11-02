@@ -7,7 +7,7 @@ title: Observability Extension
 A Helm chart to add Tracing functionality for the Agent Management Platform, by Deploying and Configuring the Agent Manager Observer.
 
 ```bash
-helm install amp-observability-extension oci://ghcr.io/wso2/wso2-amp-observability-extension \
+helm install amp-observability-extension oci://registry.wso2.com/<project>/sts/helm-charts/wso2-amp-observability-extension \
   --namespace <namespace> --create-namespace \
   --values my-values.yaml
 ```
@@ -22,7 +22,7 @@ helm install amp-observability-extension oci://ghcr.io/wso2/wso2-amp-observabili
 | `amObserver.name` | Name used for the observer's Kubernetes resources. | string | `"amp-observer"` |
 | `amObserver.replicaCount` | Number of pod replicas to run | integer | `1` |
 | `amObserver.image` | Container image for the observer. | object |  |
-| `amObserver.image.repository` | Container image repository | string | `"ghcr.io/wso2/amp-observer"` |
+| `amObserver.image.repository` | Container image repository | string | `"registry.wso2.com/<project>/sts/amp-observer"` |
 | `amObserver.image.tag` | Container image tag. Defaults to the chart's appVersion when empty | string | `"2026.11.0"` |
 | `amObserver.image.pullPolicy` | Image pull policy (`Always`, `IfNotPresent`, or `Never`) | string | `"IfNotPresent"` |
 | `amObserver.port` | Port the observer serves its API on. | integer | `9098` |

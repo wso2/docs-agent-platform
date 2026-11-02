@@ -1,0 +1,232 @@
+---
+sidebar_position: 4
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Production Recommendations
+
+Use this page to check a finished [installation](./on-your-environment.mdx) against production practice. The install guide gives you a production baseline when you choose **Production** at each step. This page covers what is left to decide and operate: a checklist, identity, gateway hardening, build limits, scaling, and cluster security.
+
+OpenChoreo's [production configuration index](https://openchoreo.dev/docs/getting-started/try-it-out/on-your-environment/#production-configuration) covers its components in more depth.
+
+### Checklist
+
+The first four items can only be fixed by reinstalling the component. Verify them before going live.
+
+| Item | Where | When it can be applied |
+|---|---|---|
+| Thunder on external PostgreSQL | [Step 4](./on-your-environment.mdx#step-4-install-thunder-extension-identity-provider) | Install only |
+| Thunder client secrets are not shipped defaults | [Step 4](./on-your-environment.mdx#step-4-install-thunder-extension-identity-provider) | Install only |
+| Thunder issuer and redirect URIs are the final hostnames | [Step 4](./on-your-environment.mdx#step-4-install-thunder-extension-identity-provider) | Install only |
+| Agent Manager on external PostgreSQL | [Phase 2](./on-your-environment.mdx#phase-2-agent-manager-installation) | Install (migration afterwards) |
+| OpenBao sealed, persistent, and unseal keys escrowed | [Step 2](./on-your-environment.mdx#step-2-set-up-the-secret-stores) | Any time, with re-seeding |
+| OpenSearch sized to retention, admin password matches OpenBao | [Step 8](./on-your-environment.mdx#step-8-setup-observability-plane) | Any time |
+| Container registry is yours, with `tlsVerify=true` | [Phase 2](./on-your-environment.mdx#phase-2-agent-manager-installation) | Any time, affects new builds |
+| Bootstrap admin password replaced | [Identity](#identity-and-access) | Any time |
+| JWT signature verification active on the API and observer | [Identity](#confirm-jwt-signature-verification-is-active) | Any time |
+| Gateway development mode off, encryption keys set | [Gateway hardening](#gateway-hardening) | Set during install |
+| Post-upgrade patches re-applied | [After a chart upgrade](#after-a-chart-upgrade) | After every relevant `helm upgrade` |
+| Build workloads bounded by a node pool or ResourceQuota | [Build workflows](#build-workflows) | Any time |
+| Stateless services at multiple replicas | [High availability](#high-availability-and-scaling) | Any time |
+| NetworkPolicies, RBAC, and Pod Security Standards applied | [Cluster security](#certificates-and-cluster-security) | Any time |
+| Stronger isolation tier for untrusted agent code | [Agent isolation](#agent-isolation) | Any time, per environment |
+| Only the three plane gateways are LoadBalancer Services | [Step 8](./on-your-environment.mdx#step-8-setup-observability-plane) | Any time |
+
+The only LoadBalancer Services should be the `gateway-default` Service of each of the three planes. Anything else this command lists is reachable from outside the cluster, so convert it to `ClusterIP`:
+
+```bash
+kubectl get svc -A --field-selector spec.type=LoadBalancer
+```
+
+### After a chart upgrade
+
+These patches are applied with `kubectl` on top of the Helm output. Any `helm upgrade` of the owning chart reverts them. The symptoms are quiet: `200` with empty lists, or `403` on build logs, while every pod stays healthy.
+
+| Patch | Owning chart | Symptom when missing |
+|---|---|---|
+| `openchoreo-api-config` entitlement claim ([Step 5](./on-your-environment.mdx#patch-the-service-account-entitlement-claim-required-with-thunder--045)) | Control Plane | Empty lists; environment not found |
+| `ClusterAuthzRoleBinding` entitlement claims ([Step 5](./on-your-environment.mdx#patch-the-service-account-entitlement-claim-required-with-thunder--045)) | Control Plane | Same as above |
+| `observer-auth-config` entitlement claim ([Step 8](./on-your-environment.mdx#step-8-setup-observability-plane)) | Observability Plane | Build-log queries return `403` |
+
+Do not delete the patched objects to force Helm to recreate them. The ClusterAuthzRoleBindings span two charts. Deleting `amp-api-client-binding` empties every organization and agent list. Recreate it from its own chart with `helm get manifest amp-platform-resources -n ${DEFAULT_NS}`.
+
+### Identity and Access
+
+Thunder generates the console's `admin` password at install time. It is stored in the `amp-admin-credentials` Secret and is never a shipped default. Log in once, change the password from the profile menu, then create real users or connect your identity provider. See the ThunderID [Manage Users](https://thunderid.dev/docs/v1.0.x/guides/users/manage-users/) and [Manage Identity Providers](https://thunderid.dev/docs/v1.0.x/guides/identity-providers/manage-identity-providers/) guides. Gateway trust is covered separately in [Configure Identity Providers at the Gateway](./configure-identity-providers-at-the-gateway.mdx).
+
+Each environment's Thunder has its own admin password, generated at provisioning. Store it in your secret manager when it is printed.
+
+The platform's internal client secrets have no rotation flow. Changing one means re-running the Thunder bootstrap and updating every consumer in the same window.
+
+#### Confirm JWT signature verification is active
+
+Both the API and the observer have a development-only path that decodes tokens without verifying them. The install disables it, but confirm:
+
+```bash
+# Neither should report "true"
+kubectl get deploy amp-api -n ${AMP_NS} \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="IS_LOCAL_DEV_ENV")].value}{"\n"}'
+kubectl get deploy amp-observer -n ${OBSERVABILITY_NS} \
+  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="IS_LOCAL_DEV_ENV")].value}{"\n"}'
+
+# The JWKS URL should point at your Thunder
+kubectl get configmap -n ${AMP_NS} -o yaml | grep -i KEY_MANAGER_JWKS_URL
+```
+
+Empty output from the first two commands is the expected result. The `amp-db-migration` job sets the variable, but it only runs migrations and validates no tokens.
+
+### External Dependencies
+
+| Dependency | Reference |
+|---|---|
+| Thunder | [Production guidelines](https://thunderid.dev/docs/v1.0.x/deployment/production-guidelines/), [caching](https://thunderid.dev/docs/v1.0.x/deployment/production-guidelines/#configure-caching) |
+| Secret management | [OpenChoreo secret management](https://openchoreo.dev/docs/platform-engineer-guide/secret-management/), [OpenBao auto-unseal](https://openbao.org/docs/concepts/seal/) |
+| Observability | [OpenChoreo observability and alerting](https://openchoreo.dev/docs/platform-engineer-guide/observability-alerting/) |
+| Container registry | [OpenChoreo registry configuration](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers) |
+| API Platform Gateway | [High availability](https://wso2.com/api-platform/docs/api-gateway/1.1.0/deployment/high-availability-production-deployment/), [database configuration](https://wso2.com/api-platform/docs/api-gateway/1.1.0/deployment/production-deployment/database-configuration/) |
+| AI Gateway | [Kubernetes with the gateway operator](https://wso2.com/api-platform/docs/ai-gateway/1.1.0/deployment-modes/kubernetes/gateway-operator/) |
+
+#### Observability storage
+
+To move off the in-cluster OpenSearch, install the logs module with `openSearch.enabled=false`, and point the modules at your managed domain through the `opensearch-admin-credentials` Secret. Existing data does not migrate automatically. Decide before trace volume builds up.
+
+### Gateway Hardening
+
+The gateway extension ships with `developmentMode: true`. The install in [Phase 2](./on-your-environment.mdx#phase-2-agent-manager-installation) already disables it. If you inherited a gateway with development mode on, turn it off:
+
+<Tabs groupId="helm-version">
+  <TabItem value="helm4" label="Helm 4" default>
+
+```bash
+helm upgrade --server-side=false api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --reuse-values \
+  --set developmentMode=false \
+  --timeout 1800s
+```
+
+  </TabItem>
+  <TabItem value="helm3" label="Helm 3">
+
+```bash
+helm upgrade api-platform-default-default \
+  oci://${HELM_CHART_REGISTRY}/wso2-amp-api-platform-gateway-extension \
+  --version ${VERSION} \
+  --namespace ${DATA_PLANE_NS} \
+  --reuse-values \
+  --set developmentMode=false \
+  --timeout 1800s
+```
+
+  </TabItem>
+</Tabs>
+
+The encryption key is required whether or not development mode is on. If the upgrade fails with `encryptionKeys must be enabled`, create the key as described in [Phase 2](./on-your-environment.mdx#phase-2-agent-manager-installation).
+
+Set gateway values through the operator's passthrough, not the rendered ConfigMap. Editing the ConfigMap causes a field-manager conflict on the next upgrade:
+
+```bash
+--set gateway.values.gateway.controller.<setting>=<value>
+```
+
+:::warning A gateway that fails its first install stays failed
+If the gateway cannot start on first install, the operator stops after 10 retries and keeps `Programmed=False`, even after you fix the values. Recover by running `helm uninstall <release>-gw`, deleting the `APIGateway` resource, and running `helm upgrade` on the extension.
+:::
+
+Verify that the gateway registered, not just that it runs:
+
+```bash
+kubectl get apigateway -n ${DATA_PLANE_NS}
+# expect PROGRAMMED=True
+```
+
+Rate-limit counters are in memory by default and are not shared across replicas. Set `backend: redis` under `apiGateway.config.policyConfigurations.ratelimit_v1` when you run more than one replica.
+
+:::warning Rollbacks need the API reachable
+The extension's bootstrap job also runs as a `pre-rollback` hook. If the Agent Manager API is down, `helm rollback` can leave the release in `pending-rollback`. Retry once the API is back, or use `helm rollback --no-hooks`.
+:::
+
+#### Gateway roles and topology
+
+A gateway's role is `INGRESS`, `EGRESS`, or `BOTH`. The default environment uses `BOTH`. For independent scaling and hardening, create an environment with `GATEWAY_TOPOLOGY=split`. See [Gateway topology](./environment-management.mdx#gateway-topology).
+
+- An environment can have at most one ingress-capable gateway (`INGRESS` or `BOTH`). Egress gateways are uncapped.
+- A role is fixed at first registration. Changing topology later means deleting and recreating the environment.
+
+`REGULAR` and `AI` are deprecated aliases for `BOTH` and `EGRESS`.
+
+### Build Workflows
+
+Build pods have no default resource limit, so a burst of builds can starve serving workloads.
+
+1. **Use dedicated build nodes.** This is preferred. It needs no per-pod declarations, and builds never fail on a quota.
+2. **Add a LimitRange and a ResourceQuota** in the `workflows-<environment>` namespace. Create the namespace's objects after the first successful build, because OpenChoreo creates the namespace then. The LimitRange must come first. A quota that tracks requests rejects every build pod without them.
+
+Measure before you set values. Run a build and watch its usage:
+
+```bash
+kubectl top pod -n workflows-default --containers
+```
+
+Then apply the objects. The numbers are placeholders:
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: build-workload-defaults
+  namespace: workflows-default
+spec:
+  limits:
+    - type: Container
+      # Replace with your measured values.
+      defaultRequest:
+        cpu: 500m
+        memory: 1Gi
+      default:
+        cpu: "2"
+        memory: 4Gi
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: build-workloads
+  namespace: workflows-default
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.cpu: "16"
+    limits.memory: 32Gi
+EOF
+```
+
+The quota sets how many build steps run at once. Builds beyond it stay `Pending`. If builds fail after you apply these, first raise the memory and CPU limits. An OOM or throttle looks like a broken build.
+
+### High Availability and Scaling
+
+The production install already runs the API, console, and observer at two replicas. To scale further, adjust:
+
+- `agentManagerService.replicaCount` and `console.replicaCount` on `wso2-agent-manager`
+- `amObserver.replicaCount` on the observability extension
+- `thunder.deployment.replicaCount`, which requires external PostgreSQL and Redis
+
+The API runs a monitor scheduler with a lock, so scheduled evaluations fire once regardless of replica count.
+
+### Certificates and Cluster Security
+
+With Let's Encrypt, renewals are automatic. Monitor the `Certificate` resources and rotate the DNS credentials on your normal schedule. With a corporate CA, track the intermediate's expiry yourself.
+
+Restrict namespace traffic with NetworkPolicies. Only the gateways should reach the OTel collector and OpenSearch. Scope RBAC to the namespaces each user operates in, and enforce Pod Security Standards on workload namespaces.
+
+Confirm that your CNI enforces NetworkPolicy. A CNI without a policy engine accepts the platform's policies and blocks nothing.
+
+### Agent Isolation
+
+Agents run under **runc** by default. For untrusted agent code, use [gVisor](./isolation-tiers/gvisor.mdx) or [Kata Containers](./isolation-tiers/kata.mdx). Both need dedicated nodes, so plan those alongside the build nodes.
+

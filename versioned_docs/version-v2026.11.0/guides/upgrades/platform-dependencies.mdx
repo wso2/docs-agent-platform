@@ -17,7 +17,7 @@ The WSO2 Agent Manager version is not the version of every dependency. Set each 
 | `openchoreo-workflow-plane` | 1.2.0 | 1.2.8 | The default cluster agent CPU and memory resources double. |
 | `openchoreo-observability-plane` | 1.2.0 | 1.2.8 | Re-apply the `client_id` patch. Set the NetworkPolicy exemption and the OpenSearch passthrough listener. |
 | `observability-logs-opensearch` | 0.5.3 | 0.5.5 | Moves OpenSearch from 3.3.0 to 3.9.0, which cannot be rolled back without a snapshot. |
-| `observability-tracing-opensearch` | 0.6.0 | 0.8.0 | The default release name is `observability-traces-opensearch`. |
+| `observability-tracing-opensearch` | 0.6.0 | 0.8.1 | The default release name is `observability-traces-opensearch`. |
 | `observability-metrics-prometheus` | 0.6.1 | 0.8.1 | Apply the Prometheus Operator CRDs first. Prometheus and Alertmanager move to PersistentVolumeClaims. |
 | `wso2-amp-thunder-extension` | v1.0.0 | 2026.11.0 | Its bundled ThunderID chart moves from 1.0.0 to 1.0.2. |
 | Environment `thunderid` releases | 1.0.0 | 1.0.2 | Upgrade every environment instance separately. |
@@ -259,7 +259,7 @@ Upgrade the tracing module. It keeps using the `amp-opentelemetry-collector-conf
 
 ```bash
 helm upgrade observability-traces-opensearch "$OC_REG/observability-tracing-opensearch" \
-  --version 0.8.0 -n "$OBS_NS" \
+  --version 0.8.1 -n "$OBS_NS" \
   --reset-then-reuse-values --timeout 15m --wait
 ```
 
@@ -332,4 +332,4 @@ A Helm rollback does not restore CRDs or persistent data. Recover a failed stage
 - [OpenChoreo upgrade overview](https://openchoreo.dev/docs/platform-engineer-guide/upgrades/overview/)
 - [Logs module 0.5.5 upgrade notes](https://github.com/openchoreo/community-modules/blob/observability-logs-opensearch-0.5.5/observability-logs-opensearch/README.md#upgrading-to-055)
 - [Metrics module 0.8.1 upgrade notes](https://github.com/openchoreo/community-modules/blob/observability-metrics-prometheus-0.8.1/observability-metrics-prometheus/README.md#upgrading)
-- [Tracing module 0.8.0](https://github.com/openchoreo/community-modules/blob/observability-tracing-opensearch-0.8.0/observability-tracing-opensearch/README.md)
+- [Tracing module 0.8.1](https://github.com/openchoreo/community-modules/blob/observability-tracing-opensearch-0.8.1/observability-tracing-opensearch/README.md)

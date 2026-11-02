@@ -13,11 +13,12 @@ OpenChoreo's [production configuration index](https://openchoreo.dev/docs/gettin
 
 ### Checklist
 
-The first four items can only be fixed by reinstalling the component. Verify them before going live.
+The first five items can only be fixed by reinstalling the component. Verify them before going live.
 
 | Item | Where | When it can be applied |
 |---|---|---|
 | Thunder on external PostgreSQL | [Step 4](./on-your-environment.mdx#step-4-install-thunder-extension-identity-provider) | Install only |
+| Each environment's Thunder on external PostgreSQL | [Prepare Storage](./on-your-environment.mdx#prepare-storage-for-the-environments-thunder) | Install (manual migration afterwards, with `THUNDER_FORCE_STORAGE_CHANGE=true`) |
 | Thunder client secrets are not shipped defaults | [Step 4](./on-your-environment.mdx#step-4-install-thunder-extension-identity-provider) | Install only |
 | Thunder issuer and redirect URIs are the final hostnames | [Step 4](./on-your-environment.mdx#step-4-install-thunder-extension-identity-provider) | Install only |
 | Agent Manager on external PostgreSQL | [Phase 2](./on-your-environment.mdx#phase-2-agent-manager-installation) | Install (migration afterwards) |
@@ -215,6 +216,7 @@ The production install already runs the API, console, and observer at two replic
 - `agentManagerService.replicaCount` and `console.replicaCount` on `wso2-agent-manager`
 - `amObserver.replicaCount` on the observability extension
 - `thunder.deployment.replicaCount`, which requires external PostgreSQL and Redis
+- `THUNDER_REPLICAS` for each environment's Thunder. More than one replica requires external PostgreSQL and Redis. The database is fixed after first provisioning, but the cache and replica count can change on a re-run. See [Prepare Storage](./on-your-environment.mdx#prepare-storage-for-the-environments-thunder).
 
 The API runs a monitor scheduler with a lock, so scheduled evaluations fire once regardless of replica count.
 

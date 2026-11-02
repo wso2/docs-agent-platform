@@ -201,6 +201,7 @@ Each install step below carries its production configuration inline, so you can 
 | `THUNDER_PUBLIC_URL` and `CONSOLE_PUBLIC_URL` | [Step 4](#step-4-install-thunder-extension-identity-provider) | The issuer URL and the console's OAuth redirect URIs are persisted on first boot |
 | The MCP resource identifiers (`API_PUBLIC_URL`, `OBS_API_PUBLIC_URL`) | [Step 4](#step-4-install-thunder-extension-identity-provider) | Registered as OAuth resource servers by the same seeding job; an identifier is matched exactly, so a later change makes MCP logins fail with `invalid_target` |
 | Thunder replica count > 1 | [Step 4](#step-4-install-thunder-extension-identity-provider) | Requires external PostgreSQL **and** a shared Redis cache — the default in-pod SQLite cannot be shared across pods |
+| Each Environment's Thunder database (in-pod SQLite vs external PostgreSQL) | [Prepare Storage](#prepare-storage-for-the-environments-thunder) | Changing it later requires manually migrating the data and setting `THUNDER_FORCE_STORAGE_CHANGE=true`; without that explicit override, the script refuses to point the installed Environment at an empty database |
 | Agent Manager's database | [Phase 2](#phase-2-agent-manager-installation) | Switching later is a data migration, not a configuration change |
 | Each environment's gateway topology | [Phase 2](#phase-2-agent-manager-installation) | A gateway's ingress/egress role is written at first registration and never rewritten, so a single-gateway environment cannot be split later — the environment has to be deleted and recreated |
 
@@ -1490,9 +1491,115 @@ helm upgrade amp oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
 That needs a `*.otel.${BASE_DOMAIN}` DNS record and gateway certificate coverage — and, per [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592), adding that wildcard makes `otel.${BASE_DOMAIN}` an empty non-terminal that a broader `*.${BASE_DOMAIN}` stops covering, so keep an explicit record for it. Env-Thunder does not need a corresponding nested wildcard: each handle sits directly under `${BASE_DOMAIN}` and is already covered by `*.${BASE_DOMAIN}`.
 :::
 
+### Prepare Storage for the Environment's Thunder
+
+By default, each Environment's Thunder keeps its data in SQLite on a 1Gi volume, uses an in-memory cache, and runs one replica. That setup is fine for evaluation, but the data lives on one volume behind one pod. For production, point it at your own PostgreSQL, and add Redis if you want more than one replica. The next step reads these settings from environment variables, so set them in the same shell before you run it. Skip this section to keep the defaults.
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `THUNDER_DB_TYPE` | `sqlite` or `postgres` | `sqlite` |
+| `THUNDER_DB_HOST`, `THUNDER_DB_USER`, `THUNDER_DB_PASSWORD` | Database connection details. Required with `postgres` | None |
+| `THUNDER_DB_NAME_PREFIX` | Prefix of the four database names. Required with `postgres` | None |
+| `THUNDER_DB_PORT`, `THUNDER_DB_SSLMODE` | Database port and SSL mode | `5432`, `require` |
+| `THUNDER_CACHE_TYPE` | `inmemory` or `redis` | `inmemory` |
+| `THUNDER_REDIS_ADDRESS` | Redis `host:port`. Required with `redis` | None |
+| `THUNDER_REDIS_USERNAME`, `THUNDER_REDIS_PASSWORD` | Redis credentials, if your Redis needs them | None |
+| `THUNDER_REDIS_KEY_PREFIX` | Prefix for every Redis key | The Thunder release name plus `:` |
+| `THUNDER_REPLICAS` | Number of Thunder pods | `1` |
+| `THUNDER_STATE_ACCESS_MODE` | Access mode for the shared certificate and secret volumes. Use `ReadWriteMany` only when replicas may run on different nodes and the storage class supports it | Chart default (`ReadWriteOnce`) |
+| `THUNDER_FORCE_STORAGE_CHANGE` | Bypass the database-change guard after you have migrated the data yourself | `false` |
+| `PERSISTENCE_SIZE`, `STORAGE_CLASS` | Size and storage class of the SQLite database volume | `1Gi`, cluster default |
+
+The script checks these settings before it creates anything and stops with a message if they do not fit together, for example if you set database details without `THUNDER_DB_TYPE=postgres`.
+
+<Tabs groupId="env-thunder-storage">
+  <TabItem value="postgres" label="External PostgreSQL" default>
+
+1. Create a role and four databases for this Environment on your PostgreSQL server. Start every database name with a prefix that is unique to the Environment, so that two Environments on one server never share data:
+
+   ```sql
+   CREATE ROLE thunder_default LOGIN PASSWORD '...';
+   GRANT thunder_default TO CURRENT_USER;  -- required on managed PostgreSQL; harmless elsewhere
+   CREATE DATABASE th_default_configdb OWNER thunder_default;
+   CREATE DATABASE th_default_entitydb OWNER thunder_default;
+   CREATE DATABASE th_default_runtime_transient OWNER thunder_default;
+   CREATE DATABASE th_default_runtime_persistent OWNER thunder_default;
+   ```
+
+   The role must own the databases, or hold `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on every table in them. The `GRANT` line matters on managed services such as RDS, Cloud SQL, and Azure Database; [Step 4](#step-4-install-thunder-extension-identity-provider) explains why. The prefix can use up to 41 lowercase letters, digits, and underscores, and must start with a letter.
+
+2. Load Thunder's schema into each database. The script does not create tables, and an empty database makes the install fail. Take the schema from the same ThunderID version the script installs:
+
+   ```bash
+   THUNDER_VERSION="$(grep -m1 -o 'CHART_VERSION:-[0-9][0-9.]*' "${AMP_DIST}/deployments/scripts/add-environment-thunder.sh" | cut -d- -f2)"
+   echo "${THUNDER_VERSION}"
+   docker create --name thunder-schema "ghcr.io/thunder-id/thunderid:${THUNDER_VERSION}"
+   for db in configdb entitydb runtime_transient runtime_persistent; do
+     docker cp "thunder-schema:/opt/thunderid/dbscripts/${db}/postgres.sql" "./thunder-${db}.sql"
+     psql "postgresql://thunder_default@your-db.example.com:5432/th_default_${db}" -v ON_ERROR_STOP=1 -f "./thunder-${db}.sql"
+   done
+   docker rm thunder-schema
+   ```
+
+   Expect 20 tables in `th_default_configdb`, 5 in `th_default_entitydb`, 13 in `th_default_runtime_transient`, and 7 in `th_default_runtime_persistent`.
+
+3. Set the database variables in the shell you will run the next step from:
+
+   ```bash
+   export THUNDER_DB_TYPE=postgres
+   export THUNDER_DB_HOST=your-db.example.com
+   export THUNDER_DB_USER=thunder_default
+   export THUNDER_DB_PASSWORD='<password>'
+   export THUNDER_DB_NAME_PREFIX=th_default_
+   ```
+
+   `THUNDER_DB_SSLMODE` accepts `disable`, `allow`, `prefer`, `require` (the default), `verify-ca`, and `verify-full`. The chart has no setting for a database CA certificate. Use `disable` only for a database inside the cluster.
+
+   The script stores the password in a Secret and gives it to the chart by reference, so it never appears in the Helm release values.
+
+  </TabItem>
+  <TabItem value="sqlite" label="In-pod SQLite (default)">
+
+There is nothing to prepare. The script creates a 1Gi volume for the database. Set `PERSISTENCE_SIZE` or `STORAGE_CLASS` to change its size or storage class. SQLite cannot be shared across pods, so an Environment on SQLite always runs one replica.
+
+  </TabItem>
+</Tabs>
+
+#### Add Redis for the cache (optional)
+
+The in-memory cache is local to each pod, so it only suits one replica. Use Redis when you run more than one Thunder replica. Any Redis that the cluster can reach works, whether a managed service or one you run yourself. Thunder only needs its address:
+
+```bash
+export THUNDER_CACHE_TYPE=redis
+export THUNDER_REDIS_ADDRESS=your-redis.example.com:6379
+export THUNDER_REDIS_PASSWORD='<password>'  # only if your Redis requires one
+```
+
+Add `THUNDER_REDIS_USERNAME` if your Redis uses ACL users. Every key starts with `THUNDER_REDIS_KEY_PREFIX`, which defaults to the Thunder release name followed by `:` (for example `amp-thunder-default-default:`), so several Environments can share one Redis. The chart has no TLS setting for Redis, so keep it on a private network.
+
+#### Run more than one replica (optional)
+
+```bash
+export THUNDER_REPLICAS=2
+```
+
+More than one replica needs external PostgreSQL and Redis. The script refuses any other combination before it creates anything. All replicas mount the same certificate and secret volumes, which are `ReadWriteOnce` by default. If the replicas can land on different nodes, also set `THUNDER_STATE_ACCESS_MODE=ReadWriteMany`, which needs a storage class that supports it. The volumes are created once, so changing this setting later has no effect.
+
+:::warning Choose the database before the first run
+Thunder seeds its database once, at first install, and `helm upgrade` never repeats it. The script therefore refuses to point an installed Environment at a different database, and refuses to retry in place a first install that failed before its setup job completed. If the first run fails that way (the script's message says so), remove the Environment's Thunder with `bash "${AMP_DIST}/deployments/scripts/remove-environment-thunder.sh"` (use the same `ENV_NAME`, `AMP_API_URL`, and `IDP_*` values as the provisioning command), fix the cause, and run the script again. If the first install failed after the setup job had finished, the database is already seeded and running the script again is accepted.
+
+Removing an Environment does not drop its PostgreSQL databases. To add the Environment again, drop and recreate its databases (and reload the schema), or use a new `THUNDER_DB_NAME_PREFIX`.
+:::
+
+Running the script again applies exactly the settings you pass, and a setting you leave out goes back to its default. Pass the same values every time, or the Environment drops, for example, from PostgreSQL with Redis and three replicas to the in-memory cache and one replica. When a run would change the cache type or the replica count of an installed Environment, the script prints the change before it applies it. It does not refuse, because scaling or switching the cache loses no data.
+
+Environments you add later from the Console use the defaults. To give one its own PostgreSQL or Redis, add the same variables in front of `bash` in the command the Console prints, as shown in [Manage Environments](./environment-management.mdx#thunder-storage).
+
 ### Provision Thunder Identity Provider for the Default Environment
 
 Every Environment needs its own dedicated Thunder ID instance. This is separate from the platform Thunder installed in Phase 1, which only handles console and API login. This instance is what issues each agent its own OAuth2 credential (AgentID) in that Environment. Run this once for the default Environment: agents can still be created without it, but they will never get an AgentID there, since there is no Thunder instance to provision one against, and Agent Manager will keep retrying and failing in the background. Run it after Agent Manager (`amp`) is installed and reachable at `API_PUBLIC_URL`, since this step registers the generated credential with the Agent Manager API.
+
+If you prepared PostgreSQL or Redis above, keep those variables set in this shell: the command picks them up. Without them, the script uses SQLite, an in-memory cache, and one replica.
 
 Pick the tab matching your [Step 3](#step-3-setup-tls-issuer) issuer choice — the CA trust setting below only differs by that choice, nothing else changes.
 
@@ -1592,6 +1699,19 @@ kubectl get secret amp-thunder-default-default-admin-credentials \
   -n amp-thunder-default-default -o jsonpath='{.data.password}' | base64 -d
 # Prints the env-Thunder console admin password for this Environment — save it,
 # it is not shown again
+```
+:::
+
+:::tip Verify the storage you chose
+The script prints a `Storage:` line at the start and again at the end. With PostgreSQL it reads `db=postgres`, and the Environment's Thunder has no database volume:
+
+```bash
+kubectl get pvc -n amp-thunder-default-default
+# With external PostgreSQL there is no "...-database-pvc", only the certs and secrets volumes
+
+psql "postgresql://thunder_default@your-db.example.com:5432/th_default_configdb" \
+  -tAc 'select count(*) from "INBOUND_CLIENT"'
+# 1 or more: Thunder seeded its own database
 ```
 :::
 
@@ -1728,11 +1848,12 @@ This section is the other half — the checklist to audit an install against, pl
 
 ### Checklist
 
-Work down this table against an existing install. The **When** column matters: the first four rows cannot be corrected without reinstalling the component, so verify them before going live.
+Work down this table against an existing install. The **When** column matters: verify every install-only choice before going live, and plan a data migration for any row that allows one.
 
 | Item | Where | When it can be applied |
 |---|---|---|
 | Thunder on external PostgreSQL | [Step 4](#step-4-install-thunder-extension-identity-provider) | Install only |
+| Each Environment's Thunder on external PostgreSQL | [Prepare Storage](#prepare-storage-for-the-environments-thunder) | Install (manual migration afterwards with `THUNDER_FORCE_STORAGE_CHANGE=true`) |
 | Thunder platform client secrets are not the shipped defaults | [Step 4](#step-4-install-thunder-extension-identity-provider) | Install only |
 | Thunder issuer and console redirect URIs are the final hostnames | [Step 4](#step-4-install-thunder-extension-identity-provider) | Install only |
 | Agent Manager on external PostgreSQL | [Phase 2](#phase-2-agent-manager-installation) | Install (migration afterwards) |
@@ -1951,6 +2072,7 @@ The production install already runs the Agent Manager API, console, and observer
 - `agentManagerService.replicaCount` and `console.replicaCount` on `wso2-agent-manager`
 - `amObserver.replicaCount` on the observability extension
 - `thunder.deployment.replicaCount` on the Thunder extension — needs **both** external PostgreSQL (the default in-pod SQLite cannot be shared between pods) and a shared Redis cache. The database half is fixed at install; see [Step 4](#step-4-install-thunder-extension-identity-provider)
+- `THUNDER_REPLICAS` for each Environment's Thunder: more than one replica needs external PostgreSQL **and** Redis. The database is guarded after first provisioning; the cache and replica count can be changed on a rerun. See [Prepare Storage for the Environment's Thunder](#prepare-storage-for-the-environments-thunder)
 
 The Agent Manager API runs a monitor scheduler that coordinates through a lock, so scheduled evaluations fire once regardless of replica count.
 
@@ -2382,9 +2504,43 @@ kubectl delete namespace wso2-amp amp-thunder \
   openbao external-secrets cert-manager
 ```
 
+If an Environment's Thunder uses your own PostgreSQL, uninstalling does not drop its databases. Drop `<prefix>configdb`, `<prefix>entitydb`, `<prefix>runtime_transient`, and `<prefix>runtime_persistent` yourself once you no longer need the data, where `<prefix>` is the `THUNDER_DB_NAME_PREFIX` you provisioned the Environment with.
+
 ---
 
 ## Troubleshooting
+
+<details>
+<summary>Environment's Thunder: "already installed with sqlite; this run asks for postgres"</summary>
+
+The script refuses to point an installed Environment at a different database. Thunder seeds its database once, at first install, so a different database would be empty: no OAuth clients and no logins.
+
+To move the Environment, remove its Thunder with `remove-environment-thunder.sh` and provision it again with the new settings. If you have already migrated the data yourself, set `THUNDER_FORCE_STORAGE_CHANGE=true`.
+
+Related messages:
+
+- `... is a failed first install`: the chart's setup job runs only on first install, and the script cannot confirm that it finished. If the job is still running (`kubectl get job <release>-setup -n <namespace>`), wait for it and run the script again. Otherwise run `remove-environment-thunder.sh`, fix the cause, and run the script again.
+- `... runs with cache=redis, replicas=3; this run sets cache=inmemory, replicas=1`: a run applies exactly the settings it is given, and the ones you left out went back to their defaults. If that was not intended, run the script again with the same `THUNDER_CACHE_TYPE` and `THUNDER_REPLICAS` as the first run.
+- `THUNDER_DB_HOST is set but THUNDER_DB_TYPE is 'sqlite'`: add `THUNDER_DB_TYPE=postgres`, or unset the database variables.
+
+</details>
+
+<details>
+<summary>Environment's Thunder does not start on PostgreSQL</summary>
+
+Check these in order:
+
+- The schema is not loaded. The setup job fails and its pod is deleted, so the logs show nothing. [Step 4](#step-4-install-thunder-extension-identity-provider) shows the underlying error. Load the schema as described in [Prepare Storage](#prepare-storage-for-the-environments-thunder).
+- The database names do not match your prefix. The script prints the four names it expects at the start of the run.
+- The database is not reachable from the cluster, or the password is wrong. Read the Thunder pod's log:
+
+  ```bash
+  kubectl logs -n amp-thunder-<org>-<env> deploy/amp-thunder-<org>-<env>-deployment
+  ```
+
+With PostgreSQL or Redis selected, the script stops with `Thunder did not become ready in time` instead of printing the console details. Run `remove-environment-thunder.sh` for the Environment before you try again.
+
+</details>
 
 <details>
 <summary>LoadBalancer not getting external IP</summary>

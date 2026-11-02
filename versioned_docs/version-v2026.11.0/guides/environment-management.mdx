@@ -75,6 +75,22 @@ ISOLATION_TIER=gvisor \
 
 Agents deployed or promoted to that environment automatically run under the tier's runtime — no agent-side changes are needed.
 
+### Thunder storage
+
+Each environment's ThunderID keeps its data in SQLite on a volume by default, with an in-memory cache and one replica. To use your own PostgreSQL and Redis, or to run more than one replica, set the storage variables on the command before you run it. The Console does not set them for you. [Prepare Storage for the Environment's Thunder](./on-your-environment.mdx#prepare-storage-for-the-environments-thunder) lists the variables and shows how to prepare the databases:
+
+```bash
+THUNDER_DB_TYPE=postgres \
+THUNDER_DB_HOST=your-db.example.com \
+THUNDER_DB_USER=thunder_prod \
+THUNDER_DB_PASSWORD='<password>' \
+THUNDER_DB_NAME_PREFIX=th_prod_ \
+  ENV_NAME=... DISPLAY_NAME=... AGENT_MANAGER_TOKEN=... \
+  bash add-environment.sh
+```
+
+The database is chosen when the environment is first created. The script blocks database changes because a new database would be empty; only use `THUNDER_FORCE_STORAGE_CHANGE=true` after you have migrated the data yourself. The cache type and the replica count can be changed by running the script again, but a run applies exactly the values you pass, so pass the full set each time. If the settings do not fit together, the script stops with a message before it creates the environment. If the ThunderID step fails later, it also stops, instead of falling back to the shared ThunderID.
+
 ### Gateway topology
 
 Every environment gets an API Platform Gateway. Its **topology** decides whether one gateway handles both directions of traffic, or two gateways split the roles — an *ingress* gateway for traffic arriving at the agents deployed in the environment, and an *egress* gateway for the calls those agents make out to LLMs, MCP servers, and other APIs.
@@ -115,6 +131,10 @@ Deletion needs no equivalent flag: the delete command detects the egress release
 
 :::note
 An environment cannot be deleted while it is still referenced by a deployment pipeline. Remove it from any pipeline first.
+:::
+
+:::note
+If the environment's ThunderID uses your own PostgreSQL, deleting the environment does not drop its databases. The command lists them when it finishes. To create the environment again, drop and recreate them, or use a new `THUNDER_DB_NAME_PREFIX`.
 :::
 
 ### Access the Environment ThunderID Console

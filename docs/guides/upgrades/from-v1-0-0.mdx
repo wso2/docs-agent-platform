@@ -19,9 +19,12 @@ The two distributions differ only in where the charts and images come from, the 
 | ThunderID moves from 1.0.0 to 1.0.2 | Platform Thunder and each environment Thunder are separate releases. | Upgrade each instance separately. |
 | kgateway moves from v2.2.1 to v2.3.11 | The `kgateway-crds` chart updates the kgateway CRDs. | Upgrade `kgateway-crds`, then `kgateway`. |
 | The Observability Plane enables an ingress NetworkPolicy | Monitor runs and run logs fail with `Connection refused` unless the Agent Manager observer is exempt. Log collection moves to a TLS passthrough route. | Upgrade the Observability Plane with the values in [Upgrade platform dependencies](./platform-dependencies.mdx#set-the-observability-plane-ingress-values). |
+| The observability modules move to logs 0.5.5, tracing 0.8.1, and metrics 0.8.1 | OpenSearch moves from 3.3.0 to 3.9.0 and cannot be rolled back without a snapshot. The Prometheus Operator CRDs change, and Prometheus and Alertmanager move to PersistentVolumeClaims, so earlier metrics are not kept. | Take an OpenSearch snapshot, confirm a default StorageClass, and apply the Prometheus Operator CRDs before the upgrade, as described in [Upgrade platform dependencies](./platform-dependencies.mdx#step-5-upgrade-the-observability-modules). |
 | Gateway Operator moves from chart 0.11.0 to 0.11.3 | Only the `llmprovidertemplates` CRD changes. Upgrading the operator does not redeploy existing gateways. | Apply the CRDs, upgrade the operator, and then trigger each gateway explicitly (Step 7). |
 | API Platform gateway moves from images 1.2.1 to 2026.09.24 (community) or 2026.10.0 (WSO2 subscription) | The gateway controller's SQLite schema moves from version 4 to version 5 (2026.09.24) or version 6 (2026.10.0). Both refuse a version 4 database. Agent Manager does not resend gateway configuration to an empty controller. | Upgrade each controller database to version 5 in place before its gateway redeploys (Step 7). Gateway 2026.10.0 then migrates it to version 6 on its first start. Do not delete it. |
+| Gateway 2026.10.0 (WSO2 subscription) changes three defaults | Gateways present a default client certificate to backends, return `x-request-id`, and serve `/.well-known/jwks` on every host. | To opt out, set `present_default_identity`, `return_request_id_in_response`, or `jwks_endpoint_enabled` to `false`. |
 | A WSO2 subscription release comes from `registry.wso2.com` | Charts, Agent Manager images, and the gateway chart and images need registry credentials and pull Secrets. | Complete the **WSO2 Subscription** part of Step 1. |
+| New LLM proxies take their API key header from the LLM Service Provider | New proxies expect the provider's header, such as `X-API-Key`. Existing proxies keep `API-Key`. Agents that send `API-Key` to a new proxy get `401`. | Send the header shown in the agent's LLM configuration in the Console. |
 | The Agent Manager database moves from migration 0043 to 0050 | Migrations 0044 to 0050 run in one transaction. v1.0.0 refuses to start against a database that contains them. | Back up PostgreSQL first. A chart rollback alone cannot restore v1.0.0. |
 | The gateway catch-all route request timeout moves from 30 seconds to unlimited | Long-running and streaming requests are no longer cut off at 30 seconds. The gateway's 5-minute idle timeout still applies. | Review any client behavior that relied on the 30-second limit. |
 | The platform Thunder bootstrap runs only at install time | The target adds a refresh-token lifetime and login-screen branding to the Console, CLI, and MCP clients, and renames the Agent Manager MCP resource server to `amp-agent-manager-mcp-resource-srv`. An upgrade does not apply these. | Existing clients and resource servers keep their v1.0.0 settings and names. |
@@ -47,6 +50,7 @@ export VERSION="0.0.0-dev"
 export REG="oci://ghcr.io/wso2"
 export GW_VERSION="2026.09.24"
 GW_REGISTRY_ARGS=()
+AMP_IMAGE_ARGS=()
 ```
 
 </TabItem>
@@ -65,6 +69,7 @@ GW_REGISTRY_ARGS=(
   --set-string gateway.values.gateway.controller.image.repository="$GW_REGISTRY/gateway-controller"
   --set-string gateway.values.gateway.gatewayRuntime.image.repository="$GW_REGISTRY/gateway-runtime"
 )
+AMP_IMAGE_ARGS=(--set-string global.ampImageRegistry="registry.wso2.com/$PROJECT/sts")
 ```
 
 Replace `<project>` with your registry project, `wso2-agent-manager` or `wso2-agent-manager-evaluations`. Replace `<subscription-version>` with the release or update to install, for example `2026.11.0` or `2026.11.0-u2`. See [List the Published Versions](../install-with-a-wso2-subscription.mdx#list-the-published-versions). Replace `<gateway-version>` with the gateway version of that release, which is `2026.10.0` for the 2026.11.0 release. The gateway comes from the same project and uses the same credentials.
@@ -93,11 +98,11 @@ Record each Helm release, namespace, chart version, and Kubernetes context. Reco
 
 Skip this part for the community release.
 
-Read your registry credentials without storing them in the shell history, and sign Helm in to the registry. Quote the username wherever you use it, because registry usernames can contain `$`:
+Read your registry credentials without storing them in the shell history, and sign Helm in to the registry. The commands work in both bash and zsh. Quote the username wherever you use it, because registry usernames can contain `$`:
 
 ```bash
-read -r -p "Registry username: " AMP_REGISTRY_USERNAME
-read -r -s -p "Registry token: " AMP_REGISTRY_PASSWORD; echo
+printf 'Registry username: '; read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: '; read -rs AMP_REGISTRY_PASSWORD; echo
 printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com \
   --username "$AMP_REGISTRY_USERNAME" --password-stdin
 helm show chart "$REG/wso2-agent-manager" --version "$VERSION"
@@ -171,26 +176,33 @@ kubectl exec -n "$AMP_NS" amp-postgresql-0 -- env PGPASSWORD="$PGPW" \
 
 Check that the dump file is not empty. For an external database, use its own backup tooling. Test the restore in a separate database.
 
-For each gateway, back up the controller data and its encryption key Secret. The key is mounted from the `gateway-encryption-keys` Secret, not stored on the volume. This backup is the recovery point for the 1.2.1 controller.
+For each gateway, back up the controller data and its encryption key Secret. The key is mounted from the `gateway-encryption-keys` Secret, not stored on the volume. This backup is the recovery point for the 1.2.1 controller. The loop covers every namespace that contains an APIGateway, egress gateways included:
 
 ```bash
-export GW_NS="default-default"
-GWC=$(kubectl --context "$GATEWAY_CONTEXT" get deploy -n "$GW_NS" -o name | grep gateway-controller)
-kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$GWC" -- tar cf - -C /app data \
-  > "upgrade-backup/gw-data-$GW_NS.tar"
-kubectl --context "$GATEWAY_CONTEXT" get secret gateway-encryption-keys -n "$GW_NS" -o yaml \
-  > "upgrade-backup/gw-encryption-keys-$GW_NS.yaml"
+for GW_NS in $(kubectl --context "$GATEWAY_CONTEXT" get apigateways -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | sort -u); do
+  GWC=$(kubectl --context "$GATEWAY_CONTEXT" get deploy -n "$GW_NS" -o name | grep gateway-controller)
+  kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$GWC" -- tar cf - -C /app data \
+    > "upgrade-backup/gw-data-$GW_NS.tar"
+  kubectl --context "$GATEWAY_CONTEXT" get secret gateway-encryption-keys -n "$GW_NS" -o yaml \
+    > "upgrade-backup/gw-encryption-keys-$GW_NS.yaml"
+done
+ls -l upgrade-backup/gw-*
 ```
+
+Each `gw-data-*.tar` file must be larger than zero bytes.
 
 Record a baseline: invoke representative agents, and note existing traces, monitor results, and API keys in use.
 
-## Step 3: Upgrade OpenChoreo and Thunder
+## Step 3: Upgrade OpenChoreo, the observability modules, and Thunder
 
 Follow [Upgrade platform dependencies](./platform-dependencies.mdx) through its environment Thunder step. Leave the Gateway Operator at 0.11.0 until Step 6.
 
 ## Step 4: Upgrade platform resources, then Agent Manager
 
 Upgrade platform resources first. The target Agent Manager attaches a new `a2a-gateway-route` trait to A2A agents, and only the target platform resources chart defines it.
+
+For a WSO2 subscription, `AMP_IMAGE_ARGS` points `global.ampImageRegistry` at the `sts` path. Without it, `--reset-then-reuse-values` keeps the v1.0.0 value and the pods fail with `ImagePullBackOff`. Step 5 uses it too.
 
 ```bash
 helm upgrade amp-platform-resources \
@@ -200,7 +212,8 @@ helm upgrade amp-platform-resources \
 
 helm upgrade amp "$REG/wso2-agent-manager" \
   --version "$VERSION" -n "$AMP_NS" \
-  --reset-then-reuse-values --timeout 15m --wait
+  --reset-then-reuse-values "${AMP_IMAGE_ARGS[@]}" \
+  --timeout 15m --wait
 ```
 
 The `amp-db-migration` post-upgrade hook applies migrations 0044 to 0050. Kubernetes deletes the job 300 seconds after it finishes, so read its logs right away:
@@ -221,23 +234,29 @@ Skip any extension that is not installed.
 ```bash
 helm upgrade amp-observability-traces "$REG/wso2-amp-observability-extension" \
   --version "$VERSION" -n openchoreo-observability-plane \
-  --reset-then-reuse-values --timeout 15m --wait
+  --reset-then-reuse-values "${AMP_IMAGE_ARGS[@]}" \
+  --timeout 15m --wait
 
 helm upgrade amp-evaluation-extension "$REG/wso2-amp-evaluation-extension" \
   --version "$VERSION" -n openchoreo-workflow-plane \
-  --reset-then-reuse-values --timeout 15m --wait
+  --reset-then-reuse-values "${AMP_IMAGE_ARGS[@]}" \
+  --timeout 15m --wait
 ```
 
 ## Step 6: Upgrade the gateway extensions and the Gateway Operator
 
 Upgrade each gateway extension release, including the `api-platform-<org>-<env>-egress` release of an egress gateway. This does not redeploy the gateway. Its pre-upgrade bootstrap job calls Agent Manager, which must be running the target version.
 
+Each gateway extension release has the same name and namespace as its APIGateway, so the loop upgrades one release per APIGateway:
+
 ```bash
-export GW_RELEASE="api-platform-default-default"
-helm upgrade "$GW_RELEASE" \
-  "$REG/wso2-amp-api-platform-gateway-extension" \
-  --version "$VERSION" -n "$GW_NS" --kube-context "$GATEWAY_CONTEXT" \
-  --reset-then-reuse-values --timeout 15m --wait
+for gw in $(kubectl --context "$GATEWAY_CONTEXT" get apigateways -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'); do
+  helm upgrade "${gw#*/}" \
+    "$REG/wso2-amp-api-platform-gateway-extension" \
+    --version "$VERSION" -n "${gw%/*}" --kube-context "$GATEWAY_CONTEXT" \
+    --reset-then-reuse-values --timeout 15m --wait
+done
 ```
 
 Apply the operator CRDs. Helm does not upgrade CRDs in a chart's `crds/` directory. The new CRDs keep serving the existing versions.
@@ -349,14 +368,20 @@ kubectl --context "$GATEWAY_CONTEXT" patch apigateway "$GW_NAME" -n "$GW_NS" --t
   "{\"spec\":{\"infrastructure\":{\"annotations\":{\"upgrade.amp.wso2.com/gateway-version\":\"$GW_VERSION\"}}}}"
 ```
 
-Wait until the gateway reports the new generation as programmed:
+Wait until the gateway reports the new generation as programmed and the new controller is rolled out:
 
 ```bash
-kubectl --context "$GATEWAY_CONTEXT" get apigateway "$GW_NAME" -n "$GW_NS" -o jsonpath=\
-'{.metadata.generation} {.status.conditions[?(@.type=="Programmed")].observedGeneration} {.status.conditions[?(@.type=="Programmed")].status}{"\n"}'
+for i in $(seq 120); do
+  s=$(kubectl --context "$GATEWAY_CONTEXT" get apigateway "$GW_NAME" -n "$GW_NS" -o jsonpath=\
+'{.metadata.generation} {.status.conditions[?(@.type=="Programmed")].observedGeneration} {.status.conditions[?(@.type=="Programmed")].status}')
+  echo "$s"
+  echo "$s" | awk '$1==$2 && $3=="True"{ok=1} END{exit !ok}' && break
+  sleep 5
+done
+kubectl --context "$GATEWAY_CONTEXT" rollout status -n "$GW_NS" "$GWC" --timeout=300s
 ```
 
-Repeat until the first two numbers match and the status is `True`. Then check the controller:
+The loop gives up after 10 minutes. If its last line is not two matching numbers and `True`, see Troubleshooting. Otherwise, check the controller:
 
 ```bash
 kubectl --context "$GATEWAY_CONTEXT" get pods -n "$GW_NS" -o jsonpath='{..image}' | tr ' ' '\n' | sort -u
@@ -394,6 +419,8 @@ Do not mark the upgrade complete because Helm reported success.
 | Migration job fails | Read the job logs before the 300-second cleanup. Fix the cause and rerun `helm upgrade amp`. The database stays at `0043`. |
 | Agent Manager images remain at v1.0.0 | An explicit image tag override in your values pins the old version. Remove it and rerun the upgrade. |
 | WSO2 Subscription: Helm fails with `401 Unauthorized` | Helm is not signed in to `registry.wso2.com`. Run the `helm registry login` command from Step 1 again. |
+| WSO2 Subscription: Agent Manager pods report `ImagePullBackOff` for an image under `registry.wso2.com/<project>/` without `sts` | The release kept the v1.0.0 `global.ampImageRegistry`. Once the failed upgrade finishes, rerun it with `"${AMP_IMAGE_ARGS[@]}"`. |
+| An agent's LLM calls return `401` through an LLM proxy created after the upgrade | The new LLM proxy expects the API key header set in its LLM Service Provider, and the agent sends `API-Key`. Send the header that the agent's LLM configuration shows in the Console. |
 | WSO2 Subscription: pods report `ImagePullBackOff` | The pod's namespace lacks `wso2-registry-credentials` (Agent Manager images) or `wso2-gateway-registry-credentials` (gateway images). Create it as in Step 1. For agent workloads, check the node's registry credentials (see Prerequisites). |
 | WSO2 Subscription: an APIGateway stays `Programmed=False` and the operator cannot pull the gateway chart | The operator namespace lacks `wso2-gateway-registry-credentials`, or the Secret has no `username` and `password` keys. Recreate it as in Step 1. |
 | OpenChoreo calls return empty lists or `403` | The plane upgrade reverted the `client_id` entitlement patch. Re-apply it as described in [Upgrade platform dependencies](./platform-dependencies.mdx). |

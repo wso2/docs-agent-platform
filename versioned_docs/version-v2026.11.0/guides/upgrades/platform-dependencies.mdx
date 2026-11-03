@@ -242,6 +242,8 @@ kubectl get pods -n "$OBS_NS" -o jsonpath='{..image}' | tr ' ' '\n' | grep -E 'o
 
 The images should be `opensearchproject/opensearch:3.9.0` and `cr.fluentbit.io/fluent/fluent-bit:5.1.5`. The Fluent Bit toleration for isolation-tier nodes is a user-supplied value, so the upgrade keeps it.
 
+If `logs-adapter-opensearch` is still restarting once OpenSearch is ready, run `kubectl rollout restart deployment/logs-adapter-opensearch -n "$OBS_NS"`. If `helm upgrade` already timed out, run it again.
+
 The metrics module moves the Prometheus Operator from v0.88.1 to v0.94.2, and Helm does not upgrade CRDs. Apply the CRDs that the target chart bundles, then upgrade the chart. `--force-conflicts` is needed because Helm owns the CRDs it installed:
 
 ```bash
@@ -265,7 +267,7 @@ helm upgrade observability-traces-opensearch "$OC_REG/observability-tracing-open
 
 If you mirror images to a private registry, mirror the new tags first. The metrics and tracing adapter and setup images move from `ghcr.io/openchoreo` to `cr.openchoreo.dev/openchoreo`, Prometheus uses the `-distroless` tag, and the logs module pins `busybox:1.37.0` for its Fluent Bit init container.
 
-After the three upgrades, open an agent in the Console and confirm that new logs, metrics, and traces appear.
+After the three upgrades, open an agent in the Console and confirm that new logs, metrics, and traces appear. The Metrics tab can return `502` for up to an hour after kube-state-metrics restarts, and then recovers on its own.
 
 ## Step 6: Upgrade platform Thunder to 1.0.2
 

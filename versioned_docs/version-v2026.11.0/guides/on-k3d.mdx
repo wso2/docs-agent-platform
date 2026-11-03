@@ -32,8 +32,8 @@ Agent Manager is a two-layer system installed in two phases:
 
 This guide installs both layers on a single-node k3d cluster on your local machine.
 
-:::info
-This setup is for **development and exploration**. For production deployments, see the [Production Considerations](#production-considerations) section.
+:::warning Not for production
+This k3d setup is for local development and evaluation only, and is not supported for production. For a production deployment, follow [On Your Environment](./on-your-environment.mdx), then check it against the [production recommendations](./production-recommendations.mdx).
 :::
 
 ## Prerequisites
@@ -868,21 +868,6 @@ If you used the one-command installer and want to remove Agent Manager and OpenC
 ```bash
 bash ~/.wso2-agent-manager/subscription/<project>/<image tag>/deployments/quick-start/uninstall.sh
 ```
-
----
-
-## Production Considerations
-
-This installation is designed for development and exploration. For production:
-
-1. **Identity provider** — Replace Thunder dev mode with a proper IdP (Asgardeo, Auth0, Okta)
-2. **JWT authentication** — Set `IS_LOCAL_DEV_ENV=false` and configure `KEY_MANAGER_JWKS_URL` for `agent-manager-service` and `agent-manager-observer` before exposing either service; when unset, JWT signature verification is skipped and only the token payload is decoded
-3. **TLS** — Replace self-signed certificates with CA-signed certificates
-4. **Secrets backend** — Disable OpenBao dev mode; configure persistent storage and proper auth
-5. **Observability storage** — Configure persistent volumes for OpenSearch
-6. **Resource sizing** — Adjust requests/limits based on workload
-7. **High availability** — Deploy multiple replicas of critical components
-8. **Security hardening** — Apply network policies, RBAC, pod security standards
 
 ---
 

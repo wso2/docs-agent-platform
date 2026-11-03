@@ -73,11 +73,11 @@ Record each Helm release, namespace, chart version, and Kubernetes context. Reco
 
 ### Sign in and create the pull Secrets
 
-Read your registry credentials without storing them in the shell history, and sign Helm in to the registry. Quote the username wherever you use it, because registry usernames can contain `$`:
+Read your registry credentials without storing them in the shell history, and sign Helm in to the registry. The commands work in both bash and zsh. Quote the username wherever you use it, because registry usernames can contain `$`:
 
 ```bash
-read -r -p "Registry username: " AMP_REGISTRY_USERNAME
-read -r -s -p "Registry token: " AMP_REGISTRY_PASSWORD; echo
+printf 'Registry username: '; read -r AMP_REGISTRY_USERNAME
+printf 'Registry token: '; read -rs AMP_REGISTRY_PASSWORD; echo
 printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com \
   --username "$AMP_REGISTRY_USERNAME" --password-stdin
 helm show chart "$REG/wso2-agent-manager" --version "$VERSION"

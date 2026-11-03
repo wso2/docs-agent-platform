@@ -214,7 +214,7 @@ The logs, tracing, and metrics modules are OpenChoreo community modules installe
 
 Before you start:
 
-- Take an [OpenSearch snapshot](https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/index/). The logs module moves OpenSearch from 3.3.0 to 3.9.0. Once OpenSearch 3.9.0 has opened the data, 3.3.0 cannot start on it: `helm rollback` succeeds, but OpenSearch fails to start. Restoring the snapshot is the only way back. The tracing module stores traces in the same OpenSearch.
+- Take an [OpenSearch snapshot](https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/index/). The logs module moves OpenSearch from 3.3.0 to 3.9.0. Once OpenSearch 3.9.0 has opened the data, 3.3.0 cannot start on it: `helm rollback` succeeds, but OpenSearch fails to start. Restoring the snapshot is the only way back. The tracing module stores traces in the same OpenSearch. The quick-start OpenSearch has no snapshot repository, so register one before you take the snapshot.
 - Confirm that the cluster has a default StorageClass with `kubectl get storageclass`. The metrics module now stores Prometheus and Alertmanager data on PersistentVolumeClaims of 10 Gi and 1 Gi. Without a default StorageClass, the claims stay `Pending` and the pods never start. Metrics collected before the upgrade are not kept, because 0.6.1 stored them on an `emptyDir` volume.
 - Upgrade with `--reset-then-reuse-values`, which needs Helm 3.14 or later. Do not use `--reuse-values`. It keeps the previous chart's defaults, so OpenSearch stays on 3.3.0, and the logs chart refuses to render because Fluent Bit 5.x no longer serves the old readiness probe path.
 
@@ -242,6 +242,8 @@ kubectl get pods -n "$OBS_NS" -o jsonpath='{..image}' | tr ' ' '\n' | grep -E 'o
 
 The images should be `opensearchproject/opensearch:3.9.0` and `cr.fluentbit.io/fluent/fluent-bit:5.1.5`. The Fluent Bit toleration for isolation-tier nodes is a user-supplied value, so the upgrade keeps it.
 
+The `logs-adapter-opensearch` pod restarts until OpenSearch 3.9.0 is ready. A slow image pull can leave it in a long restart back-off that outlasts `--wait`. While `helm upgrade` waits, check the pods in another terminal. Once OpenSearch is ready and the adapter is still restarting, restart the adapter with `kubectl rollout restart deployment/logs-adapter-opensearch -n "$OBS_NS"`. Do not interrupt `helm upgrade`. If it has already timed out, restart the adapter and run the same `helm upgrade` again.
+
 The metrics module moves the Prometheus Operator from v0.88.1 to v0.94.2, and Helm does not upgrade CRDs. Apply the CRDs that the target chart bundles, then upgrade the chart. `--force-conflicts` is needed because Helm owns the CRDs it installed:
 
 ```bash
@@ -265,7 +267,7 @@ helm upgrade observability-traces-opensearch "$OC_REG/observability-tracing-open
 
 If you mirror images to a private registry, mirror the new tags first. The metrics and tracing adapter and setup images move from `ghcr.io/openchoreo` to `cr.openchoreo.dev/openchoreo`, Prometheus uses the `-distroless` tag, and the logs module pins `busybox:1.37.0` for its Fluent Bit init container.
 
-After the three upgrades, open an agent in the Console and confirm that new logs, metrics, and traces appear.
+After the three upgrades, open an agent in the Console and confirm that new logs, metrics, and traces appear. For up to an hour after kube-state-metrics restarts, the Metrics tab can return `502`, and the `metrics-adapter-prometheus` logs show `duplicate series for the match group`. The old and new kube-state-metrics series overlap until the old one goes stale, and the tab recovers without action.
 
 ## Step 6: Upgrade platform Thunder to 1.0.2
 

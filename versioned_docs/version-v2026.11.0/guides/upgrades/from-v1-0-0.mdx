@@ -352,14 +352,20 @@ kubectl --context "$GATEWAY_CONTEXT" patch apigateway "$GW_NAME" -n "$GW_NS" --t
   "{\"spec\":{\"infrastructure\":{\"annotations\":{\"upgrade.amp.wso2.com/gateway-version\":\"$GW_VERSION\"}}}}"
 ```
 
-Wait until the gateway reports the new generation as programmed:
+Wait until the gateway reports the new generation as programmed and the new controller is rolled out:
 
 ```bash
-kubectl --context "$GATEWAY_CONTEXT" get apigateway "$GW_NAME" -n "$GW_NS" -o jsonpath=\
-'{.metadata.generation} {.status.conditions[?(@.type=="Programmed")].observedGeneration} {.status.conditions[?(@.type=="Programmed")].status}{"\n"}'
+for i in $(seq 120); do
+  s=$(kubectl --context "$GATEWAY_CONTEXT" get apigateway "$GW_NAME" -n "$GW_NS" -o jsonpath=\
+'{.metadata.generation} {.status.conditions[?(@.type=="Programmed")].observedGeneration} {.status.conditions[?(@.type=="Programmed")].status}')
+  echo "$s"
+  echo "$s" | awk '$1==$2 && $3=="True"{ok=1} END{exit !ok}' && break
+  sleep 5
+done
+kubectl --context "$GATEWAY_CONTEXT" rollout status -n "$GW_NS" "$GWC" --timeout=300s
 ```
 
-Repeat until the first two numbers match and the status is `True`. Then check the controller:
+The loop prints the generation, observed generation, and status every 5 seconds, and gives up after 10 minutes. If the last line does not show matching generations and `True`, see Troubleshooting. Otherwise, check the controller:
 
 ```bash
 kubectl --context "$GATEWAY_CONTEXT" get pods -n "$GW_NS" -o jsonpath='{..image}' | tr ' ' '\n' | sort -u

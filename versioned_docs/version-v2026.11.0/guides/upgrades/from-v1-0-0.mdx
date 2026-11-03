@@ -35,13 +35,12 @@ Release 2026.11.0 is available only from `registry.wso2.com`, so every chart and
 
 ## Step 1: Set variables and record the installation
 
-Set the release variables. The rest of the guide uses only these variables.
+Set the release variables. The rest of the guide uses only these variables and the gateway variables that you set after you sign in.
 
 ```bash
 export PROJECT="<project>"
 export VERSION="2026.11.0"
 export REG="oci://registry.wso2.com/$PROJECT/sts/helm-charts"
-export GW_VERSION="2026.10.0"
 export GW_REGISTRY="registry.wso2.com/$PROJECT/sts"
 GW_REGISTRY_ARGS=(
   --set-string gateway.helm.chartName="oci://$GW_REGISTRY/helm-charts/gateway"
@@ -60,7 +59,6 @@ Then set the shared variables and record the installation:
 export AMP_NS="wso2-amp"
 export DP_NS="openchoreo-data-plane"
 export GATEWAY_CONTEXT="<gateway-cluster-context>"
-export GW_OPERATOR_VERSION="0.11.3"
 
 helm version
 helm list -A
@@ -81,10 +79,20 @@ printf 'Registry token: '; read -rs AMP_REGISTRY_PASSWORD; echo
 printf '%s' "$AMP_REGISTRY_PASSWORD" | helm registry login registry.wso2.com \
   --username "$AMP_REGISTRY_USERNAME" --password-stdin
 helm show chart "$REG/wso2-agent-manager" --version "$VERSION"
+helm show values "$REG/wso2-amp-api-platform-gateway-extension" --version "$VERSION" \
+  | grep -A3 '^gatewayRelease:'
+```
+
+The first command prints the chart. The second prints the Gateway Operator, gateway chart, and gateway image versions that this release pins. Set the gateway variables to those values. The chart and image versions can differ in an update. For release 2026.11.0:
+
+```bash
+export GW_OPERATOR_VERSION="0.11.3"
+export GW_VERSION="2026.10.0"
+export GW_IMAGE_VERSION="2026.10.0"
 helm show chart "oci://$GW_REGISTRY/helm-charts/gateway" --version "$GW_VERSION"
 ```
 
-Both `helm show chart` commands print the chart. Write the credentials to files that only you can read, so the token never appears on a command line:
+The last command prints the gateway chart. Write the credentials to files that only you can read, so the token never appears on a command line:
 
 ```bash
 SECRET_DIR="$(mktemp -d)"
@@ -238,8 +246,8 @@ helm upgrade gateway-operator \
   --kube-context "$GATEWAY_CONTEXT" --reset-then-reuse-values \
   "${GW_REGISTRY_ARGS[@]}" \
   --set-string gateway.helm.chartVersion="$GW_VERSION" \
-  --set-string gateway.values.gateway.controller.image.tag="$GW_VERSION" \
-  --set-string gateway.values.gateway.gatewayRuntime.image.tag="$GW_VERSION" \
+  --set-string gateway.values.gateway.controller.image.tag="$GW_IMAGE_VERSION" \
+  --set-string gateway.values.gateway.gatewayRuntime.image.tag="$GW_IMAGE_VERSION" \
   --timeout 15m --wait
 ```
 
@@ -344,7 +352,7 @@ kubectl --context "$GATEWAY_CONTEXT" logs -n "$GW_NS" "$GWC" \
   | grep -E 'Migrating database schema|Database schema migrated successfully|Database schema up to date|Loaded configurations|Loaded API keys|Control plane connection established'
 ```
 
-The images are `$GW_REGISTRY/gateway-controller:2026.10.0` and `$GW_REGISTRY/gateway-runtime:2026.10.0`. The logs show `Migrating database schema` from version 5 to version 6, `Database schema migrated successfully`, and `Database schema up to date` with version 6. The configuration and API key counts match the counts before the upgrade. Invoke one agent through this gateway before you start the next gateway.
+The images are `$GW_REGISTRY/gateway-controller:$GW_IMAGE_VERSION` and `$GW_REGISTRY/gateway-runtime:$GW_IMAGE_VERSION`. The logs show `Migrating database schema` from version 5 to version 6, `Database schema migrated successfully`, and `Database schema up to date` with version 6. The configuration and API key counts match the counts before the upgrade. Invoke one agent through this gateway before you start the next gateway.
 
 ## Step 8: Verify existing workloads
 

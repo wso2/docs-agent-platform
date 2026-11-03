@@ -34,6 +34,8 @@ This guide installs both layers on a single-node k3d cluster on your local machi
 
 :::warning Not for production
 This k3d setup is for local development and evaluation only, and is not supported for production. For a production deployment, follow [On Your Environment](./on-your-environment.mdx), then check it against the [production recommendations](./production-recommendations.mdx).
+
+Its secret store, OpenBao, runs in dev mode and keeps secrets in memory only, so restarting Docker, Colima or your machine loses them. [Troubleshooting](#troubleshooting) covers what fails and how to recover.
 :::
 
 ## Prerequisites
@@ -71,6 +73,8 @@ colima start --profile agent-manager \
 `--network-address` assigns the VM a stable IP so the cluster keeps working after network changes.
 
 Choose `--cpu` and `--memory` now rather than adjusting them later. Changing either requires restarting the VM, which can leave an already-created k3d cluster unable to start. [Troubleshooting](#troubleshooting) covers the recovery if you hit this.
+
+Whenever you restart Colima, start the cluster through k3d afterwards (`k3d cluster stop amp-local && k3d cluster start amp-local`) rather than relying on Docker to bring its containers back. [Troubleshooting](#troubleshooting) explains why.
 
 On Apple silicon, install Rosetta 2 first (`softwareupdate --install-rosetta`). Without it, Colima runs amd64 images, including the images built for platform-hosted agents, under QEMU emulation, and a Python agent can take longer to start than its startup probe allows.
 
@@ -857,17 +861,23 @@ Given that, this setup keeps TLS disabled and uses the HTTP endpoint above for t
 
 ## Cleanup
 
-Delete the entire k3d cluster and all resources:
+To remove the install, delete the entire k3d cluster and all resources. Do this before you install again:
 
 ```bash
 k3d cluster delete amp-local
 ```
 
-If you used the one-command installer and want to remove Agent Manager and OpenChoreo but keep the cluster, run the uninstall script it left behind instead:
+If you used the one-command installer, running the uninstall script it left behind with `--delete-cluster` does the same.
+
+To remove Agent Manager and OpenChoreo but keep the cluster, run the uninstall script without that flag:
 
 ```bash
 bash ~/.wso2-agent-manager/subscription/<project>/<image tag>/deployments/quick-start/uninstall.sh
 ```
+
+:::warning
+When it keeps the cluster, the uninstall script currently leaves some components installed, including the gateway, OpenBao, the identity provider's data, the observability modules and the CRDs. If you install again on that cluster, the gateway cannot connect to the new Agent Manager. Delete the cluster before you reinstall.
+:::
 
 ---
 
@@ -927,6 +937,49 @@ colima start --profile agent-manager \
 ```
 
 Then rerun the one-command installer, or the guided install from Step 1: Create k3d Cluster onward.
+
+</details>
+
+<details>
+<summary>Agent logs, traces and monitor-run logs do not load after restarting Docker or Colima</summary>
+
+When Docker restarts the cluster's containers on its own, k3s rewrites the CoreDNS `NodeHosts` entry without `host.k3d.internal`. This install's CoreDNS rewrites point the platform's `*.localhost` names, such as `api.openchoreo.localhost`, at `host.k3d.internal`, so those names stop resolving inside the cluster. The console then fails to load agent logs, traces and monitor-run logs.
+
+Check whether the entry is missing:
+
+```bash
+kubectl get configmap coredns -n kube-system -o jsonpath='{.data.NodeHosts}'
+# No line ends with host.k3d.internal
+```
+
+Stop and start the cluster through k3d, which adds the entry back:
+
+```bash
+k3d cluster stop amp-local && k3d cluster start amp-local
+```
+
+The names resolve again about 1-2 minutes after the cluster starts. Do this after every Docker or Colima restart.
+
+</details>
+
+<details>
+<summary>Monitor runs and agent builds fail after restarting Docker, Colima or your machine</summary>
+
+OpenBao, the secret store in this install, runs in dev mode and keeps its data in memory, so a restart wipes the secrets stored in it. Agents that are already running keep working on the secrets they last synced, but anything that needs to read a secret again fails:
+
+- Monitor runs do not start. Their pods stay in `CreateContainerConfigError` with a `secret ... not found` event.
+- Agent builds cannot push their images.
+- ExternalSecrets report `Secret does not exist` (`kubectl get externalsecrets -A`).
+
+The lost secrets cannot be restored. Delete the cluster and install again:
+
+```bash
+bash ~/.wso2-agent-manager/subscription/<project>/<image tag>/deployments/quick-start/uninstall.sh --delete-cluster
+```
+
+If you used the guided install, run `k3d cluster delete amp-local` instead. Then rerun the one-command installer, or the guided install from Step 1: Create k3d Cluster onward.
+
+For a deployment whose secrets survive restarts, follow [On Your Environment](./on-your-environment.mdx).
 
 </details>
 

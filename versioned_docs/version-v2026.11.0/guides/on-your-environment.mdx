@@ -347,7 +347,7 @@ A sealed OpenBao stays sealed after every pod restart. For unattended restarts, 
 <Tabs groupId="cloud-provider">
 <TabItem value="generic" label="Generic" default>
 
-Set the `seal` stanza in `server.standalone.config`, and give the pod credentials for your KMS. `bao operator init` then returns recovery keys instead of unseal keys.
+Set the `seal` stanza in `server.standalone.config`, and give the pod credentials for your KMS. You still run `bao operator init` once, but with `-recovery-shares` and `-recovery-threshold` in place of `-key-shares` and `-key-threshold`, which a KMS seal rejects. It returns recovery keys and the root token. Skip the `unseal` commands; the KMS unseals OpenBao.
 
 </TabItem>
 <TabItem value="eks" label="EKS">
@@ -367,7 +367,7 @@ eksctl create iamserviceaccount \
   --approve
 ```
 
-4. Install OpenBao with this values file in place of the `--set` flags above, then skip the manual unseal commands:
+4. Install OpenBao with this values file in place of the `--set` flags above. Then initialize it with recovery-key flags, and skip the `unseal` commands. The `-key-shares` init above fails with `parameters secret_shares,secret_threshold not applicable to seal type awskms`:
 
 ```yaml
 server:
@@ -393,6 +393,12 @@ server:
         kms_key_id = "<key-arn>"
       }
 ```
+
+```bash
+kubectl exec -n openbao openbao-0 -- bao operator init -recovery-shares=5 -recovery-threshold=3
+```
+
+Store the recovery keys and root token in your secret manager. `bao status` should show `Sealed false` once the pod is Ready.
 
 </TabItem>
 <TabItem value="gke" label="GKE">
@@ -684,6 +690,24 @@ docker rm thunder-schema
 
 You should see 20 tables in `configdb`, 5 in `entitydb`, 13 in `runtime_transient`, and 7 in `runtime_persistent`.
 
+:::tip Database on a private network
+If `psql` on your machine cannot reach the database, which is the case for a private RDS, Cloud SQL, or Azure instance, keep the `docker create` and `docker cp` lines and run `psql` from a pod in the cluster instead:
+
+```bash
+kubectl run thunder-psql --image=postgres:17 --restart=Never \
+  --env=PGHOST=your-db.example.com --env=PGSSLMODE=require -- sleep 3600
+kubectl wait --for=condition=Ready pod/thunder-psql --timeout=120s
+for db in configdb entitydb runtime_transient runtime_persistent; do
+  kubectl cp "./thunder-${db}.sql" "thunder-psql:/tmp/thunder-${db}.sql"
+  kubectl exec thunder-psql -- env PGUSER=thunder PGPASSWORD='<THUNDER_DB_PASSWORD>' \
+    psql -d "${db}" -v ON_ERROR_STOP=1 -f "/tmp/thunder-${db}.sql"
+done
+kubectl delete pod thunder-psql
+```
+
+The same pod works for the `CREATE ROLE` and `CREATE DATABASE` statements: run `kubectl exec -it thunder-psql -- env PGUSER=<admin-user> psql -d postgres` before you delete it.
+:::
+
 Store the password in a Secret, so it stays out of Helm history, then write the values file:
 
 ```bash
@@ -900,7 +924,7 @@ Install the Control Plane. The OpenChoreo API stays inside the cluster. Agent Ma
 ```bash
 helm upgrade --install --server-side=false openchoreo-control-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-control-plane \
   --create-namespace \
   --values - <<EOF
@@ -946,7 +970,7 @@ kubectl wait --for=condition=Available \
 ```bash
 helm upgrade --install openchoreo-control-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-control-plane \
   --create-namespace \
   --values - <<EOF
@@ -999,7 +1023,7 @@ If the install fails with `no endpoints available for service "controller-manage
 
 #### Patch the service-account entitlement claim (required with Thunder ≥ 0.45)
 
-Thunder 0.45+ puts the client name in `client_id`, but OpenChoreo 1.2.0 reads entitlements from `sub`. Without this patch, service calls return `200` with empty lists or `403`, and the gateway bootstrap fails with `Environment 'default' not found`.
+Thunder 0.45+ puts the client name in `client_id`, but OpenChoreo 1.2.8 reads entitlements from `sub`. Without this patch, service calls return `200` with empty lists or `403`, and the gateway bootstrap fails with `Environment 'default' not found`.
 
 ```bash
 patched_yaml=$(kubectl get configmap openchoreo-api-config -n openchoreo-control-plane -o yaml   | sed -E "s/claim:[[:space:]]*['\"]?sub['\"]?/claim: client_id/g")
@@ -1071,7 +1095,7 @@ kubectl wait --for=condition=Ready certificate/dp-gateway-tls \
 
 helm install --server-side=false openchoreo-data-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-data-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-data-plane \
   --create-namespace \
   --set clusterAgent.tls.generateCerts=true \
@@ -1113,7 +1137,7 @@ kubectl wait --for=condition=Ready certificate/dp-gateway-tls \
 
 helm install openchoreo-data-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-data-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-data-plane \
   --create-namespace \
   --set clusterAgent.tls.generateCerts=true \
@@ -1210,7 +1234,7 @@ Install the Workflow Plane:
 ```bash
 helm install --server-side=false openchoreo-workflow-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-workflow-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-workflow-plane \
   --create-namespace \
   --set clusterAgent.tls.generateCerts=true \
@@ -1230,7 +1254,7 @@ kubectl wait --for=condition=Available \
 ```bash
 helm install openchoreo-workflow-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-workflow-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-workflow-plane \
   --create-namespace \
   --set clusterAgent.tls.generateCerts=true \
@@ -1273,7 +1297,7 @@ EOF
 Keep `secretStoreRef` on `default`. Git credentials and build secrets live in OpenBao, and Agent Manager reads Git credentials from it directly.
 
 :::info Container registry
-The workflow plane pushes built images to a registry set by `global.registry.endpoint` in [Phase 2](#phase-2-agent-manager-installation). Use one with access control, such as ECR, Artifact Registry, ACR, or Harbor, and set `global.defaultResources.registry.tlsVerify=true`. See [OpenChoreo's registry guide](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers).
+The workflow plane pushes built images to a registry set by `global.registry.endpoint` in [Phase 2](#phase-2-agent-manager-installation). Use one with access control that creates repositories on push and accepts static credentials, such as Harbor (with auto-create on), ACR, Artifact Registry, or CNCF Distribution, and set `global.defaultResources.registry.tlsVerify=true`. Amazon ECR does not work; see the registry requirements in Phase 2. See [OpenChoreo's registry guide](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers).
 :::
 
 ### Step 8: Setup Observability Plane
@@ -1394,7 +1418,7 @@ kubectl wait --for=condition=Ready certificate/obs-gateway-tls \
 
 helm install --server-side=false openchoreo-observability-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-observability-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-observability-plane \
   --create-namespace \
   --set gateway.tls.enabled=true \
@@ -1445,7 +1469,7 @@ kubectl wait --for=condition=Ready certificate/obs-gateway-tls \
 
 helm install openchoreo-observability-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-observability-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-observability-plane \
   --create-namespace \
   --set gateway.tls.enabled=true \
@@ -1525,7 +1549,7 @@ helm upgrade --install --server-side=false observability-traces-opensearch \
   oci://ghcr.io/openchoreo/helm-charts/observability-tracing-opensearch \
   --create-namespace \
   --namespace openchoreo-observability-plane \
-  --version 0.8.0 \
+  --version 0.8.1 \
   --set openSearch.enabled=false \
   --set openSearchSetup.openSearchSecretName="opensearch-admin-credentials" \
   --set opentelemetry-collector.configMap.existingName="amp-opentelemetry-collector-config" \
@@ -1753,12 +1777,12 @@ helm upgrade --server-side=false amp oci://${HELM_CHART_REGISTRY}/wso2-agent-man
   --namespace ${AMP_NS} \
   --reuse-values \
   --set agentManagerService.config.agentsBaseDomain="${AGENTS_DOMAIN}" \
-  --set agentManagerService.config.agentsHttpPort=80 \
-  --set agentManagerService.config.agentsHttpsPort=443 \
+  --set-string agentManagerService.config.agentsHttpPort=80 \
+  --set-string agentManagerService.config.agentsHttpsPort=443 \
   --set agentManagerService.config.idpHostBaseDomain="${BASE_DOMAIN}" \
   --set agentManagerService.config.tlsEnabled=true \
   --set console.config.idpHostBaseDomain="${BASE_DOMAIN}" \
-  --set console.config.tlsEnabled=true
+  --set-string console.config.tlsEnabled=true
 ```
 
   </TabItem>
@@ -1770,19 +1794,24 @@ helm upgrade amp oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
   --namespace ${AMP_NS} \
   --reuse-values \
   --set agentManagerService.config.agentsBaseDomain="${AGENTS_DOMAIN}" \
-  --set agentManagerService.config.agentsHttpPort=80 \
-  --set agentManagerService.config.agentsHttpsPort=443 \
+  --set-string agentManagerService.config.agentsHttpPort=80 \
+  --set-string agentManagerService.config.agentsHttpsPort=443 \
   --set agentManagerService.config.idpHostBaseDomain="${BASE_DOMAIN}" \
   --set agentManagerService.config.tlsEnabled=true \
   --set console.config.idpHostBaseDomain="${BASE_DOMAIN}" \
-  --set console.config.tlsEnabled=true
+  --set-string console.config.tlsEnabled=true
 ```
 
   </TabItem>
 </Tabs>
 
 :::warning Console-generated commands
-The Console's generated command for later environments omits the platform Thunder issuer, JWKS URL, and CA-trust mode. On a custom-TLS install, `add-environment-thunder.sh` needs those values. Do not use the generated command until the Console provides them.
+The Console's generated command for later environments omits the platform Thunder issuer and the CA-trust mode, so on a TLS install the new environment's Thunder trusts the wrong issuer or stops with `Platform Thunder CA cert is not available`. Add these variables to the generated command before you run it:
+
+- `PLATFORM_THUNDER_ISSUER="${THUNDER_PUBLIC_URL}"`
+- `SKIP_CA_BUNDLE_TRUST=true` when your certificates come from a public CA such as Let's Encrypt, or `PLATFORM_THUNDER_CA_PEM="$(cat <ca-file>.pem)"` when they come from a private CA.
+
+If the Thunder step fails, the script falls back to the platform Thunder and still reports that setup is complete. Check its output for a warning before you continue. The command is safe to run again with the missing variables.
 :::
 
 :::note Publishing added environments' gateways
@@ -1797,15 +1826,15 @@ helm upgrade --server-side=false amp oci://${HELM_CHART_REGISTRY}/wso2-agent-man
   --namespace ${AMP_NS} \
   --reuse-values \
   --set agentManagerService.config.agentsBaseDomain="${AGENTS_DOMAIN}" \
-  --set agentManagerService.config.agentsHttpPort=80 \
-  --set agentManagerService.config.agentsHttpsPort=443 \
+  --set-string agentManagerService.config.agentsHttpPort=80 \
+  --set-string agentManagerService.config.agentsHttpsPort=443 \
   --set agentManagerService.config.gatewayBaseDomain="otel.${BASE_DOMAIN}" \
   --set agentManagerService.config.gatewayVhostScheme=https \
   --set agentManagerService.config.gatewayVhostPort=443 \
   --set agentManagerService.config.idpHostBaseDomain="${BASE_DOMAIN}" \
   --set agentManagerService.config.tlsEnabled=true \
   --set console.config.idpHostBaseDomain="${BASE_DOMAIN}" \
-  --set console.config.tlsEnabled=true
+  --set-string console.config.tlsEnabled=true
 ```
 
   </TabItem>
@@ -1817,15 +1846,15 @@ helm upgrade amp oci://${HELM_CHART_REGISTRY}/wso2-agent-manager \
   --namespace ${AMP_NS} \
   --reuse-values \
   --set agentManagerService.config.agentsBaseDomain="${AGENTS_DOMAIN}" \
-  --set agentManagerService.config.agentsHttpPort=80 \
-  --set agentManagerService.config.agentsHttpsPort=443 \
+  --set-string agentManagerService.config.agentsHttpPort=80 \
+  --set-string agentManagerService.config.agentsHttpsPort=443 \
   --set agentManagerService.config.gatewayBaseDomain="otel.${BASE_DOMAIN}" \
   --set agentManagerService.config.gatewayVhostScheme=https \
   --set agentManagerService.config.gatewayVhostPort=443 \
   --set agentManagerService.config.idpHostBaseDomain="${BASE_DOMAIN}" \
   --set agentManagerService.config.tlsEnabled=true \
   --set console.config.idpHostBaseDomain="${BASE_DOMAIN}" \
-  --set console.config.tlsEnabled=true
+  --set-string console.config.tlsEnabled=true
 ```
 
   </TabItem>
@@ -1883,6 +1912,8 @@ The script checks these settings before it creates anything and stops with a mes
    ```
 
    Expect 20 tables in `th_default_configdb`, 5 in `th_default_entitydb`, 13 in `th_default_runtime_transient`, and 7 in `th_default_runtime_persistent`.
+
+   If the database is on a private network, run `psql` from a pod in the cluster as shown in [Step 4](#step-4-install-thunder-extension-identity-provider), with `PGUSER=thunder_default` and the `th_default_` database names.
 
 3. Set the database variables in the shell you will run the next step from:
 
@@ -2371,7 +2402,7 @@ oc create clusterrolebinding workflows-default-workflow-sa-privileged \
 Apply patched CRDs yourself, then install the chart with `--skip-crds`:
 
 ```bash
-helm pull oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane --version 1.2.0 --untar -d oc-cp-chart
+helm pull oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane --version 1.2.8 --untar -d oc-cp-chart
 
 sed -i.bak -E 's/has\(self\.var\)/has(self.__var__)/g; s/self\.scope\.namespace\)/self.scope.__namespace__)/g' \
   oc-cp-chart/openchoreo-control-plane/crds/*.yaml
@@ -2836,5 +2867,56 @@ json.dump(data, sys.stdout)
 ```
 
 Re-trigger the build. These patches are in-cluster, so reinstalling `amp-platform-resources` overwrites them. This affects Rancher Desktop only. EKS, GKE, and AKS are not affected.
+
+</details>
+
+<details>
+<summary>Agents cannot resolve hostnames on EKS (Try It returns 504)</summary>
+
+On EKS with the VPC CNI's network policy support on, a deployed agent cannot reach DNS or its Environment's Thunder. Try It returns `504 upstream request timeout`, and the agent's log shows `Temporary failure in name resolution`.
+
+The agent's egress policy allows DNS (port 53) and Thunder (port 8090) to any address, and allows ports 80 and 443 to the internet but not to private address ranges. The VPC CNI's policy agent applies that private-range exception to the DNS and Thunder rules as well. Cluster pods have private VPC addresses, so DNS and Thunder traffic is dropped. Other network plugins, such as Calico and Cilium, are not affected.
+
+Allow DNS and Thunder explicitly in the agent's namespace. Agent namespaces start with `dp-`; list them with `kubectl get ns | grep '^dp-'`. Set the namespace and the Thunder namespace of the agent's Environment, `amp-thunder-<org>-<env>`:
+
+```bash
+export AGENT_NS="<agent-namespace>"
+export ENV_THUNDER_NS="amp-thunder-<org>-<env>"
+kubectl apply -n "${AGENT_NS}" -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-agent-dns-and-thunder
+spec:
+  podSelector:
+    matchExpressions:
+    - key: agents.x-k8s.io/sandbox-template-ref-hash
+      operator: Exists
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+      podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ${ENV_THUNDER_NS}
+    ports:
+    - port: 8090
+      protocol: TCP
+EOF
+```
+
+Naming the DNS pods and the Thunder namespace makes the policy agent allow those addresses ahead of the private-range exception. Agents recover within a few seconds, with no redeploy. Each project and Environment has its own agent namespace, so apply this to each new one.
 
 </details>

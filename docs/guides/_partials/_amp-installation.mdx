@@ -239,6 +239,10 @@ The API Platform Gateway is deployed as an extension after Agent Manager is runn
 
 The core platform: a Go API server, a React web console, and a database.
 
+:::info Tell the Console where your registry is
+If you install from a private registry, such as your project on `registry.wso2.com` with a WSO2 subscription, add `--set console.config.registry="registry.wso2.com/<project>"` to the install command below. The Console then generates registry-aware commands for adding environments: they run the scripts from the release bundle and pull from your project, with your registry credentials. With the public community charts from `ghcr.io`, leave it unset.
+:::
+
 <Dev production={props.production}>
 
 <Tabs groupId="helm-version">
@@ -611,6 +615,8 @@ helm install --server-side=false amp-platform-resources \
   --set global.apiServer.url="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
   --set global.apiServer.hostHeader="openchoreo-api.openchoreo-control-plane.svc.cluster.local" \
   --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
+  --set global.registry.endpoint="<your-registry-host>" \
+  --set global.defaultResources.registry.tlsVerify=true \
   --timeout 1800s
 ```
 
@@ -627,11 +633,15 @@ helm install amp-platform-resources \
   --set global.apiServer.url="http://openchoreo-api.openchoreo-control-plane.svc.cluster.local:8080" \
   --set global.apiServer.hostHeader="openchoreo-api.openchoreo-control-plane.svc.cluster.local" \
   --set apiPlatformGateway.namespace=${DATA_PLANE_NS} \
+  --set global.registry.endpoint="<your-registry-host>" \
+  --set global.defaultResources.registry.tlsVerify=true \
   --timeout 1800s
 ```
 
   </TabItem>
 </Tabs>
+
+Set `global.registry.endpoint` to the registry the workflow plane pushes agent images to. Left unset, it defaults to the k3d registry `host.k3d.internal:10082`, and the first agent build fails to push. The registry requirements are below.
 
 :::warning These four values default to k3d addresses
 `global.oauth.tokenUrl` and `global.apiServer.url` default to `http://host.k3d.internal:8080`, which the single-cluster k3d layout reaches through the Docker host and routes by `Host` header. On any other cluster that name does not resolve, and the failure surfaces only when an agent is built: the workflow's `generate-workload` step prints `Failed to get access token:` with an empty body — a connection failure, not an authentication one — and the build ends with `cannot save parameter /mnt/vol/workload-cr.yaml`.
@@ -717,9 +727,16 @@ helm install amp-platform-resources \\
 Two properties are required, and the failure surfaces only on the first agent build, long after the platform installs and verifies cleanly:
 
 - **Push-to-create.** Each build pushes its image as `<workflow-run-name>-image` — a repository name that is different on every run, so repositories cannot be pre-created. The registry must create them on push. **Amazon ECR does not** and fails every build with `repository ... not found`; the same applies to any registry that requires repositories to be provisioned first.
-- **Static credentials.** The push step reads a fixed `.dockerconfigjson` from the `registry-push-secret` Secret (or pushes unauthenticated if it is absent). Registries whose credentials expire — ECR again, with its 12-hour tokens — cannot be refreshed by anything in the build pipeline.
+- **Static credentials.** The push step reads a fixed `.dockerconfigjson` from the `registry-push-secret` key in OpenBao (or pushes unauthenticated if the key is absent). Registries whose credentials expire — ECR again, with its 12-hour tokens — cannot be refreshed by anything in the build pipeline.
 
 [CNCF Distribution](https://distribution.github.io/distribution/), Harbor (with a project set to auto-create), and GitLab's registry satisfy both. If you have no registry yet, running Distribution in-cluster behind an internal LoadBalancer with a cert-manager certificate is a few resources — but it ships with **no authentication**; put htpasswd in front of it before it carries anything real.
+
+To push with credentials, store them in OpenBao before the first build. Write the registry's `.dockerconfigjson` to `registry-dockerconfig.json`, in the form `{"auths":{"<registry-host>":{"auth":"<base64 of user:token>"}}}`, then:
+
+```bash
+kubectl exec -i -n openbao openbao-0 -- env BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN='<root-token>' \
+  bao kv put secret/registry-push-secret - < registry-dockerconfig.json
+```
 :::
 
 ---

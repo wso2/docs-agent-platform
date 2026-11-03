@@ -415,7 +415,7 @@ The Control Plane is configured with Backstage disabled (Agent Manager provides 
 ```bash
 helm install openchoreo-control-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-control-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-control-plane \
   --create-namespace \
   --timeout 600s \
@@ -445,7 +445,7 @@ kubectl wait --for=condition=Available deployment --all \
 
 #### Patch the service-account entitlement claim (required with Thunder ≥ 0.45)
 
-Thunder 0.45+ puts the client name in the `client_id` claim (its `sub` is an opaque UUID), but OpenChoreo 1.2.0 extracts service-account entitlements from `sub`, and the chart does not expose the setting. Without this patch, every service-to-service call is **silently unauthorized** — the API returns `200` with empty lists and `403`s while all pods look healthy, and the gateway bootstrap later fails with `Environment 'default' not found`.
+Thunder 0.45+ puts the client name in the `client_id` claim (its `sub` is an opaque UUID), but OpenChoreo 1.2.8 extracts service-account entitlements from `sub`, and the chart does not expose the setting. Without this patch, every service-to-service call is **silently unauthorized** — the API returns `200` with empty lists and `403`s while all pods look healthy, and the gateway bootstrap later fails with `Environment 'default' not found`.
 
 ```bash
 patched_yaml=$(kubectl get configmap openchoreo-api-config -n openchoreo-control-plane -o yaml \
@@ -485,7 +485,7 @@ kubectl create configmap cluster-gateway-ca \
 ```bash
 helm install openchoreo-data-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-data-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-data-plane \
   --create-namespace \
   --timeout 600s \
@@ -552,12 +552,12 @@ helm upgrade --install registry docker-registry \
   --repo https://twuni.github.io/docker-registry.helm \
   --namespace openchoreo-workflow-plane \
   --create-namespace \
-  --values https://raw.githubusercontent.com/openchoreo/openchoreo/v1.2.0/install/k3d/single-cluster/values-registry.yaml \
+  --values https://raw.githubusercontent.com/openchoreo/openchoreo/v1.2.8/install/k3d/single-cluster/values-registry.yaml \
   --timeout 120s
 
 helm install openchoreo-workflow-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-workflow-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-workflow-plane \
   --create-namespace \
   --set argo-workflows.controller.resources.requests.cpu=50m \
@@ -681,7 +681,7 @@ Install the Observability Plane:
 ```bash
 helm install openchoreo-observability-plane \
   oci://ghcr.io/openchoreo/helm-charts/openchoreo-observability-plane \
-  --version 1.2.0 \
+  --version 1.2.8 \
   --namespace openchoreo-observability-plane \
   --create-namespace \
   --timeout 25m \
@@ -744,7 +744,7 @@ helm upgrade --install observability-traces-opensearch \
 ```
 
 :::warning Pin the tracing module to 0.6.0 or later
-The OpenChoreo 1.2.0 observer returns a span's status as an object
+The OpenChoreo 1.2.8 observer returns a span's status as an object
 (`{code, message}`), but the tracing adapter at 0.5.0 and 0.5.1 still expects a
 string. With those versions the span-details endpoint returns `500` and traces are
 silently dropped. Upstream's own install script still pins 0.5.0; do not follow it

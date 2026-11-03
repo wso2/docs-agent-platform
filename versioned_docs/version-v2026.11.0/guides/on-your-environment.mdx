@@ -1297,7 +1297,7 @@ EOF
 Keep `secretStoreRef` on `default`. Git credentials and build secrets live in OpenBao, and Agent Manager reads Git credentials from it directly.
 
 :::info Container registry
-The workflow plane pushes built images to a registry set by `global.registry.endpoint` in [Phase 2](#phase-2-agent-manager-installation). Use one with access control that creates repositories on push and accepts static credentials, such as Harbor (with auto-create on), ACR, Artifact Registry, or CNCF Distribution, and set `global.defaultResources.registry.tlsVerify=true`. Amazon ECR does not work; see the registry requirements in Phase 2. See [OpenChoreo's registry guide](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers).
+The workflow plane pushes built images to a registry set by `global.registry.endpoint` in [Phase 2](#phase-2-agent-manager-installation). Use one with access control that creates repositories on push and accepts static credentials, such as Harbor (with auto-create on), ACR, Artifact Registry, or CNCF Distribution, and set `global.defaultResources.registry.tlsVerify=true`. Amazon ECR does not work; see the registry requirements in Phase 2. On EKS without another registry, see [Set up a build registry on EKS](#set-up-a-build-registry-on-eks) in Troubleshooting. See [OpenChoreo's registry guide](https://openchoreo.dev/docs/platform-engineer-guide/container-registry-configuration/#registry-providers).
 :::
 
 ### Step 8: Setup Observability Plane
@@ -2202,6 +2202,7 @@ Pick your platform. The **Generic** tab applies to any cluster.
 - The default StorageClass must be CSI-backed. Install the EBS CSI driver and make a `gp3` class the default. Clusters created at 1.30 or later ship no default class, and the stock `gp2` class does not provision volumes without the EBS CSI driver.
 - Cilium can replace the VPC CNI and kube-proxy, which enforces `NetworkPolicy` and gives pods VPC addresses in ENI IPAM mode. If you keep the VPC CNI, enable its network policy support.
 - cert-manager, External Secrets, and OpenBao can use IAM Roles for Service Accounts instead of static keys. The Route 53 solver in Step 3 and the KMS auto-unseal in Step 2 both use this approach.
+- Amazon ECR cannot back build workflows. See [Set up a build registry on EKS](#set-up-a-build-registry-on-eks).
 - Ensure security groups allow HTTP and HTTPS to the LoadBalancers.
 
 </TabItem>
@@ -2918,5 +2919,131 @@ EOF
 ```
 
 Naming the DNS pods and the Thunder namespace makes the policy agent allow those addresses ahead of the private-range exception. Agents recover within a few seconds, with no redeploy. Each project and Environment has its own agent namespace, so apply this to each new one.
+
+</details>
+
+<details id="set-up-a-build-registry-on-eks">
+<summary>Set up a build registry on EKS (Amazon ECR cannot back builds)</summary>
+
+Amazon ECR cannot back build workflows. If you have no other registry, run [CNCF Distribution](https://distribution.github.io/distribution/) in the cluster behind an internal LoadBalancer. It creates repositories on push and needs no `registry-push-secret`. It has **no authentication**, so keep it internal: anything inside the VPC can push to it.
+
+Issue a certificate for `registry.${BASE_DOMAIN}` from the issuer created in [Step 3](#step-3-setup-tls-issuer):
+
+```bash
+kubectl create namespace registry --dry-run=client -o yaml | kubectl apply -f -
+```
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: registry-tls
+  namespace: registry
+spec:
+  secretName: registry-tls
+  issuerRef:
+    name: openchoreo-ca
+    kind: ClusterIssuer
+  dnsNames:
+    - "registry.${BASE_DOMAIN}"
+EOF
+```
+
+```bash
+kubectl wait --for=condition=Ready certificate/registry-tls -n registry --timeout=300s
+```
+
+Run Distribution with a 50 GiB volume and an internal LoadBalancer on port 443:
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-data
+  namespace: registry
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: registry
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      containers:
+        - name: registry
+          image: registry:3.0.0
+          ports:
+            - containerPort: 5000
+          env:
+            - name: REGISTRY_HTTP_TLS_CERTIFICATE
+              value: /certs/tls.crt
+            - name: REGISTRY_HTTP_TLS_KEY
+              value: /certs/tls.key
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/registry
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: registry-data
+        - name: certs
+          secret:
+            secretName: registry-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: registry
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: registry
+  ports:
+    - name: https
+      port: 443
+      targetPort: 5000
+EOF
+```
+
+```bash
+kubectl rollout status deploy/registry -n registry --timeout=300s
+```
+
+```bash
+kubectl get svc registry -n registry -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+
+The hostname starts with `internal-`, which confirms the LoadBalancer is not reachable from the internet. Create a CNAME record from `registry.${BASE_DOMAIN}` to it. The specific record takes precedence over the `*.${BASE_DOMAIN}` wildcard, but until the wildcard's cached answer expires (about 5 minutes), the name still resolves to the control-plane gateway.
+
+Check the registry from inside the cluster, the way builds reach it. Expect `HTTP/2 200`:
+
+```bash
+kubectl run regtest --rm -i --restart=Never --image=curlimages/curl -- curl -sI https://registry.${BASE_DOMAIN}/v2/
+```
+
+In Phase 2, set `global.registry.endpoint` to `registry.${BASE_DOMAIN}` and `global.defaultResources.registry.tlsVerify=true`.
 
 </details>

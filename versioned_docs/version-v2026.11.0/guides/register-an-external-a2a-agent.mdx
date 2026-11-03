@@ -3,9 +3,14 @@ sidebar_position: 17
 description: Register an A2A agent that runs outside Agent Manager, store its agent card per environment, and optionally route callers to it through the gateway.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Register an External A2A Agent
 
 Register an [Agent2Agent (A2A)](https://a2a-protocol.org/) agent that runs outside WSO2 Agent Manager, so the platform stores its agent card for each environment. You can also route the agent through an environment's gateway, which puts gateway API keys, CORS, and authentication in front of it.
+
+An externally-hosted agent has no A2A agent type. You register it as an ordinary externally-hosted agent, and every externally-hosted agent can register an A2A agent card. Registering a card URL for an environment is what makes the agent serve A2A in that environment.
 
 ## How Agent Manager Fronts an External A2A Agent
 
@@ -26,14 +31,48 @@ When the agent is routed through the gateway, callers use the same paths as on t
 
 ## Step 1: Register the Agent
 
-1. Open your project and click **Add Agent**, then select **External Agent**.
-2. Enter a **Name** and, optionally, a **Description**.
-3. Under **Agent Type**, select **A2A Agent**.
+<Tabs groupId="am-client">
+<TabItem value="console" label="Console" default>
+
+1. Open your project and click **Add Agent**.
+2. On the **Add a New Agent** screen, under **Externally-Hosted Agent**, click **Register an agent**.
+3. Enter a **Name** and, optionally, a **Description** and **Labels**.
 4. Click **Register**.
 
-Registration does not ask for a URL. You register the card URL for each environment in the next step.
+Registration does not ask for an agent type or a card URL. You register the card URL for each environment in the next step.
+
+</TabItem>
+<TabItem value="cli" label="amctl">
+
+Create the agent with external provisioning:
+
+```bash
+amctl agent create <agent-name> \
+  --display-name "<display-name>" \
+  --provisioning external
+```
+
+Do not pass `--subtype`. It applies only to platform-hosted agents, and `amctl` rejects it for external provisioning. After it creates the agent, `amctl` prints an API key and the OTel endpoint for instrumenting the agent in the first environment of the project's deployment pipeline.
+
+To also register the card URL for that first environment, add `--card-url`. Add `--proxy` as well to route that environment through its gateway, as described in Step 3:
+
+```bash
+amctl agent create <agent-name> \
+  --display-name "<display-name>" \
+  --provisioning external \
+  --card-url https://agent.example.com/.well-known/agent-card.json \
+  --proxy
+```
+
+`amctl` checks the card URL before it creates the agent. If saving the card URL fails after the agent is created, the agent stays registered and `amctl` prints the `amctl agent card set` command that finishes the step.
+
+</TabItem>
+</Tabs>
 
 ## Step 2: Register the Agent Card URL
+
+<Tabs groupId="am-client">
+<TabItem value="console" label="Console" default>
 
 1. Open the agent. In the left sidebar, under **Agent Lifecycle**, click **Configure**.
 2. Click the **A2A** tab, then select the environment's tab.
@@ -42,11 +81,41 @@ Registration does not ask for a URL. You register the card URL for each environm
 
 The **Agent Card** section on the agent's overview also links here through **Register agent card URL**.
 
-The URL must be publicly reachable. Agent Manager rejects `localhost` and private network addresses.
-
 Agent Manager then reads the card. Until it has, the card shows **Pending**. Then the panel shows the card's name, version, **Interfaces**, and **Skills**. Click **View JSON** to see the whole card. If the card shows **Failed**, fix the cause shown with it, then click **Refetch**.
 
 To change the URL, click the edit icon next to it. To remove the URL and the stored card for the environment, click **Remove**.
+
+</TabItem>
+<TabItem value="cli" label="amctl">
+
+Register the card URL for one environment:
+
+```bash
+amctl agent card set <agent-name> \
+  --env <environment> \
+  --url https://agent.example.com/.well-known/agent-card.json
+```
+
+Run it once for each environment. Running it again for the same environment replaces the URL.
+
+Agent Manager then reads the card. Check the card's source, status (`pending`, `fetched`, or `failed`), and any fetch error:
+
+```bash
+amctl agent card get <agent-name> --env <environment>
+```
+
+If the status is `failed`, fix the cause shown with it, then queue a new fetch:
+
+```bash
+amctl agent card refresh <agent-name> --env <environment>
+```
+
+Removing a card URL is available only in the Console.
+
+</TabItem>
+</Tabs>
+
+The URL must be publicly reachable. Agent Manager rejects `localhost` and private network addresses.
 
 ## Step 3: Route the Agent Through the Gateway
 
@@ -54,7 +123,8 @@ Optional: skip this step if callers should keep reaching the agent directly.
 
 To route through the gateway, the card URL must end in `/.well-known/agent-card.json`, and the agent's JSON-RPC or HTTP+JSON interfaces must be on the same host, under the same path as the card.
 
-To turn on routing:
+<Tabs groupId="am-client">
+<TabItem value="console" label="Console" default>
 
 1. On the environment's **A2A** tab, turn on **Route through gateway**.
 2. Optional: if the agent itself requires a credential, enter the header it expects in **Upstream header**, such as `X-API-Key`, and the credential in **Header value**. The gateway adds this header to every call it forwards to the agent.
@@ -63,6 +133,25 @@ To turn on routing:
 You can also turn on **Route through gateway** while registering the card URL in Step 2.
 
 Under **Gateway routing**, the status changes from **Publishing to gateway** to **Routed through gateway**, and the Console shows the agent's gateway URL with a copy button. If the status is **Gateway publish failed**, read the error, fix the cause, and click **Retry**.
+
+</TabItem>
+<TabItem value="cli" label="amctl">
+
+Pass `--proxy` when you register the card URL:
+
+```bash
+amctl agent card set <agent-name> \
+  --env <environment> \
+  --url https://agent.example.com/.well-known/agent-card.json \
+  --proxy
+```
+
+`amctl agent card get <agent-name> --env <environment>` shows the routing status (`pending`, `published`, or `failed`), the gateway URL, and any publish error. After you fix a publish error, `amctl agent card refresh` re-fetches the card and republishes the gateway routes.
+
+`amctl` turns routing on but not off, and it cannot set an upstream header. Use the Console for both.
+
+</TabItem>
+</Tabs>
 
 ### Upstream Credential
 

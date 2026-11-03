@@ -861,17 +861,23 @@ Given that, this setup keeps TLS disabled and uses the HTTP endpoint above for t
 
 ## Cleanup
 
-Delete the entire k3d cluster and all resources:
+To remove the install, delete the entire k3d cluster and all resources. Do this before you install again:
 
 ```bash
 k3d cluster delete amp-local
 ```
 
-If you used the one-command installer and want to remove Agent Manager and OpenChoreo but keep the cluster, run the uninstall script it left behind instead:
+If you used the one-command installer, running the uninstall script it left behind with `--delete-cluster` does the same.
+
+To remove Agent Manager and OpenChoreo but keep the cluster, run the uninstall script without that flag:
 
 ```bash
 bash ~/.wso2-agent-manager/subscription/<project>/<image tag>/deployments/quick-start/uninstall.sh
 ```
+
+:::warning
+When it keeps the cluster, the uninstall script currently leaves some components installed, including the gateway, OpenBao, the identity provider's data, the observability modules and the CRDs. If you install again on that cluster, the gateway cannot connect to the new Agent Manager. Delete the cluster before you reinstall.
+:::
 
 ---
 

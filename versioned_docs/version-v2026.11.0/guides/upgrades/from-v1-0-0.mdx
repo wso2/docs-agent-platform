@@ -160,16 +160,21 @@ kubectl exec -n "$AMP_NS" amp-postgresql-0 -- env PGPASSWORD="$PGPW" \
 
 Check that the dump file is not empty. For an external database, use its own backup tooling. Test the restore in a separate database.
 
-For each gateway, back up the controller data and its encryption key Secret. The key is mounted from the `gateway-encryption-keys` Secret, not stored on the volume. This backup is the recovery point for the 1.2.1 controller.
+For each gateway, back up the controller data and its encryption key Secret. The key is mounted from the `gateway-encryption-keys` Secret, not stored on the volume. This backup is the recovery point for the 1.2.1 controller. The loop covers every namespace that contains an APIGateway, egress gateways included:
 
 ```bash
-export GW_NS="default-default"
-GWC=$(kubectl --context "$GATEWAY_CONTEXT" get deploy -n "$GW_NS" -o name | grep gateway-controller)
-kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$GWC" -- tar cf - -C /app data \
-  > "upgrade-backup/gw-data-$GW_NS.tar"
-kubectl --context "$GATEWAY_CONTEXT" get secret gateway-encryption-keys -n "$GW_NS" -o yaml \
-  > "upgrade-backup/gw-encryption-keys-$GW_NS.yaml"
+for GW_NS in $(kubectl --context "$GATEWAY_CONTEXT" get apigateways -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}{"\n"}{end}' | sort -u); do
+  GWC=$(kubectl --context "$GATEWAY_CONTEXT" get deploy -n "$GW_NS" -o name | grep gateway-controller)
+  kubectl --context "$GATEWAY_CONTEXT" exec -n "$GW_NS" "$GWC" -- tar cf - -C /app data \
+    > "upgrade-backup/gw-data-$GW_NS.tar"
+  kubectl --context "$GATEWAY_CONTEXT" get secret gateway-encryption-keys -n "$GW_NS" -o yaml \
+    > "upgrade-backup/gw-encryption-keys-$GW_NS.yaml"
+done
+ls -l upgrade-backup/gw-*
 ```
+
+Each `gw-data-*.tar` file must be larger than zero bytes.
 
 Record a baseline: invoke representative agents, and note existing traces, monitor results, and API keys in use.
 
@@ -226,12 +231,16 @@ helm upgrade amp-evaluation-extension "$REG/wso2-amp-evaluation-extension" \
 
 Upgrade each gateway extension release, including the `api-platform-<org>-<env>-egress` release of an egress gateway. This does not redeploy the gateway. Its pre-upgrade bootstrap job calls Agent Manager, which must be running the target version.
 
+Each gateway extension release has the same name and namespace as its APIGateway, so the loop upgrades one release per APIGateway:
+
 ```bash
-export GW_RELEASE="api-platform-default-default"
-helm upgrade "$GW_RELEASE" \
-  "$REG/wso2-amp-api-platform-gateway-extension" \
-  --version "$VERSION" -n "$GW_NS" --kube-context "$GATEWAY_CONTEXT" \
-  --reset-then-reuse-values --timeout 15m --wait
+for gw in $(kubectl --context "$GATEWAY_CONTEXT" get apigateways -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{"\n"}{end}'); do
+  helm upgrade "${gw#*/}" \
+    "$REG/wso2-amp-api-platform-gateway-extension" \
+    --version "$VERSION" -n "${gw%/*}" --kube-context "$GATEWAY_CONTEXT" \
+    --reset-then-reuse-values --timeout 15m --wait
+done
 ```
 
 Apply the operator CRDs. Helm does not upgrade CRDs in a chart's `crds/` directory. The new CRDs keep serving the existing versions.

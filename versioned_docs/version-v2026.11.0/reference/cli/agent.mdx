@@ -20,6 +20,9 @@ amctl agent [command]
 | [`list`](#amctl-agent-list) | List agents in a project |
 | [`delete`](#amctl-agent-delete) | Delete an agent |
 | [`deploy`](#amctl-agent-deploy) | Deploy a built agent image to an environment |
+| [`card set`](#amctl-agent-card-set) | Register an agent's A2A card URL in an environment |
+| [`card get`](#amctl-agent-card-get) | Show an agent's A2A card and routing in an environment |
+| [`card refresh`](#amctl-agent-card-refresh) | Re-fetch an agent's A2A card in an environment |
 | [`build create`](#amctl-agent-build-create) | Trigger a build |
 | [`build get`](#amctl-agent-build-get) | Show details of a build |
 | [`build list`](#amctl-agent-build-list) | List builds for an agent |
@@ -92,6 +95,19 @@ amctl agent create notes-agent \
   --language-version 3.11 \
   --run-command "python main.py"
 
+# Externally-hosted agent: no subtype, no build or repository flags
+amctl agent create weather-agent \
+  --display-name "Weather Agent" \
+  --provisioning external
+
+# Externally-hosted A2A agent: register its card URL for the first environment
+# in the deployment pipeline and route that environment through its gateway
+amctl agent create weather-agent \
+  --display-name "Weather Agent" \
+  --provisioning external \
+  --card-url https://agent.example.com/.well-known/agent-card.json \
+  --proxy
+
 # Plain environment + secret references
 amctl agent create payments \
   --display-name "Payments" \
@@ -120,7 +136,7 @@ amctl agent create chatbot \
 |------|------|---------|-------------|
 | `--display-name` | string | _required_ | Human-readable name. |
 | `--description` | string | (none) | Free-text description. |
-| `--subtype` | string | (none) | Agent sub-type: `chat-api`, `custom-api`, or `a2a-agent`. The A2A choice is fixed at creation: an agent cannot later change between `a2a-agent` and the other two. |
+| `--subtype` | string | (none) | Agent sub-type (internal only): `chat-api`, `custom-api`, or `a2a-agent`. The A2A choice is fixed at creation: an agent cannot later change between `a2a-agent` and the other two. Rejected for `--provisioning external`; an externally-hosted agent has no sub-type and becomes an A2A agent by registering a card URL (`--card-url` or [`amctl agent card set`](#amctl-agent-card-set)). |
 | `--provisioning` | string | `internal` | `internal` (platform-managed) or `external`. |
 | `--repo-url` | string | (none) | Source repository URL. |
 | `--repo-branch` | string | (none) | Source branch. |
@@ -141,6 +157,16 @@ amctl agent create chatbot \
 | `--llm-provider` | string | (none) | Handle of a configured LLM provider to attach (internal only). |
 | `--llm-url-env` | string | (none) | Env var name for the provider URL (default: auto-generated). |
 | `--llm-api-key-env` | string | (none) | Env var name for the provider API key (default: auto-generated). |
+| `--card-url` | string | (none) | A2A agent card URL to register for the first environment in the deployment pipeline (external only). Must be an `http` or `https` URL. |
+| `--proxy` | bool | `false` | Route that first environment through its gateway. Requires `--card-url`, which must then end in `/.well-known/agent-card.json` with no query or fragment. |
+
+### Externally-hosted agents
+
+With `--provisioning external`, only `--display-name`, `--description`, `--card-url`, and `--proxy` apply. The repository, build, port, path, environment variable, instrumentation, LLM provider, and `--subtype` flags are rejected.
+
+After it creates the agent, the command prints an API key (valid for one year) and the OTel endpoint for instrumenting the agent in the first environment of the deployment pipeline. With `--json`, the envelope carries `agent`, `token`, `tokenExpiresAt`, `otelEndpoint`, and `instrumentationInstructions`, plus `card` when `--card-url` is given.
+
+The agent is created before the card URL is saved. If the card step fails, the agent stays registered, the command prints a warning, and it prints the [`amctl agent card set`](#amctl-agent-card-set) command that finishes the step.
 
 ### Attaching an LLM provider
 
@@ -254,6 +280,85 @@ amctl agent deploy --env LOG_LEVEL=debug --env FEATURE_X=true --yes
 | `--build-name` | | string | _latest by `startedAt`_ | Build to deploy. Builds are addressed by `buildName`, not `buildId`. |
 | `--env` | | strings | (none) | Set env var as `KEY=VALUE`. Repeatable. Merges with current config. |
 | `--yes` | `-y` | bool | `false` | Skip the env-conflict confirmation prompt. |
+
+---
+
+## amctl agent card set
+
+Register the URL that an externally-hosted agent's A2A card is fetched from, in one environment. Running it again for the same environment replaces the URL. With `--proxy`, the environment is also routed through its gateway; callers of a routed environment need an agent API key, created in the Console. See [Register an External A2A Agent](../../guides/register-an-external-a2a-agent.mdx).
+
+```
+amctl agent card set [agent] --url <card-url> [--proxy] [flags]
+```
+
+### Arguments
+
+| Name | Description |
+|------|-------------|
+| `[agent]` | Agent name. Optional if the directory is linked. |
+
+### Example
+
+```bash
+amctl agent card set weather-agent \
+  --env development \
+  --url https://agent.example.com/.well-known/agent-card.json \
+  --proxy
+```
+
+### Options
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `--url` | string | _required_ | URL the agent card is served from. Must be an `http` or `https` URL. |
+| `--proxy` | bool | `false` | Route the environment through its gateway. The URL must then end in `/.well-known/agent-card.json` with no query or fragment. |
+| `--env` | string | linked project's environment | Environment name. |
+
+`--proxy` only turns routing on. Without it, an environment that is already routed through its gateway stays routed. Turning routing off, setting an upstream header, and removing a card URL are available only in the Console.
+
+---
+
+## amctl agent card get
+
+Show an agent's A2A card in one environment: the card source, fetch status (`pending`, `fetched`, or `failed`), any fetch error, and a summary of the card. For an externally-hosted agent it also shows the routing (`direct` or `proxied`), the gateway publish status (`pending`, `published`, or `failed`), the gateway URL, and any publish error. Works for externally-hosted agents and for platform-hosted agents created with `--subtype a2a-agent`.
+
+```
+amctl agent card get [agent] [flags]
+```
+
+### Arguments
+
+| Name | Description |
+|------|-------------|
+| `[agent]` | Agent name. Optional if the directory is linked. |
+
+### Options
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | string | linked project's environment | Environment name. |
+
+---
+
+## amctl agent card refresh
+
+Queue a re-fetch of an agent's A2A card in one environment. For an environment routed through its gateway, this also republishes the gateway routes. A platform-hosted agent must be deployed in the environment.
+
+```
+amctl agent card refresh [agent] [flags]
+```
+
+### Arguments
+
+| Name | Description |
+|------|-------------|
+| `[agent]` | Agent name. Optional if the directory is linked. |
+
+### Options
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | string | linked project's environment | Environment name. |
 
 ---
 

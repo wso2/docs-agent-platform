@@ -1,6 +1,6 @@
 ---
 sidebar_position: 17
-description: Configure the startup, readiness, and liveness checks that WSO2 Agent Manager runs on a platform-hosted agent, and roll them out with a deploy and promotion.
+description: Configure the startup, readiness, and liveness checks that WSO2 Agent Manager runs on a platform-hosted agent, and roll them out with a build and promotion.
 ---
 
 # Configure Agent Health Checks
@@ -24,15 +24,21 @@ With the defaults, an agent has up to 310 seconds to start (10 + 60 × 5).
 Each check is one of two types:
 
 - **TCP**: passes when the port accepts a connection.
-- **HTTP GET**: passes when a `GET` request to the path returns a 2xx or 3xx status. The default path is `/health`.
+- **HTTP GET**: passes when a `GET` request to the path returns a 2xx or 3xx status.
 
-Checks use plain HTTP, not HTTPS. Agents serve plain HTTP inside the platform, and TLS ends at the gateway. Each check runs on the agent's endpoint port unless you set a different port.
+Checks use plain HTTP, not HTTPS. Agents serve plain HTTP inside the platform, and TLS ends at the gateway. Each check runs on the agent's port unless you set a different port.
 
-### Health Checks Belong to the Agent
+### Health Checks Belong to Each Build
 
-You set health checks once on the agent, and the same checks apply in every environment. No rebuild is needed. A deploy saves the agent's current checks in the release it creates, and promoting copies that release, checks included, to the next environment.
+Each build records the agent's health checks as they are when the build starts, the same way it records the agent's port. Wherever that build runs, it runs with its own checks:
 
-For example, you switch readiness from TCP to HTTP GET `/health`. Nothing changes until you deploy. The deploy to the first environment in the pipeline uses the new check. Sandbox gets it when you promote that release, and keeps the old check until then.
+- When a build finishes, the platform deploys it to the first environment in the project's [deployment pipeline](../concepts/deployment-pipeline.mdx) with that build's checks.
+- Promoting copies the checks the source environment runs to the next environment.
+- Deploying an older build again, for example to roll back, runs the checks that build recorded.
+
+For example, build 3 uses the default TCP readiness check. You then switch readiness to HTTP GET `/health` and trigger build 4. Build 4 runs with HTTP GET `/health`. If you roll back to build 3, readiness goes back to TCP, which suits build 3 if its code does not serve `/health` yet.
+
+Builds made before health checks were configurable have no recorded checks and run the defaults.
 
 ## Prerequisites
 
@@ -43,13 +49,14 @@ For example, you switch readiness from TCP to HTTP GET `/health`. Nothing change
 
 This step is optional. You can set every check later in [Step 2](#step-2-edit-the-health-checks).
 
-1. In your project, click **Add Agent**, choose **Platform-Hosted Agent**, then **Source Code**.
-2. Under **Agent Type**, choose **Chat Agent**, **Custom API Agent**, or **A2A Agent**.
-3. In **Readiness Check**, select one of the following:
-    - **TCP: the port accepts connections**. The agent gets the default checks.
-    - **HTTP GET: the path returns 2xx or 3xx**. Then enter the **Path**.
-
-The **Path** starts as `/health` for a Chat Agent or Custom API Agent, and as `/.well-known/agent-card.json` for an A2A Agent. The A2A protocol has no health endpoint, but every A2A server serves its agent card at that path. The path must start with `/` and contain no spaces.
+1. In your project, click **Add Agent**, select **Platform-Hosted Agent**, then **Source Code**.
+2. Under **Agent Type**, select **Chat Agent**, **Custom API Agent**, or **A2A Agent**.
+3. In the **Readiness check** section, set **Type** to **TCP** or **HTTP GET**.
+4. For **HTTP GET**, check the **Path**. The Console fills it in for the agent type:
+    - `/health` for a Chat Agent.
+    - The base path followed by `/health` for a Custom API Agent, for example `/api/health`.
+    - `/.well-known/agent-card.json` for an A2A Agent. The A2A protocol has no health endpoint, but every A2A server serves its agent card at that path.
+5. Optional: in **Port**, enter a port to check. Leave it empty to use the agent's port.
 
 The create page does not show the wait times or the startup and liveness checks. Set those in the build configuration.
 
@@ -57,15 +64,15 @@ The create page does not show the wait times or the startup and liveness checks.
 
 1. Open the agent and click **Build** in the left navigation.
 2. Click **Configure Build**.
-3. Scroll to the **Health Checks** card. It has a section for each of **Startup check**, **Readiness check**, and **Liveness check**.
+3. Scroll to the **Health Checks** card. It has a section for each of **Startup**, **Readiness**, and **Liveness**.
 4. Turn each check on or off with its switch.
 5. For each check that is on, set the following fields:
 
     | Field | Description |
     |---|---|
-    | **Check type** | **TCP: the port accepts connections** or **HTTP GET: the path returns 2xx or 3xx**. |
+    | **Type** | **TCP** or **HTTP GET**. |
+    | **Path** | The path to request. Shown only for **HTTP GET**. |
     | **Port** | The port to check. Leave it empty to use the agent's port. |
-    | **Path** | The path to request. Shown only for HTTP GET. |
     | **Initial delay (s)** | Seconds to wait before the first check. |
     | **Interval (s)** | Seconds between checks. |
     | **Timeout (s)** | Seconds before a check counts as failed. |
@@ -73,10 +80,10 @@ The create page does not show the wait times or the startup and liveness checks.
 
 6. Click **Update Build Configuration**.
 
-Saving replaces all three checks on the agent. A field you leave empty uses the default. A check you turn off is saved as off only, so if you turn it on again later, it starts from the default values.
+A field you leave empty uses the default, which the field shows as its placeholder. Turning a check off keeps its other values, so turning it on again restores them.
 
-:::warning Keep the startup check on when liveness is on
-If the startup check is off and the liveness check is on, a warning appears under **Liveness check**. Without a startup check, liveness starts after its own initial delay, so an agent that is still starting by then is restarted again and again. Keep the startup check on, or give the liveness check an initial delay longer than the agent takes to start. The Console still lets you save.
+:::tip Keep the startup check on when liveness is on
+Without a startup check, the liveness check starts after its own initial delay. An agent that is still starting by then is restarted again and again. Keep the startup check on, or give the liveness check an initial delay longer than the agent takes to start.
 :::
 
 ### Limits
@@ -86,33 +93,54 @@ The Console and the API reject values outside these limits:
 | Field | Allowed values |
 |---|---|
 | **Initial delay (s)** | 0 to 3600 |
-| **Interval (s)**, **Timeout (s)** | 1 to 3600 |
-| **Failures allowed** | 1 to 1000 |
+| **Interval (s)** | 1 to 3600 |
+| **Timeout (s)** | 1 to 3600, and no longer than **Interval (s)** |
+| **Failures allowed** | 1 or more |
 | **Port** | 1 to 65535 |
-| **Path** | Starts with `/`, no spaces, at most 1024 characters |
+| **Path** | Starts with `/` and contains only letters, digits, `.`, `_`, `-`, and `/` |
 
-The startup check may wait at most one hour in total: initial delay + failures allowed × the longer of interval and timeout must be 3600 seconds or less. Fields you leave empty count with their defaults. For example, setting only **Failures allowed** to `80` gives 10 + 80 × 5 = 410 seconds, which is accepted.
+The startup check may take at most one hour in total: initial delay + interval × failures allowed must be 3600 seconds or less. Fields you leave empty count with their defaults. For example, setting only **Failures allowed** to `80` gives 10 + 5 × 80 = 410 seconds, which is accepted.
 
-## Step 3: Deploy to Apply the Change
+## Step 3: Build to Apply the Change
 
 Saving does not trigger a build, and running environments keep their current checks.
 
-1. Deploy the agent. The deploy goes to the first environment in the project's [deployment pipeline](../concepts/deployment-pipeline.mdx), which starts using the new checks.
-2. To apply the checks to a later environment, promote the agent from that first environment.
+1. On the **Build** page, click **Trigger a Build**. The build records the new checks.
+2. When the build finishes, the platform deploys it to the first environment in the deployment pipeline, which starts using the new checks.
+3. To apply the checks to a later environment, promote the agent from that first environment.
 
-Promoting a release that was deployed before you changed the checks does not apply the new checks. Deploy first, then promote.
+## Set Health Checks with amctl
+
+An agent manifest for `amctl agent create -f` accepts the same settings under `spec.healthChecks`. Fields you leave out use the defaults. Run `amctl agent create --template` to print a scaffold that includes a commented example.
+
+```yaml
+spec:
+  # name, provisioning, build, and inputInterface as usual
+  healthChecks:
+    startup:
+      type: HTTP
+      path: /health
+      failureThreshold: 80
+    readiness:
+      type: HTTP
+      path: /health
+    liveness:
+      type: TCP
+```
+
+A check you list is on unless it sets `enabled: false`.
 
 ## Verify the Health Checks
 
 1. Open the agent and click **Deploy** in the left navigation.
-2. On the environment card, find the **Health Checks** row. It shows how many checks are on, for example `2 of 3 on`. Hover over it to see each check, for example `Readiness: HTTP GET /health`.
-3. For the full settings, click **Configure** next to **Configurations and Secrets** and scroll to **Health Checks**. Each check shows what it tests, such as `On · HTTP GET /health on the agent's port`, and its wait times, such as `After 10s, every 5s, timeout 1s, 60 failures allowed`.
+2. On the environment card, find the **Health checks** row. It shows how many checks are on, for example `2 of 3 on`. Hover over it to see each check, for example `Startup: on, TCP · Readiness: on, HTTP GET /health · Liveness: off`.
+3. For the full settings, click **Configure** next to **Configurations and Secrets**, then expand **Health Checks**. Each check shows whether it is on and its settings, for example `HTTP GET /health on the agent's port · initial delay 0s · every 5s · timeout 1s · 6 failures allowed`.
 
-The deploy page shows the checks of the release the environment runs. Until a new release reaches the environment, they can differ from the agent's current settings. Nothing in this section is editable, because health checks cannot be set per environment.
+The deploy page shows the checks of the build the environment runs. Until a new build reaches the environment, they can differ from the settings in **Configure Build**. Nothing in this section is editable: set health checks in **Configure Build**.
 
 ## Health Checks for Agents from the Catalog
 
-When you publish a version of an agent to the [Agent Catalog](../concepts/agent-kind-and-catalog.mdx), the version saves the agent's health checks as they are at that moment. An agent created from that version starts with those saved checks. Versions published before health checks were configurable have no saved checks, so their agents get the defaults.
+When you publish a build of an agent to the [Agent Catalog](../concepts/agent-kind-and-catalog.mdx), the version uses the health checks that build recorded. An agent created from that version starts with those checks. A version published from a build made before health checks were configurable gives its agents the defaults.
 
 ## Next Steps
 

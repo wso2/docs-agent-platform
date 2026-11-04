@@ -14,7 +14,7 @@ An agent's definition combines several pieces, each independently configurable:
 - **Provisioning** — for platform-hosted agents, the source repository, branch, and path the platform builds from.
 - **Build** — the build strategy: `buildpack` (language + start command, e.g. Python) or `docker` (a `Dockerfile` in the repository).
 - **Configurations** — runtime settings: auto-instrumentation, environment variables, API key / OAuth security, CORS, and resilience timeouts.
-- **Health checks**: for platform-hosted agents, the startup, readiness, and liveness checks the platform runs on the agent. They are set once on the agent, saved in the release the next deploy creates, and carried to later environments when that release is promoted. See [Configure Agent Health Checks](../guides/configure-agent-health-checks.mdx).
+- **Health checks**: for platform-hosted agents, the startup, readiness, and liveness checks the platform runs on the agent. Each build records them, runs with them in every environment it reaches, and keeps them when it is promoted or deployed again. See [Configure Agent Health Checks](../guides/configure-agent-health-checks.mdx).
 - **Kind** — optionally, an agent can be created from a published [Agent Kind](./agent-kind-and-catalog.mdx) rather than a raw repository.
 
 ## Life Cycle Actions

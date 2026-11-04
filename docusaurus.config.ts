@@ -9,7 +9,7 @@ const versions: string[] = JSON.parse(fs.readFileSync('./versions.json', 'utf-8'
 // Versions cut ahead of their release. Their pages are built and reachable by URL,
 // but stay out of the version dropdown, the announcement bar, search, and search
 // engines until the release ships; remove one from this list to publish it.
-const unreleasedVersions = ['v2026.11.0'];
+const unreleasedVersions: string[] = [];
 // STS (short-term support) releases are listed in the version dropdown but never
 // become the default version; the site keeps opening on the latest other release.
 const stsVersions = ['v2026.11.0'];

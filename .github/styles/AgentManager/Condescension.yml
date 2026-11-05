@@ -1,0 +1,12 @@
+# Words that tell the reader a step is easy. If it isn't for them, the page
+# has just told them they're doing it wrong.
+extends: existence
+message: "Consider removing '%s'."
+level: suggestion
+ignorecase: true
+tokens:
+  - simply
+  - easily
+  - obviously
+  - straightforward
+  - all you (?:need|have) to do is

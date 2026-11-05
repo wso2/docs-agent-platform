@@ -1,0 +1,16 @@
+# The registry.wso2.com project belongs to WSO2, not the reader. In these docs
+# "your project" means the reader's Agent Manager project, so only the forms
+# that place charts, images, or releases in a project are flagged.
+#
+# Raw scope, so a token can see inline code: Vale hides `registry.wso2.com`
+# from text-scoped rules, which leaves "your project on" with nothing after it.
+extends: existence
+message: "'%s' reads as if the registry project belongs to the reader. Say 'the registry project' or 'the registry'."
+level: warning
+ignorecase: true
+scope: raw
+tokens:
+  - your registry project
+  - your (?:WSO2|subscription|evaluation) project
+  - 'your project on (?:the )?(?:WSO2 )?(?:`registry\.wso2\.com|registry)'
+  - '(?:publish(?:ed|es)?|releases?|pull(?:ing|s)?|images?|charts?|installer|tags?)(?: [\w.-]+){0,2} (?:to|from|in|with) your project'

@@ -15,6 +15,7 @@ on:
       - 'issue_template.md'
       - 'pull_request_template.md'
       - '.github/**'
+      - '.vale.ini'
       - '.claude/**'
   workflow_dispatch:
 

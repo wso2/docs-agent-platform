@@ -1,0 +1,59 @@
+name: Documentation Style Suggestions
+
+# Vale suggests style and readability fixes on the lines a pull request adds.
+# It only annotates: the job passes whatever Vale finds, and GitHub shows at
+# most 10 annotations, the rest staying in the job log. Rules are in
+# .github/styles/AgentManager/.
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'versioned_docs/**'
+      - '.vale.ini'
+      - '.github/styles/**'
+
+permissions:
+  contents: read
+
+jobs:
+  vale:
+    name: Vale
+    # A docs release PR copies all of docs/ into versioned_docs/, so every line
+    # in it counts as added. Its content was already checked under docs/.
+    if: ${{ !startsWith(github.head_ref, 'docs/release-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # A JSON array, so each path reaches Vale whole. When only the Vale
+      # configuration changed, lint all of docs/ instead: a broken rule or
+      # .vale.ini fails the step, and with no page lines added, nothing is
+      # annotated.
+      - name: List changed pages
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          pages=$(git diff --name-only --diff-filter=d "$BASE_SHA" HEAD -- \
+            'docs/*.md' 'docs/*.mdx' 'versioned_docs/*.md' 'versioned_docs/*.mdx')
+          config=$(git diff --name-only "$BASE_SHA" HEAD -- .vale.ini .github/styles)
+          if [ -z "$pages" ] && [ -n "$config" ]; then
+            pages=docs
+          fi
+          files=$(printf '%s\n' "$pages" | jq -Rnc '[inputs | select(length > 0)]')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+
+      # github-pr-annotations writes through the job log rather than the API,
+      # so it also annotates pull requests from forks, whose token is read-only.
+      - uses: vale-cli/vale-action@518a9136acc6e6668ce7c00d367051e0941e87ff # v3.0.0
+        if: steps.changed.outputs.files != '[]'
+        with:
+          version: 3.12.0
+          files: ${{ steps.changed.outputs.files }}
+          sync: false
+          reporter: github-pr-annotations
+          filter_mode: added
+          fail_on_error: false

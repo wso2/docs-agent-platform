@@ -15,6 +15,7 @@ Event alerts require an Agent Manager build containing the Events and monitor-al
 
 - An installation with eventing enabled, as described below.
 - An organization role with `amp:events:manage` to create and test destinations. Viewing organization Events requires `amp:events:read`.
+- For project or agent subscriptions, the project update (`amp:project:update`) or agent update (`amp:agent:update`) permission, as described in the [authorization reference](../reference/authorization.mdx).
 - A receiver endpoint or notification service credentials. See [Notification Service URLs](./notification-service-urls.mdx).
 
 ## Step 1: Enable Eventing
@@ -65,7 +66,7 @@ The quick-start installer explicitly selects `embedded` mode. Its in-memory bus 
 
 ![Add destination form with the Name and Available to settings](../img/alerting/destination-form.png)
 
-Notification URLs contain credentials. Agent Manager encrypts them and does not return them when a destination is read. When editing a destination, leave the URL empty to retain the saved credential.
+Notification URLs contain credentials. Agent Manager encrypts them and does not return them when a destination is read. When editing a destination, leave the URL empty to retain the saved credential. If you change the service, enter the URL again.
 
 For webhooks, copy the signing secret when it is displayed. Verify incoming requests using the `webhook-id`, `webhook-timestamp`, and `webhook-signature` headers according to [Standard Webhooks](https://www.standardwebhooks.com/). Use `webhook-id` to deduplicate deliveries.
 
@@ -89,7 +90,7 @@ When several subscriptions match the same event and destination, Agent Manager s
 
 ## Verify Delivery
 
-Use the destination's test action and confirm that the receiver gets the test notification. A test sends a real message; it does not require a subscription. Only callers with `amp:events:manage` can test destinations.
+Open the destination's actions menu, select **Send test event**, and confirm that the receiver gets the test notification. A test sends a real message; it does not require a subscription. Only callers with `amp:events:manage` can test destinations.
 
 Trigger a subscribed event, then open **Delivery Log** at the corresponding scope. Inspect its status and any delivery error. Delivery is at least once, so receivers must tolerate duplicates.
 
@@ -102,7 +103,7 @@ Delivery history is retained for 14 days by default. Operators can change `EVENT
 - **Events is missing:** confirm eventing is enabled and your token contains the required permissions. The Console discovers the feature through `GET /api/v1/config`.
 - **A destination is unavailable:** check **Available to** and the project selection. Project and agent subscriptions cannot use an organization-only destination.
 - **A URL is rejected:** check the service URL syntax and percent-encoding. Production destinations must resolve to public addresses; private endpoints are blocked by default. `EVENTS_ALLOW_PRIVATE_DESTINATIONS=true` is intended for local development.
-- **Deletion or an availability change is refused:** remove or update subscriptions and monitor alert rules that still use the destination before retrying.
+- **Deletion or an availability change is refused:** remove or update the subscriptions that still use the destination before retrying. Monitor alerts are not checked at this point. If a destination is no longer usable by a monitor alert, its queued deliveries are skipped when they are sent.
 - **A delivery fails:** check the provider credential, receiver availability, and delivery error. Webhook retries include network failures, rate limits, and server errors; most other client errors are terminal.
 
 ## Next Steps

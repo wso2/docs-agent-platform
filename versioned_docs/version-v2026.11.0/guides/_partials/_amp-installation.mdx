@@ -92,7 +92,7 @@ This applies whatever `developmentMode` is set to. Earlier gateway releases auto
 Store the key with the rest of your platform secrets. It encrypts credentials the gateway holds, and losing it means those entries cannot be decrypted.
 :::
 
-The gateway for this release, `2026.10.0`, is published only to your registry project. The operator itself still comes from `ghcr.io`, and pulls the gateway chart and images from `GATEWAY_REGISTRY`, set in the Configuration Variables step, with the `wso2-gateway-registry-credentials` secret. The controller in this gateway release serves its health check on the `admin` port under `/api/admin/v1/health`, so the probes are set as well.
+The gateway for this release, `2026.10.0`, is published only to `registry.wso2.com`. The operator itself still comes from `ghcr.io`, and pulls the gateway chart and images from `GATEWAY_REGISTRY`, set in the Configuration Variables step, with the `wso2-gateway-registry-credentials` secret. The controller in this gateway release serves its health check on the `admin` port under `/api/admin/v1/health`, so the probes are set as well.
 
 <Dev production={props.production}>
 
@@ -219,7 +219,7 @@ helm install gateway-operator \
 :::note Pin the gateway chart, do not inherit it
 `gateway.helm.chartVersion` decides which gateway chart the operator deploys, and it is the only thing that decides it — the `APIGateway` resource carries no chart version. Inheriting the operator's default has historically produced a chart whose templates do not render the controller's control-plane address, giving a gateway that installs, programs, and serves traffic while never registering with Agent Manager — so it never appears in the gateway list. Pin the chart explicitly, as above.
 
-Pin the container images too. The chart version and the image tags are set separately, so `chartVersion` alone can leave the gateway on the chart's default images, which point at a public registry that does not carry this release. The four `image.repository`/`image.tag` values above pull the controller and runtime at `2026.10.0` from your project. Check the pod images after installing rather than trusting the chart version alone.
+Pin the container images too. The chart version and the image tags are set separately, so `chartVersion` alone can leave the gateway on the chart's default images, which point at a public registry that does not carry this release. The four `image.repository`/`image.tag` values above pull the controller and runtime at `2026.10.0` from the registry. Check the pod images after installing rather than trusting the chart version alone.
 
 These are the versions the gateway extension chart of your version is tested with. The chart records them in its `gatewayRelease` values, which the one-command installer reads, and an update can move them. To see them for your version:
 
@@ -278,7 +278,7 @@ The API Platform Gateway is deployed as an extension after Agent Manager is runn
 The core platform: a Go API server, a React web console, and a database.
 
 :::info Tell the Console where your registry is
-The charts and images for this release come from your private project on `registry.wso2.com`. Add `--set console.config.registry="registry.wso2.com/<project>/sts"` to the install command below. The Console then generates registry-aware commands for adding environments: they run the scripts from the release bundle and pull from your project, with your registry credentials. Without it, the Console generates the public command, which fetches from GitHub and `ghcr.io` and fails for this release.
+The charts and images for this release come from the private registry `registry.wso2.com`. Add `--set console.config.registry="registry.wso2.com/<project>/sts"` to the install command below. The Console then generates registry-aware commands for adding environments: they run the scripts from the release bundle and pull from the registry, with your registry credentials. Without it, the Console generates the public command, which fetches from GitHub and `ghcr.io` and fails for this release.
 :::
 
 <Dev production={props.production}>

@@ -6,7 +6,7 @@ description: Migrate an existing Helm installation, including Agent Manager data
 
 This guide upgrades an existing WSO2 Agent Manager v1.0.0 Helm installation to the WSO2 subscription release 2026.11.0, or to one of its updates. The commands use the quick-start release names and namespaces. Substitute the names from your installation, and repeat the gateway steps for every gateway in every organization and environment, including the `<org>-<env>-egress` gateway of an environment with a separate egress gateway.
 
-Release 2026.11.0 is available only from `registry.wso2.com`, so every chart and image in this guide comes from your registry project, with your registry credentials.
+Release 2026.11.0 is available only from `registry.wso2.com`, so every chart and image in this guide comes from the registry, with your registry credentials, except the Gateway Operator chart, which still comes from `ghcr.io`.
 
 ## Breaking changes
 
@@ -54,7 +54,7 @@ GW_REGISTRY_ARGS=(
 AMP_IMAGE_ARGS=(--set-string global.ampImageRegistry="registry.wso2.com/$PROJECT/sts")
 ```
 
-Replace `<project>` with your registry project, `wso2-agent-manager` or `wso2-agent-manager-evaluations`. To install an update instead of the release, set `VERSION` to it, for example `2026.11.0-u2`. See [List the Published Versions](../install-with-a-wso2-subscription.mdx#list-the-published-versions). The gateway comes from the same project and uses the same credentials.
+Replace `<project>` with the registry project, `wso2-agent-manager` or `wso2-agent-manager-evaluations`. To install an update instead of the release, set `VERSION` to it, for example `2026.11.0-u2`. See [List the Published Versions](../install-with-a-wso2-subscription.mdx#list-the-published-versions). The gateway comes from the same project and uses the same credentials.
 
 Then set the shared variables and record the installation:
 

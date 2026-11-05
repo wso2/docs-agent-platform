@@ -15,7 +15,7 @@ Use the **Run One Command** tab under [Install](#install): one script creates th
 :::
 
 :::info WSO2 subscription
-With a WSO2 subscription or evaluation, you install the WSO2-supported build from `registry.wso2.com`. Select the **WSO2 Subscription** tab wherever this guide shows one, and see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx) for how to get your registry credentials and which registry project to use.
+With a WSO2 subscription or evaluation, you install the WSO2-supported build from `registry.wso2.com`. Select the **WSO2 Subscription** tab wherever this guide shows one, and see [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx) for how to get your registry credentials.
 :::
 
 :::info Stronger agent isolation tiers
@@ -118,7 +118,7 @@ curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3
 curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v1.0.0/k3d-install-subscription.sh | bash -s -- --project <project>
 ```
 
-Replace `<project>` with the registry project: `wso2-agent-manager-evaluations` for an evaluation, or `wso2-agent-manager` for a subscription. The script asks for your registry credentials and installs the newest version published to that project. To install a particular version, add `--version`, for example `--version 1.0.0-u2`. See [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx#one-command) for its options.
+Replace `<project>` with `wso2-agent-manager` for a subscription, or `wso2-agent-manager-evaluations` for an evaluation. The script asks for your registry credentials and installs the newest published version. To install a particular version, add `--version`, for example `--version 1.0.0-u2`. See [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx#one-command) for its options.
 
 </TabItem>
 </Tabs>
@@ -332,7 +332,7 @@ export INSTRUMENTATION_URL="http://default-default.gateway.localhost:19080/otel"
 In k3d, every management endpoint is accessed through a plane gateway using a hostname: Thunder, the Console, and the API via the Control Plane kgateway on port 8080 (`thunder.amp.localhost`, `console.amp.localhost`, `api.amp.localhost`), and the Agent Manager Observer via the Observability Plane kgateway on port 11080 (`traces.amp.localhost`). These match the chart defaults and the Control Plane / Observability Plane OIDC configuration. No port-forwarding is needed; `*.localhost` names resolve to the loopback address in browsers and curl.
 :::
 
-With a WSO2 subscription or evaluation, also point the charts at the registry project and sign Helm in to `registry.wso2.com`:
+With a WSO2 subscription or evaluation, also point the charts at the registry and sign Helm in to `registry.wso2.com`:
 
 <Tabs groupId="distribution" queryString>
 <TabItem value="community" label="Community" default>

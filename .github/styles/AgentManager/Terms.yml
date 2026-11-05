@@ -1,0 +1,12 @@
+# A few terms from the terminology table in .claude/skills/docs/style.md.
+extends: substitution
+message: "Use '%s' instead of '%s'."
+level: suggestion
+ignorecase: false
+action:
+  name: replace
+swap:
+  Agent Management Platform: Agent Manager
+  promotion pipeline: deployment pipeline
+  '[Aa]pi key|API-key': API key
+  'the console': the Console

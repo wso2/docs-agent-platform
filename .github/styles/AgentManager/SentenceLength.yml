@@ -1,0 +1,7 @@
+# Lenient on purpose: only flags sentences that are hard to read in one pass.
+extends: occurrence
+message: "This sentence has more than 40 words. Consider splitting it."
+scope: sentence
+level: suggestion
+max: 40
+token: \b(\w+)\b

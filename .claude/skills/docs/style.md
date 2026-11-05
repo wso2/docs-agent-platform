@@ -8,6 +8,8 @@ Read when the user asks to review, polish, or fix the writing or tone of a page,
 
 **Scope on existing pages**: many older pages predate these rules. When reviewing a diff, apply the rules to changed lines only (see `review.md` → Diff mode). When reviewing a whole page, report pre-existing issues but group them under "Pre-existing (not blocking)".
 
+**Vale**: a pull request's added lines also get Vale suggestions in CI (`.github/workflows/vale.yml`, rules in `.github/styles/AgentManager/`). Vale covers a lenient subset of this file, such as registry-project wording, a few terms, condescending words, and sentences over 40 words, so this review still applies in full. If `vale` is installed, run `vale <path>` and include its findings. When a rule here can be matched by a pattern without many false positives, add it as a Vale rule at `suggestion` level.
+
 ## Step 1: Identify the page type
 
 This site has no `docType` field. Infer the type from the folder, then confirm it from structure:

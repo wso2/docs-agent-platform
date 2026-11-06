@@ -98,13 +98,16 @@ Trigger a subscribed event, then open **Delivery Log** at the corresponding scop
 
 Delivery history is retained for 14 days by default. Operators can change `EVENTS_DELIVERY_RETENTION_DAYS` and `EVENTS_DELIVERY_MAX_ATTEMPTS` (six attempts by default).
 
+If the database or event bus is unavailable while an event is being matched to subscriptions and monitor alerts, Agent Manager retries with a growing delay for about 75 minutes. After that, the event is dropped and the loss is logged.
+
 ## Troubleshooting
 
 - **Events is missing:** confirm eventing is enabled and your token contains the required permissions. The Console discovers the feature through `GET /api/v1/config`.
 - **A destination is unavailable:** check **Available to** and the project selection. Project and agent subscriptions cannot use an organization-only destination.
 - **A URL is rejected:** check the service URL syntax and percent-encoding. Production destinations must resolve to public addresses; private endpoints are blocked by default. `EVENTS_ALLOW_PRIVATE_DESTINATIONS=true` is intended for local development.
-- **Deletion or an availability change is refused:** remove or update the subscriptions that still use the destination before retrying. Monitor alerts are not checked at this point. If a destination is no longer usable by a monitor alert, its queued deliveries are skipped when they are sent.
-- **A delivery fails:** check the provider credential, receiver availability, and delivery error. Webhook retries include network failures, rate limits, and server errors; most other client errors are terminal.
+- **Deletion or an availability change is refused:** remove or update the subscriptions and monitor alert settings that still use the destination, then retry. The error names the subscriptions that use it, or says that monitor alert settings use it.
+- **A delivery fails:** check the provider credential, receiver availability, and delivery error. Webhook retries include network failures, rate limits, and server errors; most other client errors are terminal. Notification services are retried after a failure, except an email whose recipient or sign-in the mail server refuses with a permanent (5xx) reply; a temporary (4xx) reply, such as greylisting, is retried.
+- **A delivery stays pending:** a delivery with no activity for six hours has lost its queued job, for example after an `embedded` restart, and is marked failed.
 
 ## Next Steps
 

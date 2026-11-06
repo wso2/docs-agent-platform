@@ -1,0 +1,156 @@
+---
+sidebar_position: 15
+description: Register an AI Gateway that you run on your own infrastructure, connect it to Agent Manager Cloud with a registration token, and deploy LLM Service Providers and MCP Proxies to it.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Add a Self-Hosted Gateway
+
+A self-hosted gateway is an AI Gateway that you run on your own infrastructure, with Docker or on a Kubernetes cluster, instead of the managed gateways that WSO2 Agent Manager Cloud provisions for you. You register it in the Console, start it with a registration token, and it connects to Agent Manager to receive the LLM Service Providers and MCP Proxies you deploy to it.
+
+Use a self-hosted gateway when traffic must stay on your own network, for example to reach an MCP server that is not reachable from the internet.
+
+## Before You Start
+
+A self-hosted gateway is egress only, stays in the one environment you register it in, and is never selected automatically. Check that it fits your agents before you set one up:
+
+- Only externally-hosted agents can use LLM Service Providers and MCP Proxies placed on a self-hosted gateway. Platform-hosted agents and monitors always use managed gateways.
+- MCP Proxies on a self-hosted gateway support API key security only, not Agent Identity (OAuth).
+
+For the full rules, see [Managed and Self-Hosted Gateways](../concepts/gateway.mdx#managed-and-self-hosted-gateways).
+
+## Prerequisites
+
+- A role with the `amp:gateway:create` and `amp:gateway:token-manage` permissions, such as **Agent Manager Admin** or **Platform Engineer**. See [Roles Bundle Scopes Around Personas](../concepts/organization.mdx#roles-bundle-scopes-around-personas).
+- An environment to register the gateway in.
+- A host with Docker, Docker Compose, `curl`, and `unzip`, or a Kubernetes cluster with `helm`, `kubectl`, and `openssl` available.
+- A public URL that clients use to reach the gateway, such as `https://gateway.example.com`.
+- Outbound HTTPS access from the gateway host to Agent Manager Cloud.
+
+## Step 1: Register the Gateway
+
+1. Sign in to the WSO2 Agent Manager Console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) and go to the organization level.
+2. In the left sidebar, under **INFRASTRUCTURE**, click **Gateways**.
+3. Click **Add Gateway**. The **Add Gateway** drawer opens.
+4. Under **Gateway Details**, fill in the fields:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Display Name** *(required)* | A name shown in the Console. 3 to 128 characters. | `Production Gateway` |
+   | **Name** *(required)* | The API resource name: 3 to 64 lowercase letters, numbers, or hyphens, not starting or ending with a hyphen. Unique in the organization, and cannot be changed later. | `production-gateway` |
+   | **Environment** *(required)* | The environment the gateway serves. | `Production` |
+   | **Public URL** *(required)* | The base URL clients use to reach the gateway: `http` or `https`, with no path, query, or fragment. | `https://gateway.example.com` |
+   | **Description** | Optional notes about the gateway. | |
+
+5. Click **Create**.
+
+Agent Manager registers the gateway and generates its first registration token. The drawer changes to **Set up \<display name\>** and shows the commands to run the gateway, with the token already filled in.
+
+:::warning
+The registration token is shown only once. Click **Copy** on each command before you close the drawer: the copied text contains the token, while the screen shows a placeholder. Treat the token as a secret. If you lose it, see [Manage Registration Tokens](#manage-registration-tokens).
+:::
+
+## Step 2: Run the Gateway
+
+Run the copied commands on the host or cluster where the gateway will run. For reference, these are the commands the Console generates for gateway version 2026.09.24. `<control-plane-host>` is the Agent Manager Cloud address that the Console fills in for you, and `<your-gateway-token>` is the registration token.
+
+<Tabs groupId="gateway-runtime">
+  <TabItem value="docker" label="Docker" default>
+
+1. Download and extract the gateway:
+
+   ```bash
+   curl -sLO https://github.com/wso2/api-platform/releases/download/ai-gateway/v2026.09.24/wso2apip-ai-gateway-2026.09.24.zip && unzip wso2apip-ai-gateway-2026.09.24.zip
+   ```
+
+2. Run the setup script. It creates the listener certificate, the at-rest encryption key, and the `api-platform.env` file.
+
+   ```bash
+   cd wso2apip-ai-gateway-2026.09.24 && ./scripts/setup.sh
+   ```
+
+3. Add the control plane connection settings to `api-platform.env`:
+
+   ```bash
+   cat >> api-platform.env << 'ENVFILE'
+   APIP_GW_CONTROLLER_CONTROLPLANE_HOST=<control-plane-host>
+   APIP_GW_CONTROLLER_CONTROLPLANE_TOKEN=<your-gateway-token>
+   ENVFILE
+   ```
+
+4. Start the gateway:
+
+   ```bash
+   docker compose up
+   ```
+
+  </TabItem>
+  <TabItem value="helm" label="Kubernetes (Helm)">
+
+1. Create the encryption key secret:
+
+   ```bash
+   openssl rand 32 > default-aesgcm256-v1.bin
+   kubectl create secret generic gateway-encryption-keys --from-file=default-aesgcm256-v1.bin=default-aesgcm256-v1.bin
+   ```
+
+2. Install the gateway chart:
+
+   ```bash
+   helm install gateway oci://ghcr.io/wso2/api-platform/helm-charts/gateway --version 2026.09.24 \
+     --set gateway.controller.controlPlane.host=<control-plane-host> \
+     --set gateway.controller.controlPlane.token.value=<your-gateway-token> \
+     --set gateway.controller.encryptionKeys.enabled=true \
+     --set gateway.controller.encryptionKeys.secretName=gateway-encryption-keys
+   ```
+
+  </TabItem>
+</Tabs>
+
+The same setup steps are available later on the gateway's page: on the **Gateways** page, click the gateway to open it, then see **Set up the gateway**.
+
+## Step 3: Verify the Connection
+
+On the **Gateways** page, find the gateway. Its status changes from **Inactive** to **Active** when it connects to Agent Manager.
+
+If the status stays **Inactive**, check that the gateway host has outbound HTTPS access to the control plane host in the setup commands, and that the token in the gateway configuration has not been revoked.
+
+## Step 4: Deploy Resources to the Gateway
+
+Deploy an LLM Service Provider or an MCP Proxy to the gateway's environment as usual (see [Register an LLM Service Provider](./register-llm-service-provider.mdx) and [Register an MCP Proxy](./register-mcp-proxy.mdx)). In the environment and gateway selection, select the self-hosted gateway for that environment.
+
+A self-hosted gateway is never chosen automatically, so select it even when it is the environment's only egress gateway. Otherwise the deployment fails with this message: `this environment's only egress gateways are self-hosted, which are never chosen automatically; specify the gateway to use`.
+
+Once a resource is deployed to an environment through a gateway, it stays on that gateway. See [How the Egress Gateway Is Selected](../concepts/gateway.mdx#how-the-egress-gateway-is-selected).
+
+### MCP Proxies on a Self-Hosted Gateway
+
+- **Private upstreams.** Agent Manager normally rejects MCP upstream URLs that are not publicly reachable. When every environment of an MCP Proxy endpoint resolves to a self-hosted gateway, that check is skipped, so the upstream can be an MCP server on your own network.
+- **API key security only.** Agent Identity (OAuth) is not available on self-hosted gateways. In the endpoint's security settings, the OAuth option is disabled with the message *OAuth isn't available on self-hosted gateways yet. Use API key security.* An existing Agent Identity MCP Proxy cannot be placed on a self-hosted gateway. See [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx).
+
+### MCP Proxies Used by Platform-Hosted Agents
+
+An MCP Proxy that platform-hosted agents use cannot be placed on a self-hosted gateway. The save fails with a message that tells you to use a separate MCP Proxy for self-hosted gateways. Register a second MCP Proxy for the same upstream and deploy that one to the self-hosted gateway.
+
+## Manage Registration Tokens
+
+A gateway authenticates to Agent Manager with a registration token. Each gateway can have at most two active tokens, which lets you start a gateway with a new token before you revoke the old one.
+
+To manage tokens, open the gateway from the **Gateways** page and use the **Registration tokens** card:
+
+- **Create a token:** click **New token**, then copy the token from the confirmation. It is not shown again.
+- **Revoke a token:** click the revoke icon next to the token, then click **Revoke** to confirm.
+
+To replace every token in one action, click **Reconfigure** under **Set up the gateway**. It revokes all active tokens, generates a new one, and shows the setup commands with the new token filled in.
+
+:::note
+Revoking a token does not disconnect a gateway that is already connected with it. A running gateway keeps working with its previous token until it reconnects.
+:::
+
+## Next Steps
+
+- [Register an MCP Proxy](./register-mcp-proxy.mdx)
+- [Register an LLM Service Provider](./register-llm-service-provider.mdx)
+- [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx)

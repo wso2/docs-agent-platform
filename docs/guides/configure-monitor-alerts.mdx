@@ -12,7 +12,7 @@ Send WSO2 Agent Manager evaluation outcomes to shared organization destinations.
 - An installation with [eventing enabled](./configure-event-alerts.mdx#step-1-enable-eventing).
 - An [evaluation monitor](./evaluation-monitors.mdx) and at least one organization destination available to its project.
 - `amp:monitor:read` to view settings and `amp:monitor:update` to change them.
-- To verify an alert: `amp:monitor:execute` to run the monitor, and `amp:agent:read` to open the agent's **Delivery Log**. The organization's **Delivery Log** requires `amp:events:read`.
+- To verify an alert: `amp:monitor:execute` to run the monitor, `amp:monitor:score-read` to view its scores, and `amp:agent:read` to open the agent's **Delivery Log**. The organization's **Delivery Log** requires `amp:events:read`.
 
 ## Step 1: Enable Alerts for the Monitor
 

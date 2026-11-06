@@ -12,22 +12,22 @@ A self-hosted gateway is an AI Gateway that you run on your own infrastructure, 
 
 Use a self-hosted gateway when traffic must stay on your own network, for example to reach an MCP server that is not reachable from the internet.
 
-## How a Self-Hosted Gateway Differs
+## Before You Start
 
-The Console lists each gateway as **Managed** or **Self-hosted** in the **Hosting** column. A self-hosted gateway has these properties:
+A self-hosted gateway is egress only, stays in the one environment you register it in, and is never selected automatically. Check that it fits your agents before you set one up:
 
-- **Egress only.** It hosts outbound LLM Service Provider and MCP Proxy artifacts. It cannot take the ingress role for incoming agent calls. See [Ingress and Egress Gateways](../concepts/gateway.mdx#ingress-and-egress-gateways).
-- **Fixed to its environment.** Like every gateway, it serves exactly one environment. A self-hosted gateway also cannot be removed from the environment you register it in.
-- **Never chosen automatically.** Agent Manager selects only managed gateways on its own. To place a resource on a self-hosted gateway, you select it explicitly.
-- **Used by externally-hosted agents only.** Platform-hosted agents and monitors always use managed gateways. See [What Can Use a Self-Hosted Gateway](#what-can-use-a-self-hosted-gateway).
+- Only externally-hosted agents can use LLM Service Providers and MCP Proxies placed on a self-hosted gateway. Platform-hosted agents and monitors always use managed gateways.
+- MCP Proxies on a self-hosted gateway support API key security only, not Agent Identity (OAuth).
+
+For the full rules, see [Managed and Self-Hosted Gateways](../concepts/gateway.mdx#managed-and-self-hosted-gateways).
 
 ## Prerequisites
 
 - A role with the `amp:gateway:create` and `amp:gateway:token-manage` permissions, such as **Agent Manager Admin** or **Platform Engineer**. See [Roles Bundle Scopes Around Personas](../concepts/organization.mdx#roles-bundle-scopes-around-personas).
 - An environment to register the gateway in.
-- A host with Docker and Docker Compose, or a Kubernetes cluster with `helm`, `kubectl`, and `openssl` available.
+- A host with Docker, Docker Compose, `curl`, and `unzip`, or a Kubernetes cluster with `helm`, `kubectl`, and `openssl` available.
 - A public URL that clients use to reach the gateway, such as `https://gateway.example.com`.
-- Outbound HTTPS access from the gateway host to Agent Manager Cloud. The setup commands in the Console contain the address the gateway connects to.
+- Outbound HTTPS access from the gateway host to Agent Manager Cloud.
 
 ## Step 1: Register the Gateway
 
@@ -39,7 +39,7 @@ The Console lists each gateway as **Managed** or **Self-hosted** in the **Hostin
    | Field | Description | Example |
    |---|---|---|
    | **Display Name** *(required)* | A name shown in the Console. 3 to 128 characters. | `Production Gateway` |
-   | **Name** *(required)* | The resource name used by the API. It follows the display name until you edit it. Use 3 to 64 lowercase letters, numbers, and hyphens, not starting or ending with a hyphen. It must be unique in the organization and cannot be changed later. | `production-gateway` |
+   | **Name** *(required)* | The API resource name: 3 to 64 lowercase letters, numbers, or hyphens, not starting or ending with a hyphen. Unique in the organization, and cannot be changed later. | `production-gateway` |
    | **Environment** *(required)* | The environment the gateway serves. | `Production` |
    | **Public URL** *(required)* | The base URL clients use to reach the gateway: `http` or `https`, with no path, query, or fragment. | `https://gateway.example.com` |
    | **Description** | Optional notes about the gateway. | |
@@ -49,14 +49,12 @@ The Console lists each gateway as **Managed** or **Self-hosted** in the **Hostin
 Agent Manager registers the gateway and generates its first registration token. The drawer changes to **Set up \<display name\>** and shows the commands to run the gateway, with the token already filled in.
 
 :::warning
-The registration token is shown only once. Copy the commands before you close the drawer. If you lose the token, use **Reconfigure** to generate a new one (see [Manage Registration Tokens](#manage-registration-tokens)).
+The registration token is shown only once. Click **Copy** on each command before you close the drawer: the copied text contains the token, while the screen shows a placeholder. Treat the token as a secret. If you lose it, see [Manage Registration Tokens](#manage-registration-tokens).
 :::
 
 ## Step 2: Run the Gateway
 
-Run the commands from the Console on the host or cluster where the gateway will run. Use the **Copy** button on each command: the copied text contains the real token, while the displayed text shows a placeholder.
-
-The commands below show what the Console generates for gateway version 2026.09.24. `<control-plane-host>` is the Agent Manager Cloud address that the Console fills in for you, and `<your-gateway-token>` is the registration token.
+Run the copied commands on the host or cluster where the gateway will run. For reference, these are the commands the Console generates for gateway version 2026.09.24. `<control-plane-host>` is the Agent Manager Cloud address that the Console fills in for you, and `<your-gateway-token>` is the registration token.
 
 <Tabs groupId="gateway-runtime">
   <TabItem value="docker" label="Docker" default>
@@ -115,7 +113,7 @@ The same setup steps are available later on the gateway's page: on the **Gateway
 
 ## Step 3: Verify the Connection
 
-On the **Gateways** page, find the gateway. Its status changes from **Inactive** to **Active** when it connects to Agent Manager, and the **Hosting** column shows **Self-hosted**.
+On the **Gateways** page, find the gateway. Its status changes from **Inactive** to **Active** when it connects to Agent Manager.
 
 If the status stays **Inactive**, check that the gateway host has outbound HTTPS access to the control plane host in the setup commands, and that the token in the gateway configuration has not been revoked.
 
@@ -123,7 +121,7 @@ If the status stays **Inactive**, check that the gateway host has outbound HTTPS
 
 Deploy an LLM Service Provider or an MCP Proxy to the gateway's environment as usual (see [Register an LLM Service Provider](./register-llm-service-provider.mdx) and [Register an MCP Proxy](./register-mcp-proxy.mdx)). In the environment and gateway selection, select the self-hosted gateway for that environment.
 
-Because a self-hosted gateway is never chosen automatically, you must name it even when it is the only egress gateway in the environment. If the environment has no managed egress gateway and you do not specify one, the deployment fails with this message: `this environment's only egress gateways are self-hosted, which are never chosen automatically; specify the gateway to use`.
+A self-hosted gateway is never chosen automatically, so select it even when it is the environment's only egress gateway. Otherwise the deployment fails with this message: `this environment's only egress gateways are self-hosted, which are never chosen automatically; specify the gateway to use`.
 
 Once a resource is deployed to an environment through a gateway, it stays on that gateway. See [How the Egress Gateway Is Selected](../concepts/gateway.mdx#how-the-egress-gateway-is-selected).
 
@@ -132,14 +130,7 @@ Once a resource is deployed to an environment through a gateway, it stays on tha
 - **Private upstreams.** Agent Manager normally rejects MCP upstream URLs that are not publicly reachable. When every environment of an MCP Proxy endpoint resolves to a self-hosted gateway, that check is skipped, so the upstream can be an MCP server on your own network.
 - **API key security only.** Agent Identity (OAuth) is not available on self-hosted gateways. In the endpoint's security settings, the OAuth option is disabled with the message *OAuth isn't available on self-hosted gateways yet. Use API key security.* An existing Agent Identity MCP Proxy cannot be placed on a self-hosted gateway. See [Secure Agent Endpoints with API Keys](./secure-agent-endpoints-with-api-keys.mdx).
 
-## What Can Use a Self-Hosted Gateway
-
-| Consumer | LLM Service Providers on a self-hosted gateway | MCP Proxies on a self-hosted gateway |
-|---|---|---|
-| Externally-hosted agent | Yes. If the provider also has a managed placement in the environment, the managed one is used. | Yes |
-| Platform-hosted agent | No | No |
-| Evaluation monitor | No | Not applicable |
-| Project MCP Proxy binding | Not applicable | No |
+### MCP Proxies Used by Platform-Hosted Agents
 
 An MCP Proxy that platform-hosted agents use cannot be placed on a self-hosted gateway. The save fails with a message that tells you to use a separate MCP Proxy for self-hosted gateways. Register a second MCP Proxy for the same upstream and deploy that one to the self-hosted gateway.
 
@@ -149,7 +140,7 @@ A gateway authenticates to Agent Manager with a registration token. Each gateway
 
 To manage tokens, open the gateway from the **Gateways** page and use the **Registration tokens** card:
 
-- **Create a token:** click **New token**, then copy the token from the confirmation. It is not shown again. The button is disabled while the gateway already has two active tokens.
+- **Create a token:** click **New token**, then copy the token from the confirmation. It is not shown again.
 - **Revoke a token:** click the revoke icon next to the token, then click **Revoke** to confirm.
 
 To replace every token in one action, click **Reconfigure** under **Set up the gateway**. It revokes all active tokens, generates a new one, and shows the setup commands with the new token filled in.

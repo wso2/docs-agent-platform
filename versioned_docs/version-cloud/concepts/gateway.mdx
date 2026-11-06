@@ -48,7 +48,16 @@ Every gateway has a **hosting** value, shown in the **Hosting** column of the Co
 - **Managed** gateways are provisioned and run for you by Agent Manager Cloud.
 - **Self-hosted** gateways run on your own infrastructure and connect to Agent Manager with a registration token. A self-hosted gateway is always `EGRESS`, cannot be removed from the environment it is registered in, and is never selected automatically: you name it when you deploy an LLM Service Provider or MCP Proxy to it.
 
-Only externally-hosted agents can use resources placed on a self-hosted gateway. Platform-hosted agents and monitors always use managed gateways. See [Add a Self-Hosted Gateway](../guides/add-a-self-hosted-gateway.mdx).
+Only externally-hosted agents can use resources placed on a self-hosted gateway:
+
+| Consumer | LLM Service Providers on a self-hosted gateway | MCP Proxies on a self-hosted gateway |
+|---|---|---|
+| Externally-hosted agent | Yes. If the provider also has a managed placement in the environment, the managed one is used. | Yes, with API key security only. Agent Identity (OAuth) is not available. |
+| Platform-hosted agent | No | No |
+| Evaluation monitor | No | Not applicable |
+| Project MCP Proxy binding | Not applicable | No |
+
+To set one up, see [Add a Self-Hosted Gateway](../guides/add-a-self-hosted-gateway.mdx).
 
 ## Relationship to Other Concepts
 

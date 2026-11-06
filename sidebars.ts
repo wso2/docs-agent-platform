@@ -75,6 +75,9 @@ const sidebars: SidebarsConfig = {
           items: [
             'guides/custom-evaluators',
             'guides/evaluation-monitors',
+            'guides/configure-event-alerts',
+            'guides/configure-monitor-alerts',
+            'guides/notification-service-urls',
             'guides/configure-trace-sampling',
             'guides/observe-openclaw-agents',
           ],

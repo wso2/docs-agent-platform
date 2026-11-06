@@ -231,12 +231,24 @@ The tables below list every scope the platform defines, grouped by resource. The
 | Scope | Grants |
 | --- | --- |
 | `amp:monitor:create` | Create a monitor |
-| `amp:monitor:read` | View monitors |
-| `amp:monitor:update` | Update a monitor |
+| `amp:monitor:read` | View monitors and shared monitor-alert settings |
+| `amp:monitor:update` | Update a monitor and its shared alert settings |
 | `amp:monitor:delete` | Delete a monitor |
 | `amp:monitor:execute` | Execute a monitor |
 | `amp:monitor:score-read` | View monitor scores |
 | `amp:monitor:score-publish` | Publish monitor scores |
+
+</details>
+
+<details>
+<summary><strong>Events</strong></summary>
+
+| Scope | Grants |
+| --- | --- |
+| `amp:events:read` | View organization destinations, subscriptions, and delivery history |
+| `amp:events:manage` | Manage organization destinations and subscriptions, and send destination tests |
+
+Project-level subscriptions use `amp:project:read` and `amp:project:update`. Agent-level subscriptions use `amp:agent:read` and `amp:agent:update`. Shared monitor alerts use the monitor read and update scopes. See [Configure Event Alerts](../guides/configure-event-alerts.mdx).
 
 </details>
 
@@ -340,6 +352,7 @@ Rather than grant scopes one at a time, AMP ships four predefined roles. Each bu
 | Evaluators | Full | View | Full | View |
 | Agents (lifecycle) | Full | Create, read, update, delete, build, act on non-production environments, suspend, manage tokens & API keys | Read, build, act on non-production environments, suspend, manage API keys | Read, build, act on all environments, suspend, manage API keys |
 | Monitors | Full | Create, read, update, delete, run, read scores | Create, read, update, delete, run, read scores | Create, read, update, delete, run, read scores |
+| Organization Events | Full | No organization-level Events scopes | No organization-level Events scopes | No organization-level Events scopes |
 | Observability | All reads | All reads | Traces, metrics | All reads |
 | Roles & groups | Full | — | — | — |
 | Agent identities | Full | View | — | Full |

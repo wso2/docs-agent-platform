@@ -133,7 +133,6 @@ const sidebars: SidebarsConfig = {
             'guides/amp-instrumentation',
             'guides/configure-guardrail-system-parameters',
             'guides/use-a-custom-gateway-image',
-            'guides/add-a-self-hosted-gateway',
             'guides/configure-agent-health-checks',
           ],
         },

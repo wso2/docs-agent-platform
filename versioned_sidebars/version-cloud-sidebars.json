@@ -73,7 +73,6 @@
               "label": "MCP Proxies"
             },
             "guides/environment-management",
-            "guides/add-a-self-hosted-gateway",
             "guides/amp-instrumentation"
           ]
         },

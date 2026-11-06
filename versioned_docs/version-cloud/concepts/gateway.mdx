@@ -19,7 +19,7 @@ Routing LLM and MCP traffic through a gateway rather than exposing upstream prov
 
 ## Per-Environment Deployment
 
-A gateway is registered at the organization level, but it serves exactly one **[Environment](./environment.mdx)**. An environment can have several gateways, but a gateway is never shared between environments. When you register an LLM Service Provider or MCP Proxy, the platform deploys that resource's configuration into each environment it's configured for, onto an egress gateway in that environment — you don't wire a provider to a gateway environment by environment yourself. You only name a gateway explicitly when an environment offers more than one choice; see [How the Egress Gateway Is Selected](#how-the-egress-gateway-is-selected).
+A gateway is registered at the organization level, but it deploys one artifact per **[Environment](./environment.mdx)** it's mapped to. When you register an LLM Service Provider or MCP Proxy, the platform deploys that resource's configuration into each environment it's configured for, onto an egress gateway in that environment — you don't wire a provider to a gateway environment by environment yourself. You only name a gateway explicitly when an environment offers more than one choice; see [How the Egress Gateway Is Selected](#how-the-egress-gateway-is-selected).
 
 ## Ingress and Egress Gateways
 
@@ -36,30 +36,12 @@ Because the ingress slot holds at most one gateway, inbound routing is unambiguo
 
 Egress placement does have to be resolved, since an environment may have several candidates:
 
-- When the environment has **exactly one** managed egress gateway, the platform infers it and you don't specify anything. Self-hosted gateways are never inferred.
+- When the environment has **exactly one** egress gateway, the platform infers it and you don't specify anything.
 - When it has **more than one**, the target gateway must be named as the resource is deployed to that environment.
 
 Placement is then fixed. Once an endpoint is deployed to an environment through a given gateway, supplying a different one on update is rejected rather than silently moving live traffic.
 
-## Managed and Self-Hosted Gateways
-
-Every gateway has a **hosting** value, shown in the **Hosting** column of the Console's **Gateways** page:
-
-- **Managed** gateways are provisioned and run for you by Agent Manager Cloud.
-- **Self-hosted** gateways run on your own infrastructure and connect to Agent Manager with a registration token. A self-hosted gateway is always `EGRESS`, cannot be removed from the environment it is registered in, and is never selected automatically: you name it when you deploy an LLM Service Provider or MCP Proxy to it.
-
-Only externally-hosted agents can use resources placed on a self-hosted gateway:
-
-| Consumer | LLM Service Providers on a self-hosted gateway | MCP Proxies on a self-hosted gateway |
-|---|---|---|
-| Externally-hosted agent | Yes. If the provider also has a managed placement in the environment, the managed one is used. | Yes, with API key security only. Agent Identity (OAuth) is not available. |
-| Platform-hosted agent | No | No |
-| Evaluation monitor | No | Not applicable |
-| Project MCP Proxy binding | Not applicable | No |
-
-To set one up, see [Add a Self-Hosted Gateway](../guides/add-a-self-hosted-gateway.mdx).
-
 ## Relationship to Other Concepts
 
 - **[LLM Service Providers](./llm-service-provider.mdx)** and **[MCP Proxies](./mcp-proxy.mdx)** are registered independently of any gateway, but each deploys its per-environment configuration onto an egress gateway in that environment.
-- Multiple gateways can exist in one organization, and several within a single environment, but each gateway serves only one environment. Each LLM Service Provider is exposed through the egress gateway its artifact is placed on in that environment.
+- Multiple gateways can exist in one organization — for different environments or teams, and several within a single environment. Each LLM Service Provider is exposed through the egress gateway its artifact is placed on in that environment.

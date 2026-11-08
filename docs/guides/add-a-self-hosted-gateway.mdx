@@ -39,9 +39,7 @@ console:
       enableSelfHostedGateways: true
 ```
 
-That is all a local installation needs when the gateway runs as a Docker container on the same machine. The setup commands then point the gateway at `http://host.docker.internal:8080`.
-
-If the gateway runs anywhere else, it must reach Agent Manager at `console.config.gatewayControlPlaneUrl`, and that URL's host must be listed in `agentManagerService.ocIngress.gatewayMgmt.hostnames`. A production installation sets both in [Wire the Remaining Public Endpoints](./on-your-environment.mdx#wire-the-remaining-public-endpoints).
+The gateway must also reach Agent Manager at `console.config.gatewayControlPlaneUrl`, and that URL's host must be listed in `agentManagerService.ocIngress.gatewayMgmt.hostnames`. The gateway always connects over TLS (`wss://` and `https://`), so the URL must be served over HTTPS. The default, `http://host.docker.internal:8080`, is not. A production installation sets both values in [Wire the Remaining Public Endpoints](./on-your-environment.mdx#wire-the-remaining-public-endpoints).
 
 The setup commands install the gateway version in `console.config.gatewayVersion`, `v2026.09.24` by default. The gateway must be 2026.09.24 or later.
 

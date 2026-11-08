@@ -19,7 +19,7 @@ Routing LLM and MCP traffic through a gateway rather than exposing upstream prov
 
 ## Per-Environment Deployment
 
-A gateway is registered at the organization level, but it serves exactly one **[Environment](./environment.mdx)**. An environment can have several gateways, but a gateway is never shared between environments. When you register an LLM Service Provider or MCP Proxy, the platform deploys that resource's configuration into each environment it's configured for, onto an egress gateway in that environment — you don't wire a provider to a gateway environment by environment yourself. You only name a gateway explicitly when an environment offers more than one choice; see [How the Egress Gateway Is Selected](#how-the-egress-gateway-is-selected).
+A gateway is registered at the organization level, but it serves exactly one **[Environment](./environment.mdx)**. An environment can have several gateways, but a gateway is never shared between environments. When you register an LLM Service Provider or MCP Proxy, the platform deploys that resource's configuration into each environment it's configured for, onto an egress gateway in that environment — you don't wire a provider to a gateway environment by environment yourself. You name a gateway explicitly only when an environment has more than one managed egress gateway, or when you want a self-hosted one; see [How the Egress Gateway Is Selected](#how-the-egress-gateway-is-selected).
 
 ## Ingress and Egress Gateways
 
@@ -37,7 +37,8 @@ Because the ingress slot holds at most one gateway, inbound routing is unambiguo
 Egress placement does have to be resolved, since an environment may have several candidates:
 
 - When the environment has **exactly one** managed egress gateway, the platform infers it and you don't specify anything. Self-hosted gateways are never inferred.
-- When it has **more than one**, the target gateway must be named as the resource is deployed to that environment.
+- When it has **more than one** managed egress gateway, or only self-hosted ones, the target gateway must be named as the resource is deployed to that environment.
+- To place a resource on a self-hosted gateway, name that gateway.
 
 Placement is then fixed. Once an endpoint is deployed to an environment through a given gateway, supplying a different one on update is rejected rather than silently moving live traffic.
 
@@ -52,7 +53,7 @@ Only externally-hosted agents can use resources placed on a self-hosted gateway:
 
 | Consumer | LLM Service Providers on a self-hosted gateway | MCP Proxies on a self-hosted gateway |
 |---|---|---|
-| Externally-hosted agent | Yes. If the provider also has a managed placement in the environment, the managed one is used. | Yes, with API key security only. Agent Identity (OAuth) is not available. |
+| Externally-hosted agent | Yes | Yes, with API key security only. Agent Identity (OAuth) is not available. |
 | Platform-hosted agent | No | No |
 | Evaluation monitor | No | Not applicable |
 | Project MCP Proxy binding | Not applicable | No |

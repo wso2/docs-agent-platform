@@ -1,11 +1,24 @@
 ---
 sidebar_position: 5
-description: Install the WSO2-supported build of Agent Manager from registry.wso2.com with the registry credentials WSO2 sends for a subscription or an evaluation.
+description: What the Agent Manager 2026.11.0 short-term support (STS) release is, how it differs from LTS releases, and how to get registry credentials to install it.
 ---
 
-# Install with a WSO2 Subscription
+# About the STS Release
 
-WSO2 Agent Manager 2026.11.0 is a short-term support (STS) release, available only with a WSO2 subscription or an evaluation of one. WSO2 publishes its Helm charts and images to `registry.wso2.com`, signs them, and follows the release with updates that carry fixes. There is no community build of this release. This page covers what you need before you install it with the [k3d](./on-k3d.mdx) or [On Your Environment](./on-your-environment.mdx) guide.
+WSO2 Agent Manager 2026.11.0 is a short-term support (STS) release, and anyone can install it. Download it from the WSO2 website to evaluate it, or use your WSO2 subscription. Either way, you get the registry credentials that the installation needs.
+
+This page covers what you need before you install it with the [k3d](./on-k3d.mdx) or [On Your Environment](./on-your-environment.mdx) guide.
+
+## STS and LTS Releases
+
+WSO2 delivers new features, mainly AI features, in an STS release first, so you can use them before the next long-term support (LTS) release.
+
+- **Updates carry features.** Updates to an STS release carry new features as well as bug and security fixes. Updates to an LTS release carry only fixes.
+- **Fixes stay in step.** Each STS update also includes the fixes released for the LTS release.
+- **Support is short.** WSO2 supports an STS release until the next LTS release ships. That LTS release includes every feature of the STS release, so plan to move to it.
+- **Versions are dated.** An STS release is named after the year and month it was released, such as 2026.11.0, so you can tell it apart from an LTS release such as 1.0.0.
+
+Use an STS release to try new features early, or to run them before the next LTS release is out. For a deployment you want to keep for a long time without upgrading, use an LTS release.
 
 ## Get Your Registry Credentials
 
@@ -13,7 +26,7 @@ How you get registry credentials depends on how you obtained Agent Manager.
 
 ### Evaluation
 
-When you download Agent Manager from the WSO2 website for evaluation, WSO2 emails you registry credentials: a username and a token. Wherever a command shows `<project>`, use `wso2-agent-manager-evaluations`.
+You don't need a subscription to evaluate Agent Manager. Download it from the [WSO2 download page](https://wso2.com/products/downloads/?product=wso2agentmanager&package=quickstart), and WSO2 emails you registry credentials, which are a username and a token. Wherever a command shows `<project>`, use `wso2-agent-manager-evaluations`.
 
 ### Subscription
 

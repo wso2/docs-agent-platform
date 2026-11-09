@@ -14,8 +14,8 @@ Install the Agent Manager on a local Kubernetes cluster using [k3d](https://k3d.
 Use the **Run One Command** tab under [Install](#install): one script creates the cluster and installs everything. Use the **Guided Install** tab when you want to understand the full setup or need to customize it.
 :::
 
-:::info Available with a WSO2 subscription
-2026.11.0 is a short-term support (STS) release, available only with a WSO2 subscription or an evaluation of one. Its charts and images, and the API Platform gateway, come from `registry.wso2.com`. Before you start, get your registry credentials, as described in [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx).
+:::info Short-term support (STS) release
+2026.11.0 is a short-term support (STS) release. Agent Manager's charts and images, including the API Platform gateway, come from `registry.wso2.com`, so you need registry credentials before you start. Anyone can get them by downloading Agent Manager from the WSO2 website to evaluate it. With a WSO2 subscription, you can also use your subscription's credentials. Other components, such as OpenChoreo and the Gateway Operator chart, come from public registries such as `ghcr.io`. See [About the STS Release](./install-with-a-wso2-subscription.mdx).
 :::
 
 :::info Stronger agent isolation tiers
@@ -112,7 +112,7 @@ One script creates the cluster and installs every plane, plus Agent Manager:
 curl -fsSL https://github.com/wso2/agent-manager/releases/download/amp/v2026.11.0/k3d-install-subscription.sh | bash -s -- --project <project>
 ```
 
-Replace `<project>` with `wso2-agent-manager` for a subscription, or `wso2-agent-manager-evaluations` for an evaluation. The script asks for your registry credentials and installs the newest published version. To install a particular version, add `--version`, for example `--version 2026.11.0-u2`. See [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx#one-command) for its options.
+Replace `<project>` with `wso2-agent-manager` for a subscription, or `wso2-agent-manager-evaluations` for an evaluation. The script asks for your registry credentials and installs the newest published version. To install a particular version, add `--version`, for example `--version 2026.11.0-u2`. See [About the STS Release](./install-with-a-wso2-subscription.mdx#one-command) for its options.
 
 The script:
 
@@ -298,7 +298,7 @@ EOF
 
 Set these variables before continuing. They are used by the remaining Phase 1 steps and all of Phase 2.
 
-Replace `<version>` and `<project>` with your values from [Install with a WSO2 Subscription](./install-with-a-wso2-subscription.mdx). The version is `2026.11.0` for the release, or `2026.11.0-u<N>` for update N; the release bundle from Step 0 serves both. `GATEWAY_REGISTRY` is where Phase 2 pulls the API Platform gateway from.
+Replace `<version>` and `<project>` with your values from [About the STS Release](./install-with-a-wso2-subscription.mdx). The version is `2026.11.0` for the release, or `2026.11.0-u<N>` for update N; the release bundle from Step 0 serves both. `GATEWAY_REGISTRY` is where Phase 2 pulls the API Platform gateway from.
 
 ```bash
 export VERSION="<version>"

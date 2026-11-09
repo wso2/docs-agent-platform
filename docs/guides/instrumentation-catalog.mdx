@@ -19,7 +19,7 @@ The effective set is the union, deduplicated by `version`. When an extension ent
 
 ## Adding a version
 
-Walkthrough for adding a newly-published `amp-instrumentation` version to a running install. Examples use `0.5.0` as the placeholder — substitute the real version you're adding.
+Walkthrough for adding a newly-published `amp-instrumentation` version to a running install. Examples use `0.6.0` as the placeholder — substitute the real version you're adding.
 
 ### 1. Gather the facts about the version
 
@@ -47,7 +47,7 @@ agentManagerService:
   config:
     otel:
       additionalInstrumentationVersions:
-        - version: "0.5.0"
+        - version: "0.6.0"
           traceloopSdk: "0.65.0"
           pythonVersions: ["3.10", "3.11", "3.12", "3.13"]
           imageRepository: "ghcr.io/wso2/amp-python-instrumentation-provider"
@@ -72,13 +72,13 @@ The list is additive. Keep any entries already there.
 
 Skip this if you only want the new version *available*, not pre-selected on new agents.
 
-To make `0.5.0` the version pre-selected on the create-agent form, set `defaultInstrumentationVersion` in the same `values.yaml`:
+To make `0.6.0` the version pre-selected on the create-agent form, set `defaultInstrumentationVersion` in the same `values.yaml`:
 
 ```yaml
 agentManagerService:
   config:
     otel:
-      defaultInstrumentationVersion: "0.5.0"
+      defaultInstrumentationVersion: "0.6.0"
       additionalInstrumentationVersions:
         # (the entry from step 3)
 ```
@@ -115,27 +115,27 @@ Common messages and what they mean:
 
 | Log message | Cause | Fix |
 |---|---|---|
-| `extension entry "0.5.0": missing imageRepository` | A required field is missing on the entry | Add the field in step 3 |
-| `default instrumentation version "0.5.0" not in effective set` | Step 4 set the default but step 3 didn't add the entry | Add the entry, or revert the default |
+| `extension entry "0.6.0": missing imageRepository` | A required field is missing on the entry | Add the field in step 3 |
+| `default instrumentation version "0.6.0" not in effective set` | Step 4 set the default but step 3 didn't add the entry | Add the entry, or revert the default |
 | Server prints `Main API server is running` with no instrumentation errors | All good. Proceed to step 7 | — |
 
 If the pod crash-loops, `helm rollback <release>` reverts to the previous values.
 
 ### 7. Verify it appears in the Console
 
-Open the Console, navigate to the create-agent form, and hard-refresh (`Cmd+Shift+R` / `Ctrl+Shift+R`) to bypass the in-browser query cache. The "AMP Instrumentation Version" dropdown should now offer `0.5.0`. If you did step 4, it should also be pre-selected.
+Open the Console, navigate to the create-agent form, and hard-refresh (`Cmd+Shift+R` / `Ctrl+Shift+R`) to bypass the in-browser query cache. The "AMP Instrumentation Version" dropdown should now offer `0.6.0`. If you did step 4, it should also be pre-selected.
 
 ### 8. Smoke-test with a real agent
 
-The catalog check verifies that `0.5.0` is *selectable*. It does not verify that the init-container image is *pullable*. Catch any registry-side issue now, not later:
+The catalog check verifies that `0.6.0` is *selectable*. It does not verify that the init-container image is *pullable*. Catch any registry-side issue now, not later:
 
-1. Create a new agent → Python language → pick a Python version → pick `0.5.0`.
+1. Create a new agent → Python language → pick a Python version → pick `0.6.0`.
 2. Deploy.
 3. Watch the agent pod reach `Running`.
 
 If the agent pod sits in `ImagePullBackOff`, the catalog has the entry but Kubernetes can't pull the init-container image. Most common causes:
 
-- The specific Python tag wasn't mirrored (e.g. you mirrored `0.5.0-python3.11` but the user picked 3.10).
+- The specific Python tag wasn't mirrored (e.g. you mirrored `0.6.0-python3.11` but the user picked 3.10).
 - The registry needs auth and the cluster doesn't have an `imagePullSecret` for it.
 - Typo in `imageRepository`.
 
@@ -152,7 +152,7 @@ Bundled-baseline entries can't be removed via Helm; they ship with the AMP relea
 
 ## The platform default
 
-`OTEL_DEFAULT_INSTRUMENTATION_VERSION` (chart value: `agentManagerService.config.otel.defaultInstrumentationVersion`) is the version pre-selected on the create-agent form when a user doesn't override it. It defaults to `0.4.2`.
+`OTEL_DEFAULT_INSTRUMENTATION_VERSION` (chart value: `agentManagerService.config.otel.defaultInstrumentationVersion`) is the version pre-selected on the create-agent form when a user doesn't override it. It defaults to `0.5.0`.
 
 This value has to exist in the effective catalog at startup. If it doesn't, the server exits with:
 

@@ -19,7 +19,7 @@ The effective set is the union, deduplicated by `version`. When an extension ent
 
 ## Adding a version
 
-Walkthrough for adding a newly-published `amp-instrumentation` version to a running install. Examples use `0.5.0` as the placeholder — substitute the real version you're adding.
+Walkthrough for adding a newly-published `amp-instrumentation` version to a running install. Examples add `0.5.0` (`traceloop-sdk` 0.63.0), which was published after this release. Substitute the real version you're adding.
 
 ### 1. Gather the facts about the version
 
@@ -48,7 +48,7 @@ agentManagerService:
     otel:
       additionalInstrumentationVersions:
         - version: "0.5.0"
-          traceloopSdk: "0.65.0"
+          traceloopSdk: "0.63.0"
           pythonVersions: ["3.10", "3.11", "3.12", "3.13"]
           imageRepository: "ghcr.io/wso2/amp-python-instrumentation-provider"
 ```

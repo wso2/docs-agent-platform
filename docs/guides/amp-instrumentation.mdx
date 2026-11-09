@@ -317,15 +317,15 @@ These are covered by the [instrumentation matrix test suite](https://github.com/
 | LangChain | 0.3.27 | LLM | — |
 | LangGraph | 0.2.74 | LLM, Tool | Instrumented via the LangChain package |
 | LlamaIndex | 0.12.0 | LLM, Embedding | Embedding spans omit the vendor attribute |
-| CrewAI | 1.1.0 | LLM, Agent, Task | No tool spans are emitted; 1.14.5 fails to install on instrumentation 0.3.0 (see below) |
+| CrewAI | 1.1.0 | LLM, Agent, Task | No tool spans are emitted; 1.14.x does not install with any instrumentation version (see below) |
 | OpenAI (direct SDK) | 2.38.0 | LLM | — |
 | Anthropic (direct SDK) | 0.45.0 | LLM | — |
 | Strands Agents (OpenAI) | 1.55.1 | Agent, Chain, LLM, Tool | Tested with `openai==2.38.0`; emission only (gateway and Observer delivery not covered) |
 
-:::warning CrewAI 1.14.5 does not install on AMP instrumentation 0.3.0
-`crewai 1.14.5` requires `opentelemetry-api >=1.34,<1.35`, while the `traceloop-sdk 0.61.0` that AMP instrumentation 0.3.0 pins requires `>=1.38,<2`. Installing both fails with `ResolutionImpossible` at install time rather than degrading at runtime.
+:::warning CrewAI 1.14 does not install alongside AMP instrumentation
+CrewAI 1.14.x requires `opentelemetry-api ~=1.34`, while the `traceloop-sdk` that every AMP instrumentation version pins requires `>=1.38,<2`. Installing both fails with `ResolutionImpossible` at install time rather than degrading at runtime.
 
-CrewAI 1.14 has not been tested on 0.4.0, 0.4.1, 0.4.2, or 0.5.0, because the matrix pins CrewAI 1.1.0 for every version. All four resolve an `opentelemetry-api` above CrewAI 1.14.5's ceiling, so the same conflict is likely there, but it is unconfirmed. Stay on 1.1.x unless you have verified the combination yourself.
+CrewAI 1.15 and later relax that requirement and install with every AMP instrumentation version. The matrix still tests only CrewAI 1.1.0, so spans from 1.15 are unverified. If you move to 1.15, use 1.15.21 or later: earlier 1.15 releases pin `opentelemetry-api` to 1.42.x, while the platform-hosted instrumentation images ship 1.43 or later.
 :::
 
 OpenClaw is not in the matrix. It exports traces through its own plugin and is partially supported. See [Observe OpenClaw Agents](./observe-openclaw-agents.mdx).

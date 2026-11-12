@@ -46,8 +46,14 @@ chmod +x start.sh
 
 ### Option B: Run the Dev Container directly
 
+The container runs as a non-root user, so pass the Docker socket's group with `--group-add`. The first command reads that group from the Docker host.
+
 ```bash
+DOCKER_SOCKET_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  --entrypoint stat ghcr.io/wso2/amp-quick-start:v0.0.0-dev -c '%g' /var/run/docker.sock)
+
 docker run --rm -it --name amp-quick-start \
+  --group-add "$DOCKER_SOCKET_GID" \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --network=host \
   ghcr.io/wso2/amp-quick-start:v0.0.0-dev

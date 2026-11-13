@@ -1,13 +1,13 @@
 # Sample Agents
 
-The repository ships seven runnable agents under [`samples/`](https://github.com/wso2/agent-manager/tree/main/samples), each demonstrating a different framework and a different way of getting traces into the Agent Manager. Start from whichever one is closest to what you are building rather than from an empty directory.
+The following seven runnable agents are available in the [Agent Manager samples repository](https://github.com/wso2/agent-manager-samples). Each demonstrates a framework and an instrumentation approach.
 
 ## Choosing a Sample
 
 | Sample | Framework | Instrumentation | Start Here If You Want |
 |---|---|---|---|
 | [crewai-agent](#crewai-agent) | CrewAI | Zero-code | A multi-agent crew with sequential tasks |
-| [customer-support-agent](#customer-support-agent) | LangGraph | Zero-code | A multi-tool agent backed by a real database |
+| [customer-support-agent](#customer-support-agent) | LangGraph | Zero-code | A multi-tool agent with in-memory travel data |
 | [dotnet-agent](#dotnet-agent) | Microsoft Agent Framework (.NET) | Native OpenTelemetry | An agent in a language AMP does not auto-instrument |
 | [hotel-booking-agent](#hotel-booking-agent) | LangGraph | Zero-code | Retrieval over your own documents, plus a second service |
 | [insurance-support-agent](#insurance-support-agent) | Strands | Zero-code | A complete agent with a web UI and gateway login |
@@ -17,8 +17,15 @@ The repository ships seven runnable agents under [`samples/`](https://github.com
 **Zero-code** means the Agent Manager injects instrumentation at deploy time and the sample contains no tracing code. **Manual** and **native** samples emit their own spans. See [AMP Instrumentation](../guides/amp-instrumentation.mdx) for how the two paths differ.
 
 :::note Two of the seven run in CI
-`customer-support-agent` and `crewai-agent` are deployed and trace-verified on every release by the instrumentation matrix ([`deployable_samples.py`](https://github.com/wso2/agent-manager/blob/main/test/instrumentation-matrix/harness/deployable_samples.py)). The other five are maintained by hand, so pin versions yourself if you build on them.
+`customer-support-agent` and `crewai-agent` are deployed and trace-verified on every release by the instrumentation matrix ([`deployable_samples.py`](https://github.com/wso2/agent-manager/blob/main/test/instrumentation-matrix/harness/deployable_samples.py)). Pin a sample commit if you need reproducible builds.
 :::
+
+For the local run commands on this page, clone the samples repository and start from its root.
+
+```bash
+git clone https://github.com/wso2/agent-manager-samples
+cd agent-manager-samples
+```
 
 ## Before You Start
 
@@ -40,16 +47,16 @@ Two agents working in sequence. A researcher answers a question using a lookup t
 
 This is the smallest sample that produces `agent` and `crewaitask` spans, so it is the quickest way to see a multi-agent trace tree in the Console.
 
-- **App Path** — `/samples/crewai-agent`
+- **App Path** — `/crewai-agent`
 - **Requires** — `OPENAI_API_KEY`
-- **Installs** — `crewai==1.15.2`
+- **Installs** — [Pinned dependencies](https://github.com/wso2/agent-manager-samples/blob/main/crewai-agent/requirements.txt)
 
 CrewAI writes under `$HOME` when it is imported and again when a crew is constructed, and the build container's default home is not writable. The sample already handles this: `app.py` sets `CREWAI_STORAGE_DIR` and falls back to `HOME=/tmp` when the real home is read-only, before CrewAI is imported. Keep that preamble if you adapt the sample, or set `HOME` and `CREWAI_STORAGE_DIR` to writable paths on the agent yourself.
 
 Run it locally:
 
 ```bash
-cd samples/crewai-agent
+cd crewai-agent
 pip install -r requirements.txt
 python main.py
 # Serves on port 8000
@@ -59,15 +66,12 @@ python main.py
 
 ## customer-support-agent
 
-A travel support assistant covering flights, hotels, car rentals, and excursions, backed by a PostgreSQL dataset. It is based on the LangGraph customer-support tutorial, so it is the closest of the samples to a conventional production app.
+A travel support assistant covering flights, hotels, car rentals, and excursions. It uses fictional in-memory data and keeps booking changes within the current chat session.
 
-- **App Path** — `/samples/customer-support-agent`
-- **Requires** — `OPENAI_API_KEY`, `TAVILY_API_KEY`, and `DATABASE_URL` pointing at a PostgreSQL instance loaded with the bundled `db_backup.sql`
+- **App Path** — `/customer-support-agent`
+- **Requires** — `OPENAI_API_KEY`. Set `TAVILY_API_KEY` to enable web search
 - **Start Command** — `python main.py`
-
-:::note Dependencies are unpinned
-This sample's `requirements.txt` lists LangGraph and LangChain without version constraints, so a build resolves whatever is current that day. If you want a reproducible build, pin the versions before deploying.
-:::
+- **Installs** — [Pinned dependencies](https://github.com/wso2/agent-manager-samples/blob/main/customer-support-agent/requirements.txt)
 
 ---
 
@@ -81,7 +85,7 @@ Pick this one when your agent is not written in Python. It shows the whole exter
 - **Requires** — .NET 10 SDK, `OPENAI_API_KEY`, plus `AMP_OTEL_ENDPOINT` and `AMP_AGENT_API_KEY` from a registered externally-hosted agent
 
 ```bash
-cd samples/dotnet-agent
+cd dotnet-agent
 dotnet run
 # Serves on http://localhost:8000
 ```
@@ -94,7 +98,7 @@ A hotel assistant that searches availability, creates and cancels bookings, and 
 
 This is the retrieval sample, and the only one split across two deployables: the agent itself plus a separate Hotel API service it calls over HTTP. Deploy the Hotel API first so the agent has something to talk to.
 
-- **App Path** — `/samples/hotel-booking-agent/agent`, which is a subdirectory rather than the sample root
+- **App Path** — `/hotel-booking-agent/agent`, which is a subdirectory rather than the sample root
 - **Requires** — `OPENAI_API_KEY`, `PINECONE_API_KEY`, `PINECONE_SERVICE_URL`, and `HOTEL_API_BASE_URL`
 
 :::warning Pinecone is required for the agent, whatever the sample README says
@@ -104,7 +108,7 @@ The sample's own README describes Pinecone as optional. That is true of the Hote
 Run the Hotel API first:
 
 ```bash
-cd samples/hotel-booking-agent/services/hotel_api
+cd hotel-booking-agent/services/hotel_api
 pip install -r requirements.txt
 python -m uvicorn service:app --host 0.0.0.0 --port 9091
 ```
@@ -117,13 +121,13 @@ An insurance support agent over in-memory policies and claims. It can list polic
 
 This is the most complete sample end to end: it ships a React chat client that logs in through the gateway, so it is the one to read if you want to see agent authentication and CORS configured together. It is also the only Strands sample.
 
-- **App Path** — `/samples/insurance-support-agent/agent`
+- **App Path** — `/insurance-support-agent/agent`
 - **Requires** — `OPENAI_API_KEY` only, with no database or external service
 
 The agent sets `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` before importing Strands. Leave that in place if you adapt this sample, because without it tool inputs and outputs never reach the span attributes and the Console shows tool calls with empty payloads.
 
 ```bash
-cd samples/insurance-support-agent/agent
+cd insurance-support-agent/agent
 pip install -r requirements.txt
 export CORS_ALLOW_ORIGINS="http://localhost:5173"
 python main.py
@@ -141,7 +145,7 @@ An L1 IT helpdesk agent that handles password resets, software access requests, 
 
 Pick this one to explore governance. Its rules make agent behaviour easy to assert against, and its README walks through building a Sequence Adherence monitor that checks the agent looked up an employee before verifying their identity. It can also route through an LLM Service Provider so you can attach a prompt-decorator guardrail.
 
-- **App Path** — `/samples/it-helpdesk-agent`
+- **App Path** — `/it-helpdesk-agent`
 - **Requires** — `OPENAI_API_KEY`. All data is JSON fixtures in the sample, so there is nothing external to set up
 - **Optional** — set `USE_LLM_PROVIDER=true` with `LLM_PROVIDER_URL` and `LLM_PROVIDER_KEY` to route through a [registered provider](../guides/register-llm-service-provider.mdx)
 
@@ -157,14 +161,14 @@ This is the executable reference for the [manual instrumentation contract](../gu
 
 - **Runs** — either externally hosted or platform hosted
 - **Requires** — `OPENAI_API_KEY`, `AMP_OTEL_ENDPOINT`, and `AMP_AGENT_API_KEY`
-- **App Path** — `/samples/manual-instrumentation-agent` when platform hosted
+- **App Path** — `/manual-instrumentation-agent` when platform hosted
 
 :::warning Turn auto-instrumentation off for this one
 When you deploy this sample to the platform, set instrumentation to **Off** in the agent's configuration. The sample calls `init_otel()` itself, and leaving auto-instrumentation on means both paths emit spans for the same operations.
 :::
 
 ```bash
-cd samples/manual-instrumentation-agent
+cd manual-instrumentation-agent
 pip install -r requirements.txt
 python main.py
 ```

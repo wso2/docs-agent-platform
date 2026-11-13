@@ -194,7 +194,7 @@ Prompt and completion content is captured by default. To suppress it, set `TRACE
 
 AMP's platform-injected auto-instrumentation covers Python (and Ballerina). A .NET agent joins AMP through the **external-agent path**: register it in the Console, then have it push spans to AMP's OTLP endpoint using the same transport and contract as above (`POST ${AMP_OTEL_ENDPOINT}/v1/traces`, header `x-amp-api-key`, `gen_ai.*` attributes). Nothing on the AMP side is .NET-specific — any process that emits contract-shaped spans to that endpoint renders in the Console and feeds evaluators.
 
-The runnable [`dotnet-agent`](https://github.com/wso2/agent-manager/tree/main/samples/dotnet-agent) sample is the worked example of everything below.
+The runnable [`dotnet-agent`](https://github.com/wso2/agent-manager-samples/tree/main/dotnet-agent) sample is the worked example of everything below.
 
 ### Where the `gen_ai.*` spans come from
 
@@ -206,7 +206,7 @@ The recommended SDK is **Microsoft Agent Framework** (Microsoft's successor to S
 
 Instrument the **agent** with `UseOpenTelemetry(sourceName)` and let Agent Framework auto-wire the chat-client and tool spans beneath it. Do not also instrument the chat client yourself — that disables the auto-wiring and flattens the trace.
 
-Then configure the exporter to AMP. This is the .NET analog of `init_otel()`; the sample wraps it in [`AmpTelemetry.cs`](https://github.com/wso2/agent-manager/tree/main/samples/dotnet-agent/AmpTelemetry.cs):
+Then configure the exporter to AMP. This is the .NET analog of `init_otel()`; the sample wraps it in [`AmpTelemetry.cs`](https://github.com/wso2/agent-manager-samples/blob/main/dotnet-agent/AmpTelemetry.cs):
 
 ```csharp
 const string SourceName = "my-dotnet-agent";

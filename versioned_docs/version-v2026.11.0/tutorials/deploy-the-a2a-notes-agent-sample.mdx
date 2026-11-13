@@ -10,7 +10,7 @@ import TabItem from '@theme/TabItem';
 
 WSO2 Agent Manager includes a ready-to-deploy sample agent that speaks the [A2A protocol](https://a2a-protocol.org/), called the A2A Notes Agent. In this tutorial you deploy it as an **A2A Agent**, then call it through the gateway over both A2A transports. You do not need to write or change any code.
 
-The sample lives in the platform's GitHub repository, at [`samples/a2a-agent`](https://github.com/wso2/agent-manager/tree/main/samples/a2a-agent). It is built on the official [`a2a-sdk`](https://github.com/a2aproject/a2a-python) Python package and FastAPI.
+The sample lives in the Agent Manager samples repository at [`a2a-agent`](https://github.com/wso2/agent-manager-samples/tree/main/a2a-agent). It is built on the official [`a2a-sdk`](https://github.com/a2aproject/a2a-python) Python package and FastAPI.
 
 ## What You Will Build
 
@@ -49,9 +49,9 @@ For how Agent Manager exposes A2A agents in general, see [Deploy an A2A Agent](.
     |---|---|
     | **Name** | `a2a-notes-agent` |
     | **Description** *(optional)* | `Summarizes meeting notes and extracts action items over A2A` |
-    | **GitHub Repository** | `https://github.com/wso2/agent-manager` |
+    | **GitHub Repository** | `https://github.com/wso2/agent-manager-samples` |
     | **Branch** | `main` |
-    | **Project Path** | `/samples/a2a-agent` |
+    | **Project Path** | `/a2a-agent` |
 
 4. Choose **Python** as the build type, set **Language Version** to `3.11`, and set **Start Command** to `python main.py`.
 5. Leave **Enable auto instrumentation** checked.
@@ -67,9 +67,9 @@ amctl agent create a2a-notes-agent \
   --display-name "A2A Notes Agent" \
   --subtype a2a-agent \
   --port 9099 \
-  --repo-url https://github.com/wso2/agent-manager \
+  --repo-url https://github.com/wso2/agent-manager-samples \
   --repo-branch main \
-  --repo-path /samples/a2a-agent \
+  --repo-path /a2a-agent \
   --build-type buildpack \
   --language python \
   --language-version 3.11 \
@@ -181,7 +181,7 @@ Each server-sent event is one line: first the `Task`, then a `working` status up
 
 ## Call It from an A2A Client
 
-Any A2A client works. Point it at the agent's card through the gateway, `<invoke-url>/.well-known/agent-card.json`. That card lists the gateway URLs, so the client calls the agent through the gateway. The [sample README](https://github.com/wso2/agent-manager/tree/main/samples/a2a-agent#call-it-from-an-a2a-client) includes an `a2a-sdk` client example.
+Any A2A client works. Point it at the agent's card through the gateway, `<invoke-url>/.well-known/agent-card.json`. That card lists the gateway URLs, so the client calls the agent through the gateway. The [sample README](https://github.com/wso2/agent-manager-samples/blob/main/a2a-agent/README.md#call-it-from-an-a2a-client) includes an `a2a-sdk` client example.
 
 ## Troubleshooting
 

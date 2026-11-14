@@ -4,7 +4,7 @@ title: Agent and Agent Life Cycle
 
 # Agent and Agent Life Cycle
 
-An Agent is the core workload in WSO2 Agent Manager. A registered AI agent that belongs to a [project](./project.mdx), optionally builds and deploys through the platform, and is governed and observed once it's running.
+An Agent is the core workload in WSO2 Agent Manager. An agent is a registered AI agent that belongs to a [project](./project.mdx), Depending on its configuration, it can be built and deployed through the platform. Once running, it can be governed and monitored.
 
 ## What Makes Up an Agent
 
@@ -42,5 +42,5 @@ An agent's deployment status is tracked independently for each environment it ta
 | `not-deployed` | The agent has never been deployed to this environment. |
 | `suspended` | Previously deployed, then stopped by the suspend action. |
 
-The distinction between `in-progress` and `active` matters in practice, an agent whose configuration has been applied but whose container is still booting is reported as `in-progress` rather than `active`, so callers don't invoke it and receive a `503`.
+The distinction between `in-progress` and `active` matters in practice: an agent whose configuration has been applied but whose container is still starting is reported as `in-progress`, rather than `active`, so callers don't invoke it and receive a `503`.
 

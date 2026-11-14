@@ -186,6 +186,30 @@ A couple of kinds work as a *kind* but don't have their full data card extracted
 - **Rerank** is recognised as a kind only — a rerank span gets the rerank icon, no data card. There's no `RerankData` payload today and no per-kind extractor runs for rerank, so model, query, and results are not surfaced. A future enhancement will add a proper rerank payload. (Note: `rerank` isn't a value OTel GenAI enumerates for `gen_ai.operation.name`; AMP reads it because Cohere's OTel instrumentation and OpenLLMetry emit it. If OTel ratifies a rerank operation later, AMP will align.)
 - **Retriever documents.** The retrieved documents on a retriever span are not extracted in v1 (they aren't extracted for any instrumentation source today). The vectorDB chip, collection, and Top-K render; the document list doesn't.
 
+### Making traces filterable
+
+Auto-instrumentation (platform-hosted agents and `amp-instrument`) already records what the [trace filters](../concepts/observability.mdx#filter-traces) need. If your agent emits its own spans, this is what each filter reads:
+
+| Filter | What the observer reads |
+|---|---|
+| Status | On the root span: status `Error`, `error.type`, an error value in `gen_ai.tool.status`, or a numeric `http.status_code` of 400 or more |
+| Duration, Span count | The trace's start and end times and its number of spans |
+| Tokens | `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` (or `gen_ai.usage.prompt_tokens` and `gen_ai.usage.completion_tokens`). Read from the root span, then the root's first non-LLM child span, then summed over up to 50 LLM spans. |
+| Model | `gen_ai.response.model`, else `gen_ai.request.model`, on LLM spans |
+| Conversation ID | `gen_ai.conversation.id` (or `session.id` and similar session keys). Read from the root span, then the root's first non-LLM child span, then the LLM spans. |
+| Tool | The span name: `execute_tool <tool>`, or a name ending in `.tool`, `.tools`, `.function`, or `.functions` (for example `search_issues.tool`) |
+| Tool failed | Status `Error` on a tool span |
+| MCP server | `serverInfo.name` in the `traceloop.entity.output` of a span named `initialize.mcp` |
+
+The observer recognizes LLM spans by name: `chat`, `chat <model>`, or `<vendor>.chat`. It reads LLM spans only in traces with up to 100 spans, so in a larger trace, model, token, and conversation ID values found only on LLM spans are not seen. Tool filters read the span name, not `gen_ai.tool.name`.
+
+To make a manually instrumented agent's traces filterable:
+
+- Open one root span per request, with every other span inside it.
+- Set `gen_ai.conversation.id` and the token totals on the root span, and set its status to `Error` when the request fails.
+- Name LLM spans `chat <model>` and set the model and token attributes on them, as in [Setting up the exporter](#setting-up-the-exporter).
+- Name tool spans `execute_tool <tool>`, and set their status to `Error` when the call fails.
+
 ### Suppressing prompt and completion content
 
 Prompt and completion content is captured by default. To suppress it, set `TRACELOOP_TRACE_CONTENT=false` in the agent's environment. The variable is read by the Traceloop SDK on the auto path and is documented here for parity — on a fully hand-rolled manual setup that bypasses Traceloop, you control what you put into `gen_ai.input.messages` / `gen_ai.output.messages` directly.

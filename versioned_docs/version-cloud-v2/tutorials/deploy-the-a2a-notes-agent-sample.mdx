@@ -3,9 +3,6 @@ sidebar_position: 1
 description: Deploy the A2A Notes Agent sample, a Python agent that summarizes meeting notes and extracts action items over the A2A protocol.
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 # Deploy the A2A Notes Agent Sample
 
 WSO2 Agent Manager includes a ready-to-deploy sample agent that speaks the [A2A protocol](https://a2a-protocol.org/), called the A2A Notes Agent. In this tutorial you deploy it as an **A2A Agent**, then call it through the gateway over both A2A transports. You do not need to write or change any code.
@@ -32,14 +29,10 @@ For how Agent Manager exposes A2A agents in general, see [Deploy an A2A Agent](.
 
 ## Prerequisites
 
-- WSO2 Agent Manager installed. See the [Quick Start Guide](../get-started/quick-start.mdx).
+- An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
 - An OpenAI API key. Both skills call the model.
-- To use the CLI path: `amctl` installed and logged in. See [CLI Installation](../guides/cli-installation.mdx).
 
 ## Step 1: Create and Deploy the Agent
-
-<Tabs groupId="am-client">
-<TabItem value="console" label="Console" default>
 
 1. Open your project and click **Add Agent**.
 2. Choose **Platform-Hosted Agent**, then **Source Code** as the source type.
@@ -58,33 +51,6 @@ For how Agent Manager exposes A2A agents in general, see [Deploy an A2A Agent](.
 6. Under **Agent Type**, choose **A2A Agent**, and set **Port** to `9099`.
 7. Under **Environment Variables (Optional)**, click **Add**, enter `OPENAI_API_KEY` as the **Key** and your OpenAI key as the **Value**, and turn on **Mark as a Secret**.
 8. Click **Deploy**.
-
-</TabItem>
-<TabItem value="cli" label="amctl">
-
-```bash
-amctl agent create a2a-notes-agent \
-  --display-name "A2A Notes Agent" \
-  --subtype a2a-agent \
-  --port 9099 \
-  --repo-url https://github.com/wso2/agent-manager \
-  --repo-branch main \
-  --repo-path /samples/a2a-agent \
-  --build-type buildpack \
-  --language python \
-  --language-version 3.11 \
-  --run-command "python main.py" \
-  --env-secret OPENAI_API_KEY=<your-openai-key>
-
-amctl agent build create a2a-notes-agent
-amctl agent deploy a2a-notes-agent
-amctl agent status a2a-notes-agent
-```
-
-Replace `<your-openai-key>` with your OpenAI API key. `amctl agent deploy` deploys the newest build, and `amctl agent status` shows the deployment status and the agent's endpoint URL.
-
-</TabItem>
-</Tabs>
 
 The build takes a few minutes. When it finishes, the agent deploys to the first environment and the platform publishes it to the gateway.
 
@@ -198,5 +164,4 @@ Any A2A client works. Point it at the agent's card through the gateway, `<invoke
 | Guide | What it covers |
 |---|---|
 | [Deploy an A2A Agent](../guides/deploy-an-a2a-agent.mdx) | Deploying your own A2A agent, Agent Card CORS, and endpoint settings |
-| [Sample Agents](../reference/sample-agents.mdx) | The other samples in the repository |
 | [Create Your First Agent](create-your-first-agent.mdx) | The general agent creation flow |

@@ -103,37 +103,17 @@ redeployments, and no agent ever held it in the first place.
 
 ## Step 2: Add the Guardrail
 
-Navigate to the provider's **Guardrails** tab and click **Add Guardrail**. Search
-for **Prompt Decorator** and select it.
+Navigate to the provider's Guardrails tab and select **Add Guardrail**. Search for **Prompt Decorator**, select it, and provide an instruction like the following:
 
-Under **promptDecoratorConfig**, add the instruction as a message rather than as
-text:
+For the prompt decorator config
+```text
+You handle IT support requests for AcmeCorp employees only: passwords, software
+access, tickets, outages, and IT policy. If a request is not IT support, politely
+decline and suggest the employee contact the relevant team. Never write code,
+essays, or creative content.
+```
 
-1. Under **messages**, click **Add Item**.
-2. Set **Role** to `system`.
-3. In **Content**, enter an instruction like the following:
-
-    ```text
-    You handle IT support requests for AcmeCorp employees only: passwords, software
-    access, tickets, outages, and IT policy. If a request is not IT support, politely
-    decline and suggest the employee contact the relevant team. Never write code,
-    essays, or creative content.
-    ```
-
-Leave **Text** and **Json Path** empty. The decorator accepts exactly one of
-**text** or **messages**.
-
-:::note Why messages and not Text
-A **Text** decoration is inserted into a string field, by default the content of
-the last message (`$.messages[-1].content`). That works while every message is
-plain text. From the [next tutorial](./give-the-agent-real-tools.mdx) on, the
-agent calls tools, and after a tool call the last message is the tool's result.
-The sample sends that result's content as a list of content blocks rather than a
-string, so a **Text** decoration has no string to decorate. The gateway then
-rejects every request
-:::
-
-Keep everything else at its default configuration and click **Add**.
+Keep everything else at its default configuration and click Add.
 
 Now scroll down and click Save to register the guardrail configuration.
 

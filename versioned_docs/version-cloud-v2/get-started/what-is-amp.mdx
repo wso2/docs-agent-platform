@@ -21,42 +21,10 @@ Built on [OpenChoreo](https://github.com/openchoreo/openchoreo) for internal age
 - **Auto-Instrumentation** - OpenTelemetry-based instrumentation for AI frameworks with zero code changes
 - **External Agent Support** - Monitor and govern externally deployed agents alongside internal ones
 
-## Components
-
-| Component                                | Description                                                                                       |
-|------------------------------------------|---------------------------------------------------------------------------------------------------|
-| **amp-instrumentation**                  | Python package (PyPI) for instrumenting externally-hosted agents and for manual instrumentation   |
-| **amp-evaluation** *(experimental)*      | Python SDK for building custom evaluators and running evaluation pipelines                        |
-| **amp-console**                          | Web-based management console for the platform                                                     |
-| **amp-api**                              | Backend API powering the control plane                                                            |
-| **amp-trace-observer**                   | API for querying and analyzing trace data                                                         |
-| **amp-python-instrumentation-provider**  | Kubernetes init container that auto-instruments platform-hosted Python agents                     |
-
-## Helm Charts
-
-Deploy WSO2 Agent Manager on Kubernetes using our Helm charts:
-
-| Chart | Description |
-|-------|-------------|
-| `wso2-agent-manager` | Main platform deployment |
-| `wso2-amp-platform-resources-extension` | Platform resources and build workflows for OpenChoreo |
-| `wso2-amp-observability-extension` | Observability stack extension for OpenChoreo |
-| `wso2-amp-evaluation-extension` | Evaluation engine extension for Agent Manager |
-
 ## Getting Started
 
-For installation instructions and a step-by-step guide, see the [Quick Start Guide](./quick-start.mdx).
+Sign up and start managing agents at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/).
 
-## Contributing
+## Terms of Use
 
-We welcome contributions from the community! Here's how you can help:
-
-1. **Report Issues** - Found a bug or have a feature request? Open an issue on GitHub
-2. **Submit Pull Requests** - Fork the repository, make your changes, and submit a PR
-3. **Improve Documentation** - Help us improve docs, tutorials, and examples
-
-Please ensure your contributions adhere to our coding standards and include appropriate tests.
-
-## License
-
-This project is licensed under the Apache License 2.0 - see the [LICENSE](https://github.com/wso2/agent-manager/blob/main/LICENSE) file for details.
+By using WSO2 Agent Manager on the cloud, you agree to the [Terms of Use](https://wso2.com/cloud/agent-manager/terms-of-use).

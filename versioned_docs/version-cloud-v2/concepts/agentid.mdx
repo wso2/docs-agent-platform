@@ -14,8 +14,8 @@ can request its own access token and use it to call the gateway.
 AgentID is built on two pieces working together.
 
 1. **A dedicated identity provider for every environment.** Every environment gets its own
-   [ThunderID](https://thunderid.dev/) instance, created as part of setting up that environment. This instance is
-   completely separate from every other environment's [ThunderID](https://thunderid.dev/) instance, and from the Thunder
+   ThunderID instance, created as part of setting up that environment. This instance is
+   completely separate from every other environment's ThunderID instance, and from the Thunder
    identity provider that Agent Manager itself uses for console and API login.
 2. **One OAuth 2.0 identity per agent, per environment.** When an agent is created, Agent Manager
    provisions this identity for every environment already in its organization; promoting the
@@ -60,17 +60,14 @@ credential directly into the running workload. As soon as the agent's identity f
 provisioning, its `client_id`, `client_secret`, token endpoint, and scopes are injected into the
 pod as environment variables, backed by a Kubernetes secret. There is no manual retrieval step,
 though your agent's own code does need a small amount of logic to use those environment
-variables. See [Use AgentID in a Platform-Hosted Agent](../guides/use-agentid-in-platform-hosted-agents.mdx)
-for the environment variables involved and the code your agent needs to mint and use a token.
+variables.
 
 ### Externally-Hosted Agents
 
 For an agent that runs outside the platform, Agent Manager has no workload to inject
 credentials into. Instead, the agent's operator generates the credential from the agent's page
 in the console: the `client_id` and a freshly minted `client_secret` are shown once, ready to
-copy into the agent's own configuration. See
-[Retrieve AgentID Credentials for an Externally-Hosted Agent](../guides/retrieve-agentid-for-externally-hosted-agents.mdx)
-for the retrieval flow.
+copy into the agent's own configuration.
 
 ## Provisioning and Retry
 
@@ -119,15 +116,9 @@ from minting new tokens with it. A revoked credential does not invalidate tokens
 already issued before the revoke: those remain valid until they naturally expire, since Thunder
 has no way to instantly invalidate a token it has already handed out.
 
-## What's Next
-
-- [Access an environment's ThunderID console](../guides/environment-management.mdx#access-the-environment-thunderid-console)
-- [Use AgentID in a Platform-Hosted Agent](../guides/use-agentid-in-platform-hosted-agents.mdx)
-- [Retrieve AgentID Credentials for an Externally-Hosted Agent](../guides/retrieve-agentid-for-externally-hosted-agents.mdx)
-
 :::note
 AgentID's per-environment ThunderID instances are separate from the
-[identity providers you configure on a gateway](../guides/configure-identity-providers-at-the-gateway.mdx)
+identity providers you configure on a gateway
 to secure an agent's own inbound endpoint. Those protect calls coming into an agent. AgentID is
 about the identity an agent presents when it calls out to the gateway.
 :::

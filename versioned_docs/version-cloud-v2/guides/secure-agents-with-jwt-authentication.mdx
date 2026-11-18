@@ -7,7 +7,7 @@ sidebar_position: 8
 JWT authentication protects platform-hosted API agent endpoints at the gateway. When enabled,
 callers must send a valid JWT, by default in the `Authorization: Bearer <token>` header. The
 gateway validates the token's issuer, signature, and expiry against the
-[identity providers](./configure-identity-providers-at-the-gateway.mdx) you select for the
+identity providers you select for the
 agent, and its `aud` claim if you configure audiences.
 
 JWT authentication and [API key security](./secure-agent-endpoints-with-api-keys.mdx) are mutually exclusive —
@@ -16,7 +16,7 @@ an agent uses one or the other, not both.
 ## Prerequisites
 
 - A platform-hosted API agent created in a project.
-- At least one [identity provider configured](./configure-identity-providers-at-the-gateway.mdx) on the
+- At least one identity provider configured on the
   environment's gateway.
 
 ## Step 1: Enable JWT Authentication During Deployment
@@ -93,6 +93,6 @@ JWT authentication and API key security cannot be active at the same time.
 
 - JWT authentication applies to platform-hosted API agents.
 - Accepted issuers and audiences come from the
-  [identity providers configured on the gateway](./configure-identity-providers-at-the-gateway.mdx).
+  identity providers configured on the gateway.
 - An agent uses one authentication method at a time — JWT authentication or API key, not both.
 - Authentication will be enforced by the gateway based on issuer and audience claims.

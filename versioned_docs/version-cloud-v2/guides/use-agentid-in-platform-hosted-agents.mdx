@@ -77,55 +77,43 @@ def agent_identity_ready() -> bool:
 
 ## Step 2: Mint and Cache a Token
 
-Request a token using the `client_credentials` grant, passing the MCP tool's own URL as the
-`resource` parameter (RFC 8707, OAuth 2.0 target-resource indication). ThunderID scopes the
-minted token to that one resource, so a token minted for one MCP tool is not valid for another,
-if your agent calls more than one tool, cache one token **per resource**, not a single global
-token.
-
-Tokens are valid for about an hour, so cache each one instead of requesting a new one on every
-call. If your agent handles requests concurrently, coalesce refreshes per resource too: without
-it, every concurrent caller sees that resource's cache expired at the same moment and each fires
-its own token request.
+Request a token using the `client_credentials` grant. Tokens are valid for about an hour, so
+mint one and cache it instead of requesting a new token on every call. If your agent handles
+requests concurrently, coalesce refreshes too: without it, every concurrent caller sees the
+cache expired at the same moment and each fires its own token request.
 
 ```python
 import threading
 import time
 import requests
 
-_cached_tokens: dict[str, str] = {}  # resource URL -> access token
-_cached_expiries: dict[str, float] = {}  # resource URL -> expiry (epoch seconds)
+_cached_token = None
+_cached_token_expiry = 0
 _cache_lock = threading.Lock()
-_refresh_events: dict[str, threading.Event] = {}  # resource URL -> "refresh in flight"
+_refresh_done = threading.Event()
+_refresh_done.set()
 
-def get_agent_access_token(resource: str) -> str:
+def get_agent_access_token():
+    global _cached_token, _cached_token_expiry
+
     with _cache_lock:
-        if resource in _cached_tokens and time.time() < _cached_expiries[resource]:
-            return _cached_tokens[resource]
+        if _cached_token and time.time() < _cached_token_expiry:
+            return _cached_token
 
         if not agent_identity_ready():
             raise AgentIdentityNotProvisionedError(
                 "AgentID has not finished provisioning for this environment yet"
             )
 
-        # Only the first caller to see this resource's cache expired refreshes
-        # it; everyone else waits for that result below instead of firing its
-        # own request. The event is tracked only while that refresh is in
-        # flight, so the next expiry starts a fresh one.
-        event = _refresh_events.get(resource)
-        if event is None:
-            event = threading.Event()
-            _refresh_events[resource] = event
-            is_refresher = True
-        else:
-            is_refresher = False
+        # Only the first caller to see the cache expired refreshes it; everyone
+        # else waits for that result below instead of firing its own request.
+        is_refresher = _refresh_done.is_set()
+        if is_refresher:
+            _refresh_done.clear()
 
     if not is_refresher:
-        event.wait(timeout=15)
-        with _cache_lock:
-            if resource in _cached_tokens and time.time() < _cached_expiries[resource]:
-                return _cached_tokens[resource]
-        raise RuntimeError(f"Token refresh failed or timed out for {resource}")
+        _refresh_done.wait(timeout=15)
+        return _cached_token
 
     try:
         response = requests.post(
@@ -133,7 +121,6 @@ def get_agent_access_token(resource: str) -> str:
             data={
                 "grant_type": "client_credentials",
                 "scope": AGENT_IDENTITY_SCOPES,
-                "resource": resource,
             },
             auth=(AGENT_IDENTITY_CLIENT_ID, AGENT_IDENTITY_CLIENT_SECRET),
             timeout=10,
@@ -142,37 +129,33 @@ def get_agent_access_token(resource: str) -> str:
         token_data = response.json()
 
         with _cache_lock:
-            _cached_tokens[resource] = token_data["access_token"]
+            _cached_token = token_data["access_token"]
             # Refresh at 75% of the token's lifetime, so a slow refresh never leaves a gap.
-            _cached_expiries[resource] = time.time() + (token_data["expires_in"] * 0.75)
+            _cached_token_expiry = time.time() + (token_data["expires_in"] * 0.75)
 
-        return _cached_tokens[resource]
+        return _cached_token
     finally:
-        with _cache_lock:
-            _refresh_events.pop(resource, None)
-        event.set()
+        _refresh_done.set()
 ```
 
-The same request with `curl`, useful for a quick manual check from inside the pod (replace
-`$MCP_SERVER_URL` with the target tool's own URL):
+The same request with `curl`, useful for a quick manual check from inside the pod:
 
 ```bash
 curl -s -X POST "$AMP_AGENTID_TOKEN_ENDPOINT" \
   -u "$AMP_AGENTID_CLIENT_ID:$AMP_AGENTID_CLIENT_SECRET" \
   -d "grant_type=client_credentials" \
-  -d "scope=$AMP_AGENTID_SCOPES" \
-  -d "resource=$MCP_SERVER_URL"
+  -d "scope=$AMP_AGENTID_SCOPES"
 ```
 
 ## Step 3: Call the Gateway with the Token
 
 Attach the token as a bearer token on every call your agent makes to an MCP tool through the
-gateway. Request the token for that same tool's URL, since that's the resource it was minted
-for.
+gateway. This does not change which URL your agent calls, only which credential rides along
+with the call.
 
 ```python
 headers = {
-    "Authorization": f"Bearer {get_agent_access_token(mcp_gateway_url)}",
+    "Authorization": f"Bearer {get_agent_access_token()}",
 }
 response = requests.post(
     mcp_gateway_url,

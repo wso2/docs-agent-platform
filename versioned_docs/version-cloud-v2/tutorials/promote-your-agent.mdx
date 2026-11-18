@@ -9,12 +9,11 @@ can't abuse, and monitors prove it behaves. Now it has to serve actual
 employees.
 
 :::info This chapter needs a platform-hosted agent
-Promotion, suspend, endpoint security, and isolation tiers are all things
-Agent Manager can only do for a workload it runs. If your agent is
-externally-hosted, follow along to understand the model. The actions
-themselves won't be available to you, and the deployment and endpoint
-security stay your responsibility. Only [Step 7](#step-7-watch-it) applies to
-both.
+Promotion, suspend, and endpoint security are all things Agent Manager can
+only do for a workload it runs. If your agent is externally-hosted, follow
+along to understand the model. The actions themselves won't be available to
+you, and the deployment and endpoint security stay your responsibility. Only
+[Step 7](#step-7-watch-it) applies to both.
 :::
 
 Production is not development with a different URL. It's a different
@@ -37,9 +36,9 @@ development, then staging, then production.
 
 ```mermaid
 flowchart LR
-  B["Build<br/>one image"] -->|"env-non-production"| D["Development"]
-  D -->|"promote<br/>env-non-production"| S["Staging"]
-  S -->|"promote<br/>env-production"| P["Production"]
+  B["Build<br/>one image"] -->|"deploy-non-production"| D["Development"]
+  D -->|"promote<br/>deploy-non-production"| S["Staging"]
+  S -->|"promote<br/>deploy-production"| P["Production"]
 ```
 
 One image is built once and moves rightward. Each hop is a promotion, and the
@@ -179,13 +178,6 @@ point.
 Run the seeded traffic against staging one more time. Confirm the monitors
 from Chapter 4 are green. Then promote staging to production.
 
-When you promote into an environment, the agent runs under that
-environment's configured **Isolation Tier**, the sandboxing strength you
-chose (or left at default) when you created it in Step 1. If you want
-production locked down tighter than the default, set that on the environment
-before promoting into it. See
-[Environment Management](../guides/environment-management.mdx) for how.
-
 {/* SCREENSHOT: Promote dialog for staging to production, with the production configuration panel */}
 
 You already attached production's LLM and MCP bindings in Step 2, so
@@ -194,11 +186,11 @@ promotion won't block on those. In the promotion dialog, set production's own
 file mounts it needs. Same pattern as Step 3, just for production this time.
 
 You may find you *can't* do this. That's the system working as intended.
-Promoting into production needs `amp:agent:env-production`,
-[held in addition to](../concepts/organization.mdx#production-is-a-separate-permission)
-the `amp:agent:env-non-production` you've been using all series, not instead
-of it. A **Developer** typically has the non-production scope but not the
-production one. A **Platform Engineer** has both.
+Promoting into production requires `amp:agent:deploy-production`,
+[a separate permission](../concepts/organization.mdx#production-is-a-separate-permission)
+from the `amp:agent:deploy-non-production` you've been using all series. A
+**Developer** typically has the non-production scope but not the production
+one. A **Platform Engineer** has both.
 
 The split is what makes the pipeline a control rather than a convention: the
 pipeline decides the path, the permission decides who may move an agent
@@ -249,5 +241,3 @@ than wiring each one by hand.
 ## Where to Go Next
 
 - [Agent Kind & Agent Catalog](../concepts/agent-kind-and-catalog.mdx): publish this agent as a reusable template so other teams can deploy their own.
-- [Authorization](../reference/authorization.mdx): the full scope catalog behind the permission split you just hit.
-- [CLI](../reference/cli/overview.mdx): do all of this from `amctl` instead of the console.

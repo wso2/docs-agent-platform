@@ -34,7 +34,7 @@ problem the previous one leaves behind, so they're meant to be read in order.
 
 ## What You'll Need
 
-- Agent Manager installed and reachable. [Quickstart](../get-started/quick-start.mdx) is the fastest route.
+- An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
 - An OpenAI API key.
 
 The agent itself is an [`it-helpdesk-agent`](https://github.com/wso2/agent-manager/tree/main/samples/it-helpdesk-agent).
@@ -60,31 +60,26 @@ where they appear.
 
 ## Step 1: Create the Agent
 
-Log in to the Agent Manager console using `admin` for both the username and password.
+Log in to the Agent Manager console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/). There's no separate Agent Manager username or password to create: sign in with your existing Google or GitHub account, and Agent Manager Cloud federates that login for you.
 
-Where you land next depends on whether your organization already has a project.
-On a brand-new install with no projects yet, you'll land on the **Projects**
-view. That's the organization-wide screen listing every project across the org.
-If a project already exists (for example a `default` one created during setup),
-you're dropped straight into it instead.
+If you don't belong to an organization yet, you'll be prompted to create one first. Give it a **Name** and a **Handle** (a short, URL-safe identifier for your organization), then continue.
 
-Either way, get to the right project before creating anything:
+Every organization already has a **default** project, so you land directly
+inside it once you're logged in.
 
-- **Using an existing project**: open it from the project list, then skip
-  ahead to creating the agent below.
-- **Starting a new one**: from the **Projects** view (click the organization
-  icon next to the Agent Manager logo if you're not already there), click **Add
-  Project** and fill in:
+If you'd rather use a different project, go to the organization view (click
+the organization icon next to the Agent Manager logo), open **Projects**, and
+either select an existing one or click **Add Project** and fill in:
 
-  | Field | Value |
-  |---|---|
-  | **Name** | `it-support` |
-  | **Description** *(optional)* | `AcmeCorp IT helpdesk agents` |
-  | **Deployment Pipeline** | The pipeline that defines which environments (development, staging, production) this project's agents can be promoted through. See [Deployment Pipeline](../concepts/deployment-pipeline.mdx) if you don't have one yet. |
+| Field | Value |
+|---|---|
+| **Name** | `it-support` |
+| **Description** *(optional)* | `AcmeCorp IT helpdesk agents` |
+| **Deployment Pipeline** | The pipeline that defines which environments (development, staging, production) this project's agents can be promoted through. See [Deployment Pipeline](../concepts/deployment-pipeline.mdx) if you don't have one yet. |
 
-  You'll come back to this project in [Chapter 5](./promote-your-agent.mdx)
-  to promote the agent through that pipeline, so use `it-support` as the name
-  now.
+You'll come back to this project in [Chapter 5](./promote-your-agent.mdx)
+to promote the agent through that pipeline, so use `it-support` as the name
+now.
 
 If the project has no agents yet, you land directly on the **Add a New Agent**
 page. Otherwise, click **Add Agent** to get there. Either way, choose the
@@ -128,10 +123,6 @@ Choose **Chat Agent**. That contract is `POST /chat` on port `8000`. It takes
 `{message, session_id, context}` and returns `{response}`, which is exactly
 what the sample's `app.py` serves. Picking **Custom API Agent** here would make
 the console expect an OpenAPI spec instead.
-
-Leave the **Readiness check** **Type** on **TCP**. It decides when the agent starts getting
-traffic; see [Configure Agent Health Checks](../guides/configure-agent-health-checks.mdx)
-to change it later.
 
 ### Environment Variables
 

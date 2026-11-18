@@ -16,8 +16,6 @@ An MCP proxy is multi-environment. You attach one or more endpoints to it, and e
 
 ### Where configuration lives
 
-The endpoint is the unit of configuration. Its upstream connection, capabilities, access control, rewrite, security are all stored on the endpoint, not on the environment. An environment is deployed with the configuration of the endpoint it is bound to, so several environments can share one endpoint's config, and editing that endpoint changes all of them. To vary settings across environments, put them on separate endpoints. The one exception is **scopes** (used for [agent authorization](../guides/authorize-agent-access-to-mcp-tools.mdx)): they are defined once for the whole proxy and apply across every endpoint and environment.
+The endpoint is the unit of configuration. Its upstream connection, capabilities, access control, rewrite, security are all stored on the endpoint, not on the environment. An environment is deployed with the configuration of the endpoint it is bound to, so several environments can share one endpoint's config, and editing that endpoint changes all of them. To vary settings across environments, put them on separate endpoints. The one exception is **scopes** (used for agent authorization): they are defined once for the whole proxy and apply across every endpoint and environment.
 
 Each agent resolves the proxy's per-environment endpoint at its own deploy time, so changing a proxy does not automatically redeploy the agents that use it; they pick up the change on their next deployment.
-
-For the console walkthrough of registering a proxy, see [Register an MCP Proxy](../guides/register-mcp-proxy.mdx).

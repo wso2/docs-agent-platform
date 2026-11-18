@@ -7,20 +7,20 @@ sidebar_position: 5
 LLM Service Providers are organization-level resources that represent connections to upstream LLM APIs (e.g., OpenAI, Anthropic, AWS Bedrock). Once registered, they are exposed through an AI Gateway and can be attached to agents across any project in the organization.
 
 :::tip Prefer the CLI?
-You can also create, list, and delete providers from the command line — see [`amctl llm-provider`](../reference/cli/llm-provider.mdx).
+You can also create, list, and delete providers from the command line with `amctl llm-provider`.
 :::
 
 ## Prerequisites
 
 - Admin access to the WSO2 Agent Manager Console
-- At least one [AI Gateway](../concepts/gateway.mdx) active. The installer registers one per environment; gateways are not created from the console.
+- An active AI Gateway. On Agent Manager Cloud this is provisioned for you — no setup required.
 - API credentials for the target LLM provider (e.g., an OpenAI API key)
 
 ---
 
 ## Step 1: Navigate to LLM Service Providers
 
-1. Log in to the WSO2 Agent Manager Console (`http://console.amp.localhost:8080`).
+1. Log in to the WSO2 Agent Manager Console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/).
 2. Go to the Organization level by closing the projects section from the top navigation.
 3. In the left sidebar, click **LLM Service Providers** under the **RESOURCES** section.
 

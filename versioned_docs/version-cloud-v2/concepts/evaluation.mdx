@@ -222,7 +222,7 @@ For a step-by-step walkthrough of creating custom evaluators in the AMP Console,
 :::
 
 :::note Network access
-On deployments where the evaluation-job NetworkPolicy is enabled and the cluster's CNI enforces it (see [Cluster Requirements](../guides/on-your-environment.mdx#cluster-requirements)), custom evaluator code runs with restricted network egress — it can reach only what evaluation itself needs (trace data, the LLM gateway for LLM-Judge evaluators, and the scoring endpoint), not arbitrary external services. Design evaluators that don't depend on unrelated outbound network calls regardless, since this isn't guaranteed on every deployment.
+Custom evaluator code runs with restricted network egress — it can reach only what evaluation itself needs (trace data, the LLM gateway for LLM-Judge evaluators, and the scoring endpoint), not arbitrary external services. Design evaluators that don't depend on unrelated outbound network calls.
 :::
 
 ## Monitors

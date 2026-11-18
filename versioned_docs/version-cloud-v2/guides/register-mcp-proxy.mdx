@@ -31,7 +31,7 @@ Agents do not embed the proxy — they **reference** it. Each agent resolves the
 ## Prerequisites
 
 - Admin access to the WSO2 Agent Manager Console
-- At least one [AI Gateway](../concepts/gateway.mdx) active for the environments you want to configure. The installer registers one per environment.
+- An active [AI Gateway](../concepts/gateway.mdx) for the environments you want to configure. On Agent Manager Cloud these are provisioned for you.
 - A reachable upstream MCP server endpoint for each environment (e.g., `https://api.example.com/mcp`)
 - Any credential the upstream MCP server requires (e.g., an API key passed in an HTTP header)
 
@@ -39,7 +39,7 @@ Agents do not embed the proxy — they **reference** it. Each agent resolves the
 
 ## Step 1: Navigate to MCP Proxies
 
-1. Log in to the WSO2 Agent Manager Console (`http://console.amp.localhost:8080`).
+1. Log in to the WSO2 Agent Manager Console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/).
 2. Go to the Organization level by closing the projects section from the top navigation.
 3. In the left sidebar, click **MCP Proxies** under the **Resources** section.
 

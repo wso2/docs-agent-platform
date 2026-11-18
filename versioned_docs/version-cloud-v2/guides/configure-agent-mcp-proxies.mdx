@@ -8,16 +8,6 @@ Agents can be configured to use one or more [MCP Proxies](./register-mcp-proxy.m
 
 The agent does not embed the proxy. It references it, and the platform resolves the proxy's endpoint for the agent's target environment at deploy time. Because the org-level proxy owns its per-environment gateway artifacts, changing the proxy does not redeploy the agent automatically — the agent picks up any change on its next deployment.
 
-:::tip
-The API key described in this guide **authenticates** the agent: it proves the caller
-is allowed to reach the proxy at all. It says nothing about *which* tools that agent
-may invoke — any agent holding a valid key can call every tool the endpoint exposes.
-
-When you need that granularity(controling which agent access which tool). See
-[Authorize Agent Access to MCP Tools](./authorize-agent-access-to-mcp-tools.mdx),
-which covers per-tool **authorization** on top of authentication.
-:::
-
 ## Prerequisites
 
 - At least one MCP Proxy registered at the org level (see [Register an MCP Proxy](./register-mcp-proxy.mdx))
@@ -103,50 +93,6 @@ The variable names in the snippet match whatever you set in Step 3.
 
 > Renaming the variables here only changes their names — *"These variable names are injected into the agent at runtime with environment-specific values. Rename them here if your code already uses different names, then save."*
 
-#### OAuth (AgentID)-Secured Proxies
-
-If the proxy's Security tab is set to **OAuth** instead of **API Key**, the panel shows an **AgentID Variables** section instead of an API key, and the Integration Guide snippet mints a token instead of reading one:
-
-```python
-import os
-from typing import Any
-import requests
-from langchain_mcp_adapters.client import MultiServerMCPClient
-
-mcp_server_url = os.environ.get("MY_PROXY_URL", "").strip()
-
-client_id = os.environ["AMP_AGENTID_CLIENT_ID"]
-client_secret = os.environ["AMP_AGENTID_CLIENT_SECRET"]
-token_endpoint = os.environ["AMP_AGENTID_TOKEN_ENDPOINT"]
-scopes = os.environ["AMP_AGENTID_SCOPES"]
-
-token_response = requests.post(
-    token_endpoint,
-    auth=(client_id, client_secret),
-    data={
-        "grant_type": "client_credentials",
-        "scope": scopes,
-        "resource": mcp_server_url,  # scopes the token to this proxy (RFC 8707)
-    },
-    timeout=30,
-)
-token_response.raise_for_status()
-access_token = token_response.json()["access_token"]
-
-server_configs: dict[str, dict[str, Any]] = {
-    "mcp_server": {
-        "url": mcp_server_url,
-        "transport": "streamable_http",
-        "headers": {"Authorization": f"Bearer {access_token}"},
-    }
-} if mcp_server_url else {}
-
-mcp_client = MultiServerMCPClient(server_configs)
-tools = await mcp_client.get_tools()
-```
-
-The `AMP_AGENTID_*` variable names are fixed and not renameable. See [Use AgentID in a Platform-Hosted Agent](./use-agentid-in-platform-hosted-agents.mdx) for how these are provisioned and injected. For an OAuth-secured proxy on an **External** agent, see [Configuring an MCP Proxy for an External Agent](#configuring-an-mcp-proxy-for-an-external-agent) below.
-
 ---
 
 ## Configuring an MCP Proxy for an External Agent
@@ -189,35 +135,6 @@ curl -N <endpoint-url> \
 > When a key is freshly generated, the panel warns *"Make sure to copy your API key now. You will not be able to see it again."* If you reopen the panel later, it shows *"The endpoint is available below. If the MCP server requires an API key, the key was only displayed when this configuration was created."* — rotate the key from the API key section to obtain a new value.
 
 Configure your agent's MCP client using the Endpoint URL and pass the API Key in the configured header on every request.
-
-#### OAuth (AgentID)-Secured Proxies
-
-If the proxy's Security tab is set to **OAuth** instead of **API Key**, Step 2 above doesn't apply — there's no API key to manage. The **Connect to MCP Server** panel shows different fields instead:
-
-| Field | Description |
-|---|---|
-| **MCP URL** | The gateway invoke URL for this MCP proxy in the selected environment |
-| **Client ID** / **Client Secret** | This agent's OAuth 2.0 credentials for this environment (the secret is shown once, right after it's generated or rotated) |
-| **Issuer URL** | This environment's ThunderID issuer, useful for verifying tokens |
-| **Token Endpoint** | The `/oauth2/token` endpoint to request a token from |
-| **JWKS Endpoint** | This environment's JSON Web Key Set, for verifying token signatures |
-| **Available Scopes** | The scopes to request when minting a token |
-
-Copy these values into your external agent's own environment (there is no automatic injection, since the platform doesn't run this agent's process). Mint a token with the `client_credentials` grant, passing the **MCP URL** as the `resource` parameter (RFC 8707) so the token is scoped to this specific proxy, then call the MCP URL with it as a Bearer token:
-
-```bash
-TOKEN=$(curl -s -X POST "<token-endpoint>" \
-  -u "<client-id>:<client-secret>" \
-  -d "grant_type=client_credentials" \
-  -d "scope=<scopes>" \
-  -d "resource=<mcp-url>" \
-  | jq -r .access_token)
-
-curl -N <mcp-url> \
-  --header "Authorization: Bearer $TOKEN"
-```
-
-Rotate credentials from the **Agent ID** page (top-right on the agent's Overview page) if a secret is lost or needs to be regenerated.
 
 ---
 
@@ -276,4 +193,3 @@ If you have confirmed the proxy is deployed to the environment and the connectio
 - For external agents, the Endpoint URL routes traffic through the AI Gateway, applying any security, access control, and rewrite rules configured on the endpoint serving that environment.
 - The external agent API Key is displayed only right after it is generated or rotated. If lost, rotate the key from the tool configuration's API key section (per environment) to obtain a new value.
 - A single proxy attached from the Configure page maps to every environment in the agent's pipeline; the proxy supplies each environment's endpoint. To use different proxies per environment, attach them during agent creation.
-- An API key controls **whether** an agent may call the proxy, not **which tools** it may call. For per-tool control, use an identity-secured proxy with scopes and roles — see [Authorize Agent Access to MCP Tools](./authorize-agent-access-to-mcp-tools.mdx).

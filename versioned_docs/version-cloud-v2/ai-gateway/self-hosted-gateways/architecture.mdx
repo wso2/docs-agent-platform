@@ -28,7 +28,7 @@ flowchart LR
   end
   C -->|"outbound WebSocket, port 443"| M
   A["Agents"] --> R
-  R --> U["LLM providers and MCP servers"]
+  R --> U["Upstream LLM providers and MCP servers"]
 ```
 
 The gateway has two components.
@@ -79,7 +79,7 @@ The router identifies the matching route and applies the configured policy chain
 
 ## Key Benefits
 
-This architecture keeps runtime execution close to your upstream services and limits the exposure of internal systems. You apply consistent policies across all providers and proxies from one place.
+This architecture keeps runtime execution close to your upstream services and limits the exposure of internal systems. You apply consistent policies across all LLM service providers and MCP proxies from one place.
 
 To keep serving traffic when a controller or runtime replica is unavailable, run more than one of each. See [High Availability](./high-availability.mdx).
 

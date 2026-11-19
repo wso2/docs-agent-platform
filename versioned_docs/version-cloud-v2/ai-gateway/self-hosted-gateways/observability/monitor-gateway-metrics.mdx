@@ -1,0 +1,48 @@
+---
+sidebar_label: Monitor Gateway Metrics
+sidebar_position: 3
+description: "Expose Prometheus metrics from a self-hosted AI Gateway and view them in the bundled Grafana dashboards."
+---
+
+# Monitor Gateway Metrics
+
+The Gateway Controller and the policy engine in the Gateway Runtime expose Prometheus metrics. The gateway bundle includes Prometheus and Grafana with ready-made dashboards.
+
+## Enable Metrics
+
+1. Add these settings to `configs/config.toml`:
+
+   ```toml
+   [controller.metrics]
+   enabled = true
+
+   [policy_engine.metrics]
+   enabled = true
+   port = 9003
+   ```
+
+2. Start the gateway with the `metrics` profile:
+
+   ```bash
+   docker compose --profile metrics up -d
+   ```
+
+## View the Metrics
+
+| Tool | Address | Sign-in |
+|---|---|---|
+| Grafana | `http://localhost:3000` | `admin` / `admin` |
+| Prometheus | `http://localhost:9092` | None |
+
+Grafana opens on the **Infrastructure Overview** dashboard. The bundle also provides **Gateway Controller** and **Policy Engine** dashboards.
+
+In Prometheus, open **Status** → **Targets** to check the scrape jobs. The `gateway-controller` and `policy-engine` jobs show **UP**. The `router` job stays **DOWN**, because the router admin interface listens only on the container's loopback address.
+
+## Scrape the Metrics Yourself
+
+To use your own Prometheus, scrape these endpoints:
+
+| Component | Host port | Path |
+|---|---|---|
+| Gateway Controller | `9011` | `/metrics` |
+| Policy engine | `9003` | `/metrics` |

@@ -1,0 +1,65 @@
+---
+sidebar_label: Collect Gateway Logs
+sidebar_position: 1
+description: "Read the logs of a self-hosted AI Gateway, set the log level and format, and ship logs to OpenSearch with the bundled logging profile."
+---
+
+# Collect Gateway Logs
+
+The Gateway Controller and Gateway Runtime write their logs to the container output. The gateway bundle also includes an optional logging stack, so you can search the logs of both components in one place.
+
+## Read the Logs
+
+```bash
+docker compose logs gateway-controller
+docker compose logs gateway-runtime
+```
+
+The runtime log includes the router access log, with one line for each request.
+
+## Change the Log Level and Format
+
+Edit `configs/config.toml`, then recreate the containers with `docker compose up -d --force-recreate`.
+
+```toml
+[controller.logging]
+level = "debug"   # debug, info, warn, or error
+format = "json"   # text or json
+
+[policy_engine.logging]
+level = "info"
+format = "json"
+
+[router.access_logs]
+enabled = true
+format = "json"
+```
+
+Set `format` to `json` for the logging stack, because it parses JSON log lines.
+
+## Search Logs with the Logging Stack
+
+The `logging` profile adds Fluent Bit, OpenSearch, and OpenSearch Dashboards. Fluent Bit reads the Docker log files, adds a `component` field, and stores the logs in OpenSearch in daily `gateway-logs-*` indexes.
+
+1. Start the gateway with the profile:
+
+   ```bash
+   docker compose --profile logging up -d
+   ```
+
+2. Open OpenSearch Dashboards at `http://localhost:5601`.
+3. Create an index pattern named `gateway-logs-*`, then search under **Discover**.
+
+The stack is a starting point. To use your own logging system, point your collector at the container output instead.
+
+## Log Requests and Responses
+
+Traffic logging writes one JSON line for each request. It is off by default.
+
+```toml
+[traffic_logging]
+enabled = true
+masked_headers = ["authorization", "x-api-key", "x-jwt-assertion"]
+```
+
+The lines go to the container output, so the logging stack picks them up. Headers and bodies appear only if you also enable them under `[collector]` and `[traffic_logging]`. Bodies can contain sensitive data, so enable them deliberately.

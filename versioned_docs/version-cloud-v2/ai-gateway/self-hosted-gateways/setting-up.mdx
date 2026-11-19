@@ -1,0 +1,303 @@
+---
+sidebar_label: Setting Up Guide
+sidebar_position: 3
+description: "Install a self-hosted AI Gateway with Docker Compose or Helm, connect it to Agent Control Plane, harden it for production, and manage registration tokens."
+---
+
+# Setting Up a Self-Hosted Gateway
+
+This page covers installing a self-hosted AI Gateway for real use, either on a VM or Docker host with Docker Compose or on Kubernetes with Helm. It also covers configuration, hardening, token management, upgrades, and troubleshooting.
+
+:::tip
+Just trying it out? The [Quick Start Guide](./quickstart-guide.mdx) is the fastest path.
+:::
+
+## Before You Begin: Add the Gateway in the Console
+
+Every installation method starts the same way.
+
+1. In [Agent Control Plane](https://console.agent-manager.cloud.wso2.com/), go to **Infrastructure** → **Gateways** and click **Add gateway**.
+2. Enter the following details.
+   - **Display Name:** the gateway **Name** is derived from it and cannot be changed later.
+   - **Environment:** the environment that this gateway serves.
+   - **Public URL:** the base URL that clients use to reach the gateway, for example `https://gw.example.com:8443`. Enter a base URL with no path, query, or user information.
+3. Click **Create**. The gateway is created as **Inactive**, and a setup panel shows the commands for **Docker** and **Kubernetes (Helm)**.
+
+:::warning
+**The registration token is shown only once.** The **Copy** button on the configure command (or the Helm install command) copies it with the real token. Store the token in your secret manager before you leave the page. If you lose it, see [Manage Registration Tokens](#manage-registration-tokens).
+:::
+
+## Option A: VM or Docker Host (Docker Compose)
+
+Use this on a Linux VM, a bare-metal server, or any machine with a Docker-compatible runtime.
+
+### Prerequisites
+
+- `curl`, `unzip`, and `openssl`.
+- A Docker-compatible container runtime with the Compose v2 plugin, for example Docker Engine with the Compose plugin (Linux), Docker Desktop (Windows and macOS), Rancher Desktop, or Colima.
+
+  ```bash
+  docker --version
+  docker compose version
+  ```
+
+- Outbound HTTPS (443) from the host to Agent Control Plane.
+- On Docker Desktop, Rancher Desktop, or Colima, extract the gateway into a folder that the runtime shares with its VM. Your home directory is shared by default. System temporary folders usually are not.
+
+### Step 1: Download and Run the Setup Script
+
+The **Download the gateway** and **Set up the gateway** commands in the setup panel do this for you.
+
+```bash
+curl -sLO https://github.com/wso2/api-platform/releases/download/ai-gateway/v<VERSION>/wso2apip-ai-gateway-<VERSION>.zip && \
+unzip wso2apip-ai-gateway-<VERSION>.zip
+cd wso2apip-ai-gateway-<VERSION> && ./scripts/setup.sh
+```
+
+The distribution contains the following files.
+
+```text
+wso2apip-ai-gateway-<VERSION>/
+├── docker-compose.yaml        # gateway-controller and gateway-runtime services
+├── configs/config.toml        # gateway configuration (reads values from api-platform.env)
+├── resources/
+│   ├── listener-certs/        # HTTPS listener certificate and key
+│   └── ...
+├── observability/             # optional tracing, logging, and metrics stacks
+└── scripts/setup.sh           # one-time setup (setup.ps1 on Windows)
+```
+
+`setup.sh` creates the at-rest encryption key, the admin credentials for the controller's local management API (it prints the password **once**), `api-platform.env`, and `.env`, which pins a unique Docker Compose project name.
+
+You can use the following options.
+
+| Option or variable | Effect |
+|---|---|
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` | Set the admin credentials non-interactively, for example in automation. If `ADMIN_PASSWORD` is empty, a random password is generated and printed. |
+| `COMPOSE_PROJECT_NAME=<name>` | Choose the Compose project name on the **first** run. It prefixes all containers and volumes and never changes afterward. Do not delete `.env`: a new name starts the gateway with an empty database. |
+| `--force` | Regenerates the listener certificate and the encryption key, creates a new admin password, and **rewrites `api-platform.env`**. Add the control plane settings again afterward. Rotating the encryption key makes previously encrypted data unreadable. |
+| `--force --certs-only` | Regenerates only the listener certificate. The encryption key, admin password, and `api-platform.env` stay untouched. Without `--force`, an existing certificate is kept. |
+
+### Step 2: Add the Control Plane Settings
+
+Copy the **Configure the gateway** command from the setup panel, which includes your token, and run it in the gateway folder.
+
+```bash
+cat >> api-platform.env << 'ENVFILE'
+APIP_GW_CONTROLLER_CONTROLPLANE_HOST=<control-plane-host-shown-in-console>
+APIP_GW_CONTROLLER_CONTROLPLANE_TOKEN=<your-registration-token>
+ENVFILE
+```
+
+For production, also turn on TLS verification of the control plane. See [Production Hardening](#production-hardening).
+
+```bash
+echo "APIP_GW_CONTROLLER_CONTROLPLANE_INSECURE_SKIP_VERIFY=false" >> api-platform.env
+```
+
+### Step 3: Start
+
+```bash
+docker compose up -d
+```
+
+### Step 4: Verify
+
+```bash
+docker compose ps
+curl -s http://localhost:8080/_gateway-health/healthy
+docker compose logs gateway-controller | grep "Connection state changed"
+```
+
+You should see a healthy response and a `to=connected` log line. Reload the gateway under **Infrastructure** → **Gateways**. The gateway shows **Active**.
+
+### Stop, Restart, and Remove
+
+| Task | Command |
+|---|---|
+| Follow logs | `docker compose logs -f` |
+| Stop (keeps data) | `docker compose stop` |
+| Apply changes to `api-platform.env` | `docker compose up -d --force-recreate` |
+| Remove the containers | `docker compose down` |
+| Remove completely, **including the gateway database volume** | `docker compose down -v` |
+
+## Option B: Kubernetes (Helm)
+
+### Prerequisites
+
+- A Kubernetes cluster and Helm. The setup panel lists the supported versions.
+- `kubectl` access to the target namespace, and `openssl`.
+- **cert-manager**, which the chart uses by default to issue the HTTPS listener certificate. Alternatively, provide your own TLS secret (see Step 3).
+- Outbound HTTPS (443) from the cluster to Agent Control Plane.
+
+### Step 1: Install cert-manager (If It Is Not Installed)
+
+```bash
+helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.19.1 \
+  --namespace cert-manager --create-namespace \
+  --set crds.enabled=true --wait
+kubectl get pods -n cert-manager
+```
+
+### Step 2: Create the Namespace and Secrets
+
+The chart requires an AES-256 at-rest encryption key and refuses to render without one. Create the key as a secret in the namespace you install into. Then store the registration token in a secret too, rather than passing it on the command line.
+
+```bash
+kubectl create namespace ai-gateway
+
+# AES-256 at-rest encryption key (the entry name must be default-aesgcm256-v1.bin)
+openssl rand 32 > default-aesgcm256-v1.bin
+kubectl create secret generic gateway-encryption-keys -n ai-gateway \
+  --from-file=default-aesgcm256-v1.bin=default-aesgcm256-v1.bin
+rm default-aesgcm256-v1.bin
+
+# Registration token copied from the console
+kubectl create secret generic gateway-cp-token -n ai-gateway \
+  --from-literal=token='<your-registration-token>'
+```
+
+:::warning
+Back up the encryption key secret. If it is lost or rotated, data the gateway already encrypted cannot be read.
+:::
+
+### Step 3: Install the Chart
+
+The **Kubernetes (Helm)** tab gives you the `helm install` command with the version and control plane host filled in. Reference the token secret and add the encryption key settings.
+
+```bash
+helm install gateway \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway --version <VERSION> \
+  --namespace ai-gateway \
+  --set gateway.controller.controlPlane.host="<control-plane-host-shown-in-console>" \
+  --set gateway.controller.controlPlane.token.secretName=gateway-cp-token \
+  --set gateway.controller.encryptionKeys.enabled=true \
+  --set gateway.controller.encryptionKeys.secretName=gateway-encryption-keys
+```
+
+To use your own listener certificate instead of cert-manager, create a TLS secret and add two settings to the `helm install` command.
+
+```bash
+kubectl create secret tls gateway-tls -n ai-gateway --cert=gateway.crt --key=gateway.key
+# then add to helm install:
+#   --set gateway.controller.tls.certificateProvider=secret \
+#   --set gateway.controller.tls.secret.name=gateway-tls
+```
+
+For more than a few flags, put the settings in a `values.yaml` file and install with `-f values.yaml`. To see every option, run `helm show values oci://ghcr.io/wso2/api-platform/helm-charts/gateway --version <VERSION>`.
+
+### Step 4: Verify
+
+```bash
+kubectl get pods -n ai-gateway
+kubectl logs -n ai-gateway deploy/gateway-controller | grep "Connection state changed"
+kubectl get svc -n ai-gateway
+```
+
+The gateway runtime is exposed through a `LoadBalancer` service on ports 8080 (HTTP) and 8443 (HTTPS). Set the gateway **Public URL** in Agent Control Plane to that address, or to the ingress or DNS name in front of it. Find the exact controller deployment name with `kubectl get deploy -n ai-gateway`.
+
+### Upgrade and Uninstall
+
+```bash
+helm upgrade gateway \
+  oci://ghcr.io/wso2/api-platform/helm-charts/gateway --version <NEW_VERSION> \
+  --namespace ai-gateway -f values.yaml
+
+helm uninstall gateway -n ai-gateway
+```
+
+To run more than one replica, see [High Availability](./high-availability.mdx).
+
+## Configuration Reference
+
+The Docker Compose distribution reads these variables from `api-platform.env`.
+
+| Variable | Set by | Description |
+|---|---|---|
+| `APIP_GW_CONTROLLER_CONTROLPLANE_HOST` | Console command | Control plane host that the gateway connects to over HTTPS and WSS on 443. |
+| `APIP_GW_CONTROLLER_CONTROLPLANE_TOKEN` | Console command | Gateway registration token. Treat it as a secret. |
+| `APIP_GW_CONTROLLER_CONTROLPLANE_INSECURE_SKIP_VERIFY` | You | `false` verifies the control plane's TLS certificate. The Docker Compose distribution defaults to `true`, so set `false` explicitly. The Helm chart defaults to `false`. |
+| `APIP_GW_CONTROLLER_AUTH_BASIC_ADMIN_USERNAME` | `setup.sh` | Admin user for the controller's local REST API (port 9090). |
+| `APIP_GW_CONTROLLER_AUTH_BASIC_ADMIN_PASSWORD_HASH` | `setup.sh` | bcrypt hash of the admin password. |
+| `APIP_GW_CONTROLLER_LOGGING_LEVEL` | You (optional) | Controller log level, `info` by default. |
+| `LOG_LEVEL` | `setup.sh` | Runtime log level. |
+
+Other settings, such as listeners, storage, and policies, live in `configs/config.toml`. `configs/config-template.toml` documents every key.
+
+## Production Hardening
+
+1. **Verify the control plane certificate.** Set `APIP_GW_CONTROLLER_CONTROLPLANE_INSECURE_SKIP_VERIFY=false` in `api-platform.env`. With verification off, the controller logs `TLS certificate verification disabled`.
+
+2. **Use your own listener certificate.** The distribution ships a self-signed certificate for `localhost` in `resources/listener-certs/`, and `setup.sh` keeps it if it exists. Replace `default-listener.crt` and `default-listener.key` with a certificate issued for your gateway hostname. At minimum, run `./scripts/setup.sh --force --certs-only` to generate a self-signed certificate that is unique to this install.
+
+3. **Keep management ports private.** The distribution's `docker-compose.yaml` publishes the controller API (9090), admin API (9094), metrics (9011), Envoy admin (9901), and policy engine admin and metrics (9002, 9003) on all host interfaces. Block them at the firewall, or bind them to the loopback address with a `docker-compose.override.yaml`. Compose picks this file up automatically. The `!override` tag requires Docker Compose 2.24 or later.
+
+   ```yaml
+   services:
+     gateway-controller:
+       ports: !override
+         - "127.0.0.1:9090:9090"
+         - "127.0.0.1:9094:9092"
+         - "127.0.0.1:9011:9091"
+     gateway-runtime:
+       ports: !override
+         - "8080:8080"     # Gateway traffic (remove if you serve only HTTPS)
+         - "8443:8443"     # Gateway traffic
+   ```
+
+4. **Protect secrets on disk.** `api-platform.env` holds the registration token, and `resources/aesgcm-keys/` holds the encryption key. Keep both readable only by the account that runs the gateway, and keep them out of version control.
+
+5. **Rotate the registration token** if it may have leaked. See [Manage Registration Tokens](#manage-registration-tokens).
+
+## Manage Registration Tokens
+
+The gateway uses a registration token to prove its identity to Agent Control Plane when it connects. The token is in the gateway's `api-platform.env` file or Helm secret. Agent Control Plane shows it only once, when you add the gateway.
+
+Replace a token if you lose it or suspect that it leaked. A gateway can have at most two active tokens. Open the gateway under **Infrastructure** → **Gateways**, then use one of these options:
+
+- **Reconfigure** on the **Set up the gateway** card revokes all active tokens and shows a setup command with a new token. A running gateway that still uses the old token loses its connection.
+- **New token** on the **Registration tokens** card adds a token and keeps the others active. Use this to replace a token without interrupting the running gateway, then revoke the old token from its row.
+
+After you have a new token, update the gateway:
+
+- **Docker Compose:** replace the `APIP_GW_CONTROLLER_CONTROLPLANE_TOKEN=` line in `api-platform.env`, then run `docker compose up -d --force-recreate`.
+- **Kubernetes:** update the `gateway-cp-token` secret, then run `kubectl rollout restart deploy/<controller-deployment> -n ai-gateway`.
+
+Reload the gateway page and confirm that the gateway is **Active**.
+
+## Delete a Gateway
+
+Point to the gateway row under **Infrastructure** → **Gateways** and click **Delete**. You cannot delete a gateway that has deployments. Undeploy its LLM service providers and LLM proxies first.
+
+Agent Control Plane never picks a self-hosted gateway automatically as the egress gateway of an environment. Select it explicitly.
+
+## Port Already in Use
+
+If another service on the host already uses 8080, 8443, 9090, or another gateway port, remap the **host** side of the port in a `docker-compose.override.yaml`. Leave the container port unchanged.
+
+```yaml
+services:
+  gateway-controller:
+    ports: !override
+      - "127.0.0.1:19090:9090"
+      - "127.0.0.1:19094:9092"
+  gateway-runtime:
+    ports: !override
+      - "18080:8080"
+      - "18443:8443"
+```
+
+If you change the HTTPS port that clients use, update the gateway **Public URL** in Agent Control Plane to match.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| The gateway shows **Inactive** after starting | Reload the page, because the status does not update live. Then check `docker compose logs gateway-controller` for `Connection state changed … to=connected`. |
+| The controller keeps reconnecting with authentication errors | The token is wrong, has a stray character, or was revoked. Copy a fresh command from the console, or add a new token. |
+| `WebSocket connection failed … context deadline exceeded` | The controller cannot reach Agent Control Plane within the timeout. It retries with backoff. If it never connects, check outbound 443 to the control plane host, DNS, and any HTTP proxy or firewall. |
+| `x509: certificate signed by unknown authority` with `INSECURE_SKIP_VERIFY=false` | A TLS-inspecting proxy re-signs the traffic. Add the proxy's CA to the gateway's trust store, or allow the control plane host through without inspection. |
+| `read /etc/gateway-controller/config.toml: is a directory` | The gateway folder is not shared with the Docker VM (Docker Desktop, Colima, Rancher Desktop). Move it under your home directory or add the path to the runtime's file sharing. Then run `docker compose down -v` and `docker compose up -d`. |
+| `Encryption key file is world-readable` warning | Restrict `resources/aesgcm-keys/default-aesgcm256-v1.bin` to the gateway's user. `setup.sh` does this automatically when `setfacl` is available. |
+| Helm: `encryptionKeys must be enabled` | Create the encryption key secret and pass `gateway.controller.encryptionKeys.enabled=true` and `secretName`. See [Step 2](#step-2-create-the-namespace-and-secrets). |

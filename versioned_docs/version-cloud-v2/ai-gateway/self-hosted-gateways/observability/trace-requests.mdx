@@ -1,0 +1,35 @@
+---
+sidebar_label: Trace Requests
+sidebar_position: 2
+description: "Enable OpenTelemetry tracing on a self-hosted AI Gateway and view the traces in Jaeger or your own OTLP backend."
+---
+
+# Trace Requests
+
+A trace follows one request through the gateway. The router and the policy engine each add spans, so you can see where a request spends its time.
+
+## Enable Tracing
+
+1. Add the tracing settings to `configs/config.toml`:
+
+   ```toml
+   [tracing]
+   enabled = true
+   endpoint = "otel-collector:4317"   # OTLP gRPC endpoint
+   insecure = true
+   sampling_rate = 1.0                # 1.0 traces every request
+   ```
+
+2. Start the gateway with the `tracing` profile. It adds an OpenTelemetry Collector and Jaeger:
+
+   ```bash
+   docker compose --profile tracing up -d
+   ```
+
+3. Send a request through the gateway, then open Jaeger at `http://localhost:16686`. Select the `router` service and click **Find Traces**.
+
+Lower `sampling_rate`, for example to `0.1`, to trace a fraction of requests in production.
+
+## Use Your Own Backend
+
+The collector receives spans on port `4317` (gRPC) and `4318` (HTTP). To send traces elsewhere, add an exporter to `observability/otel-collector/config.yaml` and list it under the `traces` pipeline. Alternatively, set `endpoint` in `config.toml` to your own OTLP collector and skip the `tracing` profile.

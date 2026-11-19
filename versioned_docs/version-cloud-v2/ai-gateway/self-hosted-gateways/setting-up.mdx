@@ -125,7 +125,7 @@ You should see a healthy response and a `to=connected` log line. Reload the gate
 
 ### Prerequisites
 
-- A Kubernetes cluster and Helm. The setup panel lists the supported versions.
+- A Kubernetes cluster, version 1.24 or later, and Helm.
 - `kubectl` access to the target namespace, and `openssl`.
 - **cert-manager**, which the chart uses by default to issue the HTTPS listener certificate. Alternatively, provide your own TLS secret (see Step 3).
 - Outbound HTTPS (443) from the cluster to Agent Control Plane.
@@ -164,7 +164,7 @@ Back up the encryption key secret. If it is lost or rotated, data the gateway al
 
 ### Step 3: Install the Chart
 
-The **Kubernetes (Helm)** tab gives you the `helm install` command with the version and control plane host filled in. Reference the token secret and add the encryption key settings.
+The **Kubernetes (Helm)** tab shows a `helm install` command with the version and control plane host filled in. It appears right after you create the gateway or select **Reconfigure**. The commands in the tab do not set a namespace, so add `-n ai-gateway` to each one, or set the namespace for your current context. Reference the token secret and add the encryption key settings.
 
 ```bash
 helm install gateway \
@@ -195,7 +195,7 @@ kubectl logs -n ai-gateway deploy/gateway-controller | grep "Connection state ch
 kubectl get svc -n ai-gateway
 ```
 
-The gateway runtime is exposed through a `LoadBalancer` service on ports 8080 (HTTP) and 8443 (HTTPS). Set the gateway **Public URL** in Agent Control Plane to that address, or to the ingress or DNS name in front of it. Find the exact controller deployment name with `kubectl get deploy -n ai-gateway`.
+The gateway runtime is exposed through a `LoadBalancer` service on ports 8080 (HTTP) and 8443 (HTTPS). Use that address, or the ingress or DNS name in front of it, as the **Public URL** when you create the gateway. Find the exact controller deployment name with `kubectl get deploy -n ai-gateway`.
 
 ### Upgrade and Uninstall
 
@@ -257,7 +257,7 @@ The gateway uses a registration token to prove its identity to Agent Control Pla
 Replace a token if you lose it or suspect that it leaked. A gateway can have at most two active tokens. Open the gateway under **Infrastructure** → **Gateways**, then use one of these options:
 
 - **Reconfigure** on the **Set up the gateway** card revokes all active tokens and shows a setup command with a new token. A running gateway that still uses the old token loses its connection.
-- **New token** on the **Registration tokens** card adds a token and keeps the others active. Use this to replace a token without interrupting the running gateway, then revoke the old token from its row.
+- **New token** on the **Registration tokens** card adds a token and keeps the others active. Use this to replace a token without interrupting the running gateway, then revoke the old token from its row. Rows show an ID and the creation time, not the token, so identify the old token by its creation time and revoke the older row with the trash icon after the gateway runs on the new token. **Copy** on the new-token banner copies only the token. Use it as the value of `APIP_GW_CONTROLLER_CONTROLPLANE_TOKEN`.
 
 After you have a new token, update the gateway:
 
@@ -268,7 +268,7 @@ Reload the gateway page and confirm that the gateway is **Active**.
 
 ## Delete a Gateway
 
-Point to the gateway row under **Infrastructure** → **Gateways** and click **Delete**. You cannot delete a gateway that has deployments. Undeploy its LLM service providers and LLM proxies first.
+Point to the gateway row under **Infrastructure** → **Gateways** and click **Delete**. You cannot delete a gateway that has deployments. Undeploy every LLM service provider and MCP server that is deployed to it first.
 
 Agent Control Plane never picks a self-hosted gateway automatically as the egress gateway of an environment. Select it explicitly.
 
@@ -288,14 +288,18 @@ services:
       - "18443:8443"
 ```
 
-If you change the HTTPS port that clients use, update the gateway **Public URL** in Agent Control Plane to match.
+If you change the HTTPS port that clients use, the gateway **Public URL** in Agent Control Plane must match it. The **Public URL** cannot be changed after you create the gateway, so create a new gateway with the correct URL.
+
+Use the remapped host port in the health check, for example `curl -s http://localhost:18080/_gateway-health/healthy`. The override replaces the whole port list, so ports that you leave out, such as `9901`, `9002`, `9003`, and `9011`, are no longer published. Add them back if you use them, for example for metrics.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
 | The gateway shows **Inactive** after starting | Reload the page, because the status does not update live. Then check `docker compose logs gateway-controller` for `Connection state changed … to=connected`. |
-| The controller keeps reconnecting with authentication errors | The token is wrong, has a stray character, or was revoked. Copy a fresh command from the console, or add a new token. |
+| The controller exits with `Authentication failed - invalid or revoked token` | The token is wrong, has a stray character, or was revoked. `docker compose ps -a` shows the controller as `Exited (1)` while the runtime keeps running. The log message names `GATEWAY_REGISTRATION_TOKEN`, but the variable to set is `APIP_GW_CONTROLLER_CONTROLPLANE_TOKEN`. Correct it in `api-platform.env`, then run `docker compose up -d --force-recreate`. |
+| `Bind for :::8080 failed: port is already allocated` | Another service uses a gateway port. See [Port Already in Use](#port-already-in-use). |
+| `x509: certificate is valid for <name>, not <host>` with `INSECURE_SKIP_VERIFY=false` | The control plane host in `api-platform.env` does not match the name on its certificate. Use the host name that the certificate is issued for. |
 | `WebSocket connection failed … context deadline exceeded` | The controller cannot reach Agent Control Plane within the timeout. It retries with backoff. If it never connects, check outbound 443 to the control plane host, DNS, and any HTTP proxy or firewall. |
 | `x509: certificate signed by unknown authority` with `INSECURE_SKIP_VERIFY=false` | A TLS-inspecting proxy re-signs the traffic. Add the proxy's CA to the gateway's trust store, or allow the control plane host through without inspection. |
 | `read /etc/gateway-controller/config.toml: is a directory` | The gateway folder is not shared with the Docker VM (Docker Desktop, Colima, Rancher Desktop). Move it under your home directory or add the path to the runtime's file sharing. Then run `docker compose down -v` and `docker compose up -d`. |

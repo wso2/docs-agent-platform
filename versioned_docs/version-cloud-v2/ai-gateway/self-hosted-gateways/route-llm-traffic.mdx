@@ -42,7 +42,7 @@ A self-hosted gateway is never selected for you. Select it explicitly when you d
 2. Enter a **Name** and a **Version** in the form `v1.0`. Optionally, enter a **Context path** such as `/my-openai`. The context path becomes part of the URL that agents call.
 3. Select a **Provider Template**, for example **OpenAI**. The template fills in the **Endpoint URL** of the LLM API.
 4. Enter your credential in **API key / Credential**. The gateway sends it to the LLM API, so agents never handle it.
-5. Under **Deployment Configuration**, select the environment, then select your self-hosted gateway from the gateway list. The list shows **Self-hosted** next to it.
+5. Under **Deployment Configuration**, select the **Environment** check box, which is cleared by default. A gateway list appears and shows the managed **Default API Gateway**. Select your self-hosted gateway, which shows **Self-hosted** next to it.
 6. Click **Add provider**.
 
 ![The Add LLM Service Provider form with the OpenAI template and the self-hosted gateway selected under Deployment Configuration](../../img/ai-gateway/deploy-llm-provider-form.png)
@@ -54,11 +54,10 @@ The LLM service provider page opens. Under **Deployment**, the environment shows
 On the gateway host, the controller logs show the configuration arriving:
 
 ```bash
-docker compose logs gateway-controller | grep -i "llm provider"
+docker compose logs gateway-controller | grep "Runtime deploy config added"
 ```
 
 ```text
-msg="Successfully processed LLM provider deployment event" provider_id=...
 msg="Runtime deploy config added" key=LlmProvider:my-openai kind=LlmProvider ...
 ```
 
@@ -90,8 +89,8 @@ The gateway checks the key, adds the credential that you entered for the LLM ser
 
 ## Update or Remove a Deployment
 
-- **Move to another gateway.** An LLM service provider keeps its gateway. On its **Deployment** tab, clear the environment and click **Save** to undeploy. Then select the new gateway and save again.
-- **Undeploy.** Clear the environment on the **Deployment** tab and click **Save**. The gateway removes the routes, and the invoke URLs stop working.
+- **Move to another gateway.** An LLM service provider keeps its gateway. On its **Deployment** tab, clear (uncheck) the **Environment** box and click **Save** to undeploy. Then select the new gateway and save again.
+- **Undeploy.** Clear (uncheck) the **Environment** box on the **Deployment** tab and click **Save**. The gateway removes the routes, and the invoke URLs stop working.
 - **Gateway offline during a change.** The gateway synchronizes its deployments again when it reconnects.
 
 ## Troubleshooting
@@ -101,9 +100,9 @@ The gateway checks the key, adds the credential that you entered for the LLM ser
 | The self-hosted gateway is not in the gateway list | It belongs to a different environment, or it has not connected. Check its environment and status under **Infrastructure** → **Gateways**. |
 | The status stays **Deploying** | The gateway did not acknowledge the deployment. Check that it is **Active**, then read `docker compose logs gateway-controller`. |
 | `curl: (60) SSL certificate problem` | The listener certificate is self-signed. Use `-k`, pass `--cacert`, or install a certificate for your gateway hostname. |
-| `404` from the gateway | The path does not match a deployed route. Check the context and the path, and confirm that the deployment shows **Deployed**. |
+| `404` from the gateway | The path does not match a deployed route, or another service owns the port that you called. Check the context and the path, confirm that the deployment shows **Deployed**, and check which service listens on that port. |
 | `502` or `503` from the gateway | The gateway cannot reach the upstream. Check DNS and network routing from the gateway host or pod to the upstream LLM provider. |
-| The invoke URL has the wrong host or port | The URL uses the gateway **Public URL**. Update it with **Edit gateway** under **Infrastructure** → **Gateways**. |
+| The invoke URL has the wrong host or port | The URL uses the gateway **Public URL**, which cannot be changed after you create the gateway. Create a new gateway with the correct URL and deploy to it. |
 
 ## Next Steps
 

@@ -12,20 +12,25 @@ The demonstration stack is Fluent Bit, OpenSearch, and OpenSearch Dashboards. It
 
 ## Set the Log Level and Format
 
-The logging stack parses JSON log lines, so set the format to `json`. Edit `configs/config.toml`, then recreate the containers with `docker compose up -d --force-recreate`.
+The logging stack parses JSON log lines, so set the format to `json`. The shipped `configs/config.toml` already has the three tables below. Do not add them again, because a duplicate table makes the gateway fail to start. Add the `format` line to each existing table:
 
 ```toml
 [controller.logging]
-level = "info"    # debug, info, warn, or error
 format = "json"   # text or json
 
 [policy_engine.logging]
-level = "info"
 format = "json"
 
 [router.access_logs]
-enabled = true
 format = "json"
+```
+
+To change the log level, edit the `level` value in `[controller.logging]` and `[policy_engine.logging]`. The values are `debug`, `info`, `warn`, and `error`.
+
+The gateway reads `config.toml` only when it starts. Recreate the containers so that the change takes effect:
+
+```bash
+docker compose up -d --force-recreate
 ```
 
 ## Start the Logging Stack
@@ -58,22 +63,20 @@ docker compose logs gateway-runtime
 
 The runtime log includes the router access log, with one line for each request.
 
-Stop the stack, and the stored logs:
+To stop only the logging stack, leave the gateway running:
 
 ```bash
-docker compose --profile logging down
+docker compose --profile logging stop fluent-bit opensearch-dashboards opensearch
 ```
 
-```bash
-docker compose --profile logging down -v
-```
-
-The second command deletes the `opensearch-data` volume.
+:::warning
+`docker compose --profile logging down` stops and removes every container in the project, including the gateway. Adding `-v` also deletes the volumes, which includes the gateway database and the stored logs. Use `down -v` only when you want to remove the whole gateway and its data.
+:::
 
 ## View Logs in OpenSearch Dashboards
 
 1. Open `http://localhost:5601`.
-2. Open the menu, then **Management** → **Dashboard Management** → **Index Patterns**.
+2. Open the menu, then **Management** → **Dashboards Management** → **Index patterns**. If the page offers no **Create index pattern** button, no logs have arrived yet. Send a request through the gateway and check again.
 3. Click **Create index pattern**.
 4. Enter `gateway-logs-*` and click **Next step**.
 5. Select **@timestamp** as the time field and click **Create index pattern**.
@@ -243,6 +246,14 @@ Configure Fluent Bit to forward to Splunk HEC:
 ```
 
 Turn TLS verification on for production.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| Fluent Bit exits with `Too many open files` | The Docker host limits file watchers. Raise `fs.inotify.max_user_instances` on the Docker host, or run the stack on a host with higher limits. |
+| The `gateway-logs-*` index does not exist | Fluent Bit is not running, or no requests reached the gateway. Check `docker compose ps` and send a request. |
+| A port is already in use | OpenSearch uses `9200`, OpenSearch Dashboards uses `5601`, and the Grafana example uses `3000`. Change the host side of the port mapping. |
 
 ## Additional Resources
 

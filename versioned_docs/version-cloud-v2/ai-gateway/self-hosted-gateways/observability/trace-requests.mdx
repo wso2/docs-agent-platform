@@ -10,6 +10,11 @@ A trace follows one request through the gateway. Each step is a span. The router
 
 The demonstration stack is an OpenTelemetry Collector and Jaeger. The gateway sends spans to the collector on gRPC port 4317 or HTTP port 4318, and the collector forwards them to Jaeger. You can send the same spans to any OTLP backend instead.
 
+## Prerequisites
+
+- A self-hosted gateway that shows **Active** in Agent Control Plane.
+- A deployed LLM service provider or MCP server to send requests to. See [Route LLM Traffic Through a Self-Hosted Gateway](../route-llm-traffic.mdx).
+
 ## Enable Tracing
 
 Add the tracing settings to `configs/config.toml`:
@@ -25,13 +30,13 @@ max_export_batch_size = 512             # Maximum spans per batch
 sampling_rate = 1.0                     # Sample rate (1.0 = 100%, 0.5 = 50%)
 ```
 
-Start the gateway with the tracing services:
+The gateway reads `config.toml` only when it starts. Start the tracing services and recreate the gateway containers so that tracing turns on:
 
 ```bash
-docker compose --profile tracing up -d
+docker compose --profile tracing up -d --force-recreate
 ```
 
-This starts **gateway-controller**, **gateway-runtime**, the OpenTelemetry Collector, and Jaeger.
+This starts the OpenTelemetry Collector and Jaeger, and recreates **gateway-controller** and **gateway-runtime** with tracing on.
 
 To run the gateway without that stack:
 
@@ -43,11 +48,15 @@ docker compose up -d
 If tracing is enabled and the collector is not running, the components log export warnings. Set `enabled = false` to turn tracing off. Jaeger keeps traces in memory, so stopping it drops them unless you add a storage backend.
 :::
 
-Stop the stack:
+To stop only the tracing services, leave the gateway running:
 
 ```bash
-docker compose --profile tracing down
+docker compose --profile tracing stop otel-collector jaeger
 ```
+
+:::warning
+`docker compose --profile tracing down` stops and removes every container in the project, including the gateway.
+:::
 
 ## View Traces in Jaeger
 
@@ -97,7 +106,7 @@ A shorter timeout shows traces sooner. A longer timeout sends fewer, larger batc
 
 ## Send Traces Somewhere Else
 
-Keep the gateway endpoint pointed at an OTLP collector, and change the collector exporters. The collector file is `observability/otel-collector/config.yaml`.
+Keep the gateway endpoint pointed at an OTLP collector, and change the collector exporters. The collector file is `observability/otel-collector/config.yaml`. Several exporters below, such as `awsxray`, `googlecloud`, `azuremonitor`, and `datadog`, exist only in the OpenTelemetry Collector Contrib image. The bundled collector image does not include them, so switch the `otel-collector` image to the Contrib image first. Tempo and the Datadog Agent also publish port `4317`, the same host port as the bundled collector. Stop the bundled collector first, or change one host port.
 
 ### Moesif
 
@@ -421,9 +430,12 @@ processors:
 If you omit `traceparent`, the gateway starts a new trace. To continue a trace you already have, send the header with your request:
 
 ```bash
-curl http://localhost:8080/<context>/<path> \
+curl -k https://localhost:8443/<context>/<path> \
+  -H "API-Key: <API_KEY>" \
   -H "traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
 ```
+
+Use the invoke URL and API key from [Route LLM Traffic Through a Self-Hosted Gateway](../route-llm-traffic.mdx). A request that the gateway rejects with `401` still creates a trace.
 
 ## Choose a Sampling Rate
 

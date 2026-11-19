@@ -10,9 +10,9 @@ A self-hosted AI Gateway can run with more than one Gateway Controller replica a
 
 Agent Control Plane sends a deployment to one of the Gateway Controller replicas. That controller stores the deployment in the shared PostgreSQL database. The other Gateway Controller replicas read the updated deployment state from the database and synchronize the configuration with the Gateway Runtime instances connected to them.
 
-Every Gateway Controller replica then works from the same deployment state, and each runtime environment receives the latest configuration.
+Every Gateway Controller replica then works from the same deployment state, and each group of Gateway Runtime replicas receives the latest configuration.
 
-## Architecture
+## Components
 
 | Component | Description |
 |---|---|
@@ -40,9 +40,9 @@ One of the available Gateway Controller replicas handles a deployment request.
 
 That controller validates the deployment and stores the deployment state in the shared PostgreSQL database. The other Gateway Controller replicas read the latest deployment state from the database. When a controller detects a new or updated deployment, it generates the runtime configuration and synchronizes it with the Gateway Runtime instances connected to that controller.
 
-Each Gateway Runtime applies the configuration it receives and starts serving the deployed LLM service providers and MCP proxies.
+Each Gateway Runtime applies the configuration it receives and starts serving the deployed LLM service providers and MCP servers.
 
-## High Availability
+## How Failover Works
 
 High availability removes the dependency on a single controller instance.
 
@@ -60,13 +60,20 @@ Gateway Runtime replicas do not read the database. They receive runtime configur
 
 ## Configure Replicas on Kubernetes
 
+### Prerequisites
+
+- A Kubernetes install as described in [Option B: Kubernetes (Helm)](./setting-up.mdx#option-b-kubernetes-helm). The commands below use the `ai-gateway` namespace from that page.
+- A PostgreSQL database that the cluster can reach. The gateway creates its own tables, and the database user needs permission to create them.
+
+### Steps
+
 1. Store the database password in a Kubernetes secret:
 
    ```bash
-   kubectl create secret generic gateway-db-password --from-literal=password=<DB_PASSWORD>
+   kubectl create secret generic gateway-db-password -n ai-gateway --from-literal=password=<DB_PASSWORD>
    ```
 
-2. Add these values to the `helm install` command, or to a values file:
+2. Add these values to the `helm install` command from [Step 3 of the Helm install](./setting-up.mdx#step-3-install-the-chart), or to a values file:
 
    ```bash
    --set gateway.config.controller.storage.type=postgres \
@@ -78,6 +85,6 @@ Gateway Runtime replicas do not read the database. They receive runtime configur
    --set gateway.gatewayRuntime.deployment.replicaCount=2
    ```
 
-   Replace the placeholders with your database details. The `sslmode` value defaults to `require`.
+   Replace the placeholders with your database details. The `sslmode` value defaults to `require`. For a database without TLS, add `--set gateway.config.controller.storage.postgres.sslmode=disable`. To see every option, run `helm show values oci://ghcr.io/wso2/api-platform/helm-charts/gateway --version <VERSION>`.
 
 The chart also supports a PodDisruptionBudget (`gateway.controller.podDisruptionBudget.enabled`) and autoscaling (`gateway.controller.hpa.enabled` and `gateway.gatewayRuntime.hpa.enabled`). Autoscaling the controller requires a PostgreSQL or SQL Server database.

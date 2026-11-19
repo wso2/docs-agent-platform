@@ -5,11 +5,13 @@ description: "Run LLM and MCP traffic through a managed or self-hosted AI Gatewa
 
 # AI Gateway
 
-The AI Gateway is the runtime that carries traffic between your agents and the LLM providers and MCP servers they use. Every request to an LLM service provider or MCP proxy passes through a gateway, which authenticates the caller, applies rate limits and guardrails, and forwards the request upstream.
+The AI Gateway is the runtime that carries traffic between your agents and the LLM providers and MCP servers they use. Every request to an LLM service provider or MCP server passes through a gateway, which authenticates the caller, applies rate limits and guardrails, and forwards the request upstream.
 
 You configure gateways from Agent Control Plane, wherever they run. For how gateways work across environments, see [Gateway](../concepts/gateway.mdx).
 
 ## Gateway Options
+
+The **Gateways** page in Agent Control Plane shows each gateway's **Hosting** (managed or self-hosted) and **Type**. The type tells you the traffic that the gateway handles. A managed gateway is **Ingress + Egress**. A self-hosted gateway is **Egress**, which carries the calls that your agents make to LLM service providers and MCP servers.
 
 | Gateway | Description | Traffic Via | Best For |
 |---|---|---|---|

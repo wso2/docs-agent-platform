@@ -44,7 +44,7 @@ The main flow assumes you control a DNS zone. If you are evaluating on a cluster
 
 | Requirement | Minimum |
 |-------------|---------|
-| Kubernetes version | 1.32+ |
+| Kubernetes version | 1.32+ (on 1.37+, install kgateway v2.3.7 or later, as shown in Phase 1) |
 | Nodes | 3 |
 | CPU per node | 4 cores |
 | RAM per node | 8 GB |
@@ -288,20 +288,24 @@ helm upgrade --install external-secrets oci://ghcr.io/external-secrets/charts/ex
   --wait --timeout 180s
 ```
 
-**kgateway (v2.2.1)** — the network gateway for OpenChoreo planes:
+**kgateway (v2.3.11)** — the network gateway for OpenChoreo planes:
 
 ```bash
 helm upgrade --install kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
   --create-namespace \
   --namespace openchoreo-control-plane \
-  --version v2.2.1
+  --version v2.3.11
 
 helm upgrade --install kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
   --namespace openchoreo-control-plane \
   --create-namespace \
-  --version v2.2.1 \
+  --version v2.3.11 \
   --set controller.extraEnv.KGW_ENABLE_GATEWAY_API_EXPERIMENTAL_FEATURES=true
 ```
+
+:::note
+Use kgateway v2.3.7 or later on Kubernetes 1.37 and newer. Earlier versions, including v2.2.x, ship CRDs that the 1.37 API server rejects with `estimated rule cost exceeds budget`, and the `kgateway` chart then installs without them.
+:::
 
 :::note
 Evaluating on Rancher Desktop / k3s? See the [Rancher Desktop / k3s appendix](#appendix-rancher-desktop--k3s) — Traefik must be removed before this step.

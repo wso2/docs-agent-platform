@@ -1,31 +1,47 @@
 ---
 sidebar_label: Deploy an LLM Service Provider
 sidebar_position: 3
-description: "Deploy an LLM service provider to your self-hosted AI Gateway, then send a test request through the gateway."
+description: "Put your self-hosted AI Gateway in front of an LLM API. Register an LLM service provider, deploy it to the gateway, and send a request through it."
 ---
 
 # Deploy an LLM Service Provider
 
-This guide deploys an LLM service provider to your self-hosted gateway and sends a request through it.
+An LLM service provider connects Agent Control Plane to an upstream LLM API, such as OpenAI. When you deploy it to your self-hosted gateway, the gateway becomes the single entry point for that LLM API. Agents call the gateway, and the gateway calls the LLM API.
+
+## How It Works
+
+```mermaid
+flowchart LR
+  A["Agent or client"] -->|"1. Request with API-Key header"| G["Self-hosted AI Gateway"]
+  G -->|"2. Request with the provider credential"| U["Upstream LLM API"]
+  CP["Agent Control Plane"] -.->|"Deploys the LLM service provider"| G
+```
+
+- **You configure it once, in Agent Control Plane.** The LLM service provider holds the upstream URL and your credential for the LLM API. Deploying it sends that configuration to your gateway.
+- **Agents hold a gateway API key, not your credential.** The key identifies the caller to the gateway, so the upstream credential stays out of agent code.
+- **The gateway forwards the request.** It checks the key, adds the upstream credential, and sends the request to the LLM API. The access control, rate limiting, and guardrails that you set on the LLM service provider apply here.
+- **Traffic stays on your side.** Requests flow from the agent to your gateway and from your gateway to the LLM API. They do not pass through Agent Control Plane.
+
+This guide registers an LLM service provider, deploys it to your gateway, and sends a request that follows this path.
 
 ## Prerequisites
 
 - A self-hosted gateway that shows **Active** in Agent Control Plane. If you do not have one, follow the [Quick Start Guide](./quickstart-guide.mdx).
 - A machine that can reach the gateway **Public URL**.
-- A credential for the upstream LLM provider you want to use, such as OpenAI.
+- A credential for the upstream LLM API you want to use, such as an OpenAI API key.
 
-The gateway calls the upstream LLM provider, not Agent Control Plane, so the gateway host needs outbound access to it.
+The gateway host needs outbound access to the LLM API.
+
+## Step 1: Register the LLM Service Provider and Deploy It to the Gateway
 
 :::note
 A self-hosted gateway is never selected for you. Select it explicitly when you deploy.
 :::
 
-## Step 1: Register and Deploy the LLM Service Provider
-
 1. In [Agent Control Plane](https://console.agent-manager.cloud.wso2.com/), go to **Resources** → **LLM service providers** and click **Add service provider**.
-2. Enter a **Name** and a **Version** in the form `v1.0`. Optionally, enter a **Context path** such as `/my-openai`. It becomes part of the invoke URL.
-3. Select a **Provider Template**, for example **OpenAI**. The template fills in the **Endpoint URL**.
-4. Enter your credential in **API key / Credential**. The gateway sends it upstream, so agents never handle it.
+2. Enter a **Name** and a **Version** in the form `v1.0`. Optionally, enter a **Context path** such as `/my-openai`. The context path becomes part of the URL that agents call.
+3. Select a **Provider Template**, for example **OpenAI**. The template fills in the **Endpoint URL** of the LLM API.
+4. Enter your credential in **API key / Credential**. The gateway sends it to the LLM API, so agents never handle it.
 5. Under **Deployment Configuration**, select the environment, then select your self-hosted gateway from the gateway list. The list shows **Self-hosted** next to it.
 6. Click **Add provider**.
 
@@ -35,7 +51,7 @@ The LLM service provider page opens. Under **Deployment**, the environment shows
 
 ![The Deployment tab showing the environment on the self-hosted gateway with the Deployed status](../../img/ai-gateway/llm-provider-deployed.png)
 
-On the gateway host, the controller logs show the deployment arriving and being applied:
+On the gateway host, the controller logs show the configuration arriving:
 
 ```bash
 docker compose logs gateway-controller | grep -i "llm provider"
@@ -46,28 +62,31 @@ msg="Successfully processed LLM provider deployment event" provider_id=...
 msg="Runtime deploy config added" key=LlmProvider:my-openai kind=LlmProvider ...
 ```
 
-## Step 2: Test the LLM Service Provider
+## Step 2: Get the Invoke URL and an API Key
 
-1. On the LLM service provider's **Overview** tab, find **Invoke URL & API Key**. The invoke URL combines the gateway **Public URL** with the LLM service provider context, for example `https://localhost:8443/my-openai`.
+1. On the LLM service provider's **Overview** tab, find **Invoke URL & API Key**. The invoke URL is the gateway **Public URL** plus the context path, for example `https://localhost:8443/my-openai`. Agents call this URL instead of the LLM API.
 2. Click **Generate API key** and copy the key. The key is shown once and works in all environments.
 
-   ![The Overview tab showing the invoke URL on the self-hosted gateway and the Generate API key button](../../img/ai-gateway/llm-provider-invoke-url.png)
+![The Overview tab showing the invoke URL on the self-hosted gateway and the Generate API key button](../../img/ai-gateway/llm-provider-invoke-url.png)
 
-3. Send a request with the key in the `API-Key` header. The default listener certificate is self-signed, so add `-k` until you install a trusted certificate.
+## Step 3: Send a Request Through the Gateway
 
-   ```bash
-   curl -k -X POST "https://localhost:8443/my-openai/chat/completions" \
-     -H "API-Key: <API_KEY>" \
-     -H "Content-Type: application/json" \
-     -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]}'
-   ```
+Send a request to the invoke URL, followed by the API path of the LLM API. Put the key in the `API-Key` header. The default listener certificate is self-signed, so add `-k` until you install a trusted certificate.
 
-The gateway checks the key, adds the credential that you entered for the LLM service provider, and forwards the request. A valid credential returns a chat completion.
+```bash
+curl -k -X POST "https://localhost:8443/my-openai/chat/completions" \
+  -H "API-Key: <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+The gateway checks the key, adds the credential that you entered for the LLM service provider, and forwards the request. A valid credential returns a chat completion. The response tells you how far the request got:
 
 | Response | Meaning |
 |---|---|
+| A chat completion | The whole path works, from the client through the gateway to the LLM API. |
 | `401` with `Valid API key required` | The request reached the gateway, but the `API-Key` header is missing or invalid. |
-| `401` with an error from the upstream LLM provider, such as `Incorrect API key provided` | The request reached the upstream provider. Correct the credential on the LLM service provider's **Connection** tab. |
+| `401` with an error from the upstream LLM API, such as `Incorrect API key provided` | The request passed the gateway and reached the LLM API. Correct the credential on the LLM service provider's **Connection** tab. |
 
 ## Update or Remove a Deployment
 

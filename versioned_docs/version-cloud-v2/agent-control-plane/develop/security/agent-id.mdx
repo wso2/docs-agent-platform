@@ -1,0 +1,39 @@
+---
+title: Agent ID
+---
+
+# Agent ID
+
+Each agent has an identity in each environment: an OAuth2 client that the agent uses to get tokens, plus the groups and roles that decide what it may do. For how agent identities work, see [AgentID](../../../concepts/agentid.mdx).
+
+Open the agent, and in the left navigation, under **Security**, click **Agent ID**. The page has three tabs.
+
+## Overview
+
+**Client Credentials**
+
+| Field | Description |
+|---|---|
+| **Client ID** | The agent's OAuth2 client ID. |
+| **Client Secret** | Shown only once, when it's generated. Regenerate it to get a new one. |
+| **Agent ID** | The agent's identity ID. |
+
+**OAuth2 Endpoints**
+
+| Field | Example |
+|---|---|
+| **Issuer URL** | `https://<identity-provider-host>` |
+| **Token Endpoint** | `https://<identity-provider-host>/oauth2/token` |
+| **JWKS Endpoint** | `https://<identity-provider-host>/oauth2/jwks` |
+
+Each value has a copy icon.
+
+## Groups
+
+The groups the agent is a member of in this environment. See [Agent Identity Groups and Roles](../../administer/agent-identity-groups-and-roles.mdx).
+
+## Roles
+
+The roles assigned to the agent in this environment.
+
+Roles and groups can be changed only when the agent has an active identity binding in the environment. Until then, the page shows a message saying so.

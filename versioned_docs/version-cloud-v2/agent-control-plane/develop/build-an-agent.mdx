@@ -1,0 +1,38 @@
+---
+title: Build an Agent
+---
+
+# Build an Agent
+
+A platform-hosted agent is built from its source repository. A successful build is needed before you can deploy or publish the agent.
+
+## Open the Build page
+
+Open the agent, and in the left navigation, under **Agent lifecycle**, click **Build**.
+
+The page shows:
+
+- **Latest build status**, for example **Running**.
+- **Build success rate**, as a percentage.
+- **Total builds**.
+- A list of builds, with their **Branch** (and commit), **Build Name**, **Started At** time, and **Status**.
+
+## Trigger a build
+
+1. Click **Trigger a Build**.
+2. In the **Trigger Build** panel, choose a **Commit**, or leave **Latest commit** selected to build the latest commit.
+3. Click **Trigger build**.
+
+The new build shows up in the list.
+
+## See a build's progress and logs
+
+Click **Details** on a build. The **Build Details** panel shows when the build was triggered, its stages, and its **Log**. The stages are:
+
+1. **Initiated**
+2. **Triggered**
+3. **Build execution**
+4. **Build workflow**
+5. **Workload update**
+
+To change the repository, build type, or health checks used by later builds, click **Configure build**. See [Configure the Build](./configure-the-build.mdx).

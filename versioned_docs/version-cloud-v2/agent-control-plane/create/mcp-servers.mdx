@@ -1,0 +1,41 @@
+---
+title: MCP Servers
+---
+
+# MCP Servers
+
+An MCP server provides tools for agents. You can register an MCP server for the whole organization or for a project, and agents call its tools through their [tool configurations](../develop/llm-and-tool-configurations.mdx) or the **MCP Servers** section when you create the agent.
+
+## Where MCP servers are listed
+
+- **Organization level**: in the left navigation, under **Resources**, click **MCP servers**.
+- **Project level**: in the left navigation, click **MCP servers**. The list shows the MCP servers registered for the organization or the project, and those published from the project's components.
+
+## Register an MCP server
+
+1. On the **MCP Servers** page, click **Register MCP server**. The **Register MCP Server** page opens.
+2. Enter the server's details:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | The server's name. | `GitHub MCP Server` |
+   | **Handle** | Generated from the name. Unique in the organization, and can't be changed once registered. Click the edit icon to change it before you register. | `github-mcp-server` |
+   | **Version** | The server's version. Defaults to `1.0.0`. | `1.0.0` |
+   | **Context** *(optional)* | The path the server is served under, within the project: `/default/<handle>` for the default project. | `/github` |
+   | **Description** *(optional)* | What tools the server provides. | |
+
+3. Under **Endpoint**, click **Add endpoint**, and enter:
+
+   | Field | Description |
+   |---|---|
+   | **Endpoint Name** *(optional)* | A name for the endpoint, such as `Primary`. When it's blank, a handle is derived from the URL. |
+   | **MCP Server Endpoint URL** | The MCP server's public URL. |
+
+   The endpoint is assigned to the environments to deploy the server to, and each environment is secured with an API key.
+
+4. Optionally, set the endpoint's advanced settings:
+
+   - **Advanced Configurations** > **Headers**: HTTP headers to send to the MCP server, each with a **Key** and a hidden **Value**. Select a header's checkbox to use it.
+   - **Resilience**: the **Request Timeout** (shown as `60s`) and the **Idle Timeout** (shown as `300s`).
+
+5. Click **Add endpoint**, then click **Create**.

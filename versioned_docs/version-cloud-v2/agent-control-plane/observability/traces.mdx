@@ -1,0 +1,33 @@
+---
+title: Traces
+---
+
+# Traces
+
+A trace records one run of the agent: its input and output, how long it took, the tokens it used, and its spans. Open the agent, and in the left navigation, under **Observability**, click **Traces**.
+
+A platform-hosted Python agent sends traces when **Auto instrumentation** is on, which it is by default. To instrument an agent yourself, see [AMP Instrumentation](../../guides/amp-instrumentation.mdx).
+
+## The traces list
+
+| Column | Description |
+|---|---|
+| **Status** | Whether the run succeeded. |
+| **Trace ID** | The trace's ID. |
+| **Conversation** | The conversation the run belongs to. |
+| **Input**, **Output** | What the agent received and returned. |
+| **Start Time** | When the run started. The list is sorted by it. |
+| **Duration** | How long the run took. |
+| **Tokens** | The tokens used. |
+| **Spans** | The number of spans. |
+| **Score** | The evaluation score. See [Monitors](../evaluation/monitors.mdx). |
+
+## Find traces
+
+- Choose the time range, for example **1 hour**.
+- Show **All** traces, only **Errors**, or only **Success**.
+- Enter a trace ID in **Go to trace ID**.
+- Use **Advanced filters** to filter further.
+- Choose the columns to show, refresh the list, or **Export** it.
+
+If no trace matches, the page shows **No traces found!**; try changing the time range.

@@ -1,0 +1,38 @@
+---
+title: Create an Agent from a Sample
+---
+
+# Create an Agent from a Sample
+
+A sample is a ready-made agent that you configure and deploy as a platform-hosted agent. It's a quick way to try the platform.
+
+## Steps
+
+1. On the **Add a New Agent** page, under **Start Quickly with a Sample**, click a sample. See [Add an Agent](./add-an-agent.mdx) for the list of samples.
+
+   The **Create a Platform-Hosted Agent** form opens with its fields filled in from the sample. A banner links to the sample's README, which has its setup and testing details.
+
+2. Check the filled-in values. For example, the **Hotel Booking Agent** sample uses:
+
+   | Field | Value |
+   |---|---|
+   | **Name** | `Hotel Booking Agent` |
+   | **Agent handle** | `hotel-booking-agent` |
+   | **GitHub Repository** | `https://github.com/wso2/agent-manager` |
+   | **Branch** | `main` |
+   | **Project Path** | `/samples/hotel-booking-agent/agent` |
+   | **Build Details** | **Python**, version `3.11` |
+   | **Start Command** | `python -m uvicorn app:app --host 0.0.0.0 --port 8000` |
+   | **Agent Type** | **Chat agent** |
+
+3. Under **Environment Variables**, enter a value for each variable that the sample needs. The Hotel Booking Agent sample needs:
+
+   | Key | Secret |
+   |---|---|
+   | `OPENAI_API_KEY` | Yes |
+   | `HOTEL_API_BASE_URL` | No |
+   | `HOTEL_API_TOKEN` | Yes |
+
+4. Click **Create and deploy**.
+
+The agent's **Overview** page opens and the first build starts. For what each field means, see [Create an Agent from Source Code](./create-from-source-code.mdx).

@@ -1,0 +1,27 @@
+---
+title: Identity Providers
+---
+
+# Identity Providers
+
+An identity provider issues the tokens that a gateway accepts when agent endpoints are secured with OAuth. The identity providers configured on a gateway are listed as **Token Issuers** on the gateway details page. For information on gateways, see [Gateways](./gateways.mdx).
+
+## Add an identity provider
+
+Identity providers are owned by the gateway. When you add an identity provider, Agent Manager patches the gateway configuration and applies the change for you.
+
+1. At the organization level, in the left navigation, under **Infrastructure**, click **Gateways**, and then click the gateway. On the gateway details page, under **Token Issuers**, click **Add identity provider**. The **Add Identity Provider** panel opens, with the **Gateway** field set to the current gateway.
+2. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Environment** | The environment that the identity provider applies to. | `Development` |
+   | **Name** | The name of the identity provider. | `AcmeIdP` |
+   | **Discover from URL** *(optional)* | The URL of the identity provider, or its `.well-known` URL. Click **Fetch** to fill in **Issuer** and **JWKS URI** automatically from the provider's OpenID configuration. | `https://idp.example.com` |
+   | **Issuer** | The issuer URL of the identity provider. | `https://idp.example.com` |
+   | **JWKS URI** | The URL from which the gateway fetches the provider's JSON Web Key Set. | `https://idp.example.com/oauth2/jwks` |
+
+3. Optionally, select **Skip TLS verification when fetching JWKS (trusted internal only)**. Use this option only for trusted internal identity providers.
+4. Click **Add**.
+
+For information on securing agent endpoints with OAuth tokens, see [Secure Agents with JWT Authentication](../../guides/secure-agents-with-jwt-authentication.mdx).

@@ -1,0 +1,83 @@
+---
+title: Create an Agent from Source Code
+---
+
+# Create an Agent from Source Code
+
+A platform-hosted agent is built from its source code in a GitHub repository and deployed on the platform.
+
+## Open the form
+
+1. On the **Add a New Agent** page, click **Deploy a new agent** under **Platform-Hosted Agent**. See [Add an Agent](./add-an-agent.mdx).
+2. Under **Source Code**, click **Use source code**.
+
+The **Create a Platform-Hosted Agent** form opens.
+
+## Step 1: Enter the agent details
+
+| Field | Description |
+|---|---|
+| **Name** | A name for your agent, for example `Customer Support Agent`. |
+| **Agent handle** | Generated from the name, for example `customer-support-agent`. Click the edit icon to change it. |
+| **Description** *(optional)* | A short description of what the agent does, up to 2000 characters. Markdown is supported; use **Preview** to check it. |
+| **Labels** *(optional)* | Key/value labels to organize and filter agents. Click **Add label** to add one. |
+
+## Step 2: Enter the repository details
+
+| Field | Description |
+|---|---|
+| **Repository Visibility** | For example, **Public repository**. |
+| **GitHub Repository** | The repository URL, for example `https://github.com/username/repo`. |
+| **Branch** | The branch to build. Defaults to `main`. |
+| **Project Path** | The folder of the agent in the repository. Defaults to `/`. |
+
+## Step 3: Choose how to build the agent
+
+Under **Build Details**, choose one:
+
+- **Python**: run a Python app.
+- **Ballerina**: run a Ballerina program.
+- **Docker**: build from your Dockerfile.
+
+For **Python**, set the **Python configuration**:
+
+| Field | Description |
+|---|---|
+| **Start Command** | The command that starts the agent, for example `python main.py`. Dependencies are installed automatically from `package.json`, `requirements.txt`, or `pyproject.toml`. |
+| **Language Version** | The Python runtime version, for example `3.11`. |
+| **Auto instrumentation** | On by default. Adds OpenTelemetry tracing to your agent automatically, so its traces show up under [Traces](../observability/traces.mdx). |
+| **AMP Instrumentation Version** | Pins the init-container image and the bundled OpenLLMetry SDK version, for example `0.5.0 (OpenLLMetry v0.63.0)`. |
+
+## Step 4: Choose the agent type
+
+Under **Agent Type**, choose how your agent receives requests:
+
+| Type | Description |
+|---|---|
+| **Chat agent** | Uses the standard chat interface: `POST /chat` on port `8000`. |
+| **Custom API agent** | Uses your OpenAPI specification and port. |
+| **A2A agent** | Serves its own agent card. |
+
+A chat agent takes requests and returns responses in this form:
+
+```
+Request:  {message: string, session_id: string, context: JSON}
+Response: {response: string}
+```
+
+Under **Readiness check**, set how Kubernetes decides that the agent is ready for traffic. A **TCP** check makes sure the port is open (for a chat agent, port `8000`).
+
+## Step 5: Connect models, tools, and configuration (optional)
+
+| Section | Description |
+|---|---|
+| **LLM Providers** | Give the agent model access through a platform LLM provider. Click **Add LLM provider**. See [LLM Service Providers](../administer/llm-service-providers.mdx). |
+| **MCP Servers** | Let the agent call tools from registered MCP servers. Click **Add MCP server**. See [MCP Servers](./mcp-servers.mdx). |
+| **Environment Variables** | Pass configuration and secrets to the agent at runtime. Click **Add variable**, or **Upload .env file**. Select **Mark as Secret** for a value that must stay hidden, such as an API key. |
+| **File Mounts** | Mount configuration files into the agent's container. Click **Add file**. |
+
+## Step 6: Create the agent
+
+Click **Create and deploy**. The button is available once the required fields are filled in.
+
+The agent's **Overview** page opens and the first build starts. **Latest Build** shows its status. The agent shows **Not Deployed** until it has a successful build. To follow the build, see [Build an Agent](../develop/build-an-agent.mdx).

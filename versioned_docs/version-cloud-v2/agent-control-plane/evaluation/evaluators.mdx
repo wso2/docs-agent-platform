@@ -1,0 +1,38 @@
+---
+title: Evaluators
+---
+
+# Evaluators
+
+Evaluators are checks that score your agents' traces. Your organization has built-in evaluators, and you can create your own. You use evaluators in [monitors](./monitors.mdx). For how evaluation works, see [Evaluation](../../concepts/evaluation.mdx).
+
+At the organization level, in the left navigation, under **Evaluation**, click **Evaluators**. Search by name, or filter to **Built-in** or **Custom** evaluators.
+
+Each evaluator shows:
+
+- Its **scope**: what it scores, such as a whole **Trace**, the **Agent**, or each **LLM** call.
+- Its **type**: **Rule-based**, or **LLM Judge** (scored by an LLM).
+- Tags, such as `quality`, `efficiency`, `safety`, or `tool-use`.
+
+## Built-in evaluators
+
+The built-in evaluators include:
+
+| Evaluator | Scope | Type | What it checks |
+|---|---|---|---|
+| **Length Compliance** | Trace | Rule-based | Whether the output length is within the configured minimum and maximum. |
+| **Iteration Efficiency** | Agent | Rule-based | Whether the agent completed within its iteration limit, measured by LLM call count. |
+| **Latency Performance** | Trace | Rule-based | Execution speed against a configurable time limit. |
+| **Content Safety** | Trace | Rule-based | Whether the output has prohibited strings or patterns. |
+| **Content Coverage** | Trace | Rule-based | How many required strings and patterns the output has. |
+| **Tool Coverage** | Agent | Rule-based | How many required tools were called at least once. |
+| **Step Success Rate** | Agent | Rule-based | The share of tool execution steps that completed without errors. |
+| **Token Efficiency** | Trace | Rule-based | Total token usage against a configurable limit. |
+| **Sequence Adherence** | Agent | Rule-based | How closely the tool call order matches the expected order. |
+| **Accuracy** | Trace | LLM Judge | The factual correctness of the response. |
+| **Clarity** | Trace | LLM Judge | The response's readability, structure, and lack of ambiguity. |
+| **Coherence** | LLM | LLM Judge | Each LLM call's logical flow, consistency, and structure. |
+
+## Create an evaluator
+
+Click **Create evaluator**. See [Custom Evaluators](../../guides/custom-evaluators.mdx).

@@ -1,0 +1,59 @@
+---
+title: Gateways
+---
+
+# Gateways
+
+Gateways carry the traffic of your agents. Each gateway belongs to an environment and has its own token issuers, which secure agent endpoints with OAuth. For information on how gateways work, see [Gateway](../../concepts/gateway.mdx).
+
+## View gateways
+
+At the organization level, in the left navigation, under **Infrastructure**, click **Gateways**. The **Gateways** page lists the gateways grouped by environment. Use **Search gateways** to find a gateway by name.
+
+| Column | Description |
+|---|---|
+| **Name** | The name of the gateway. |
+| **Type** | The traffic that the gateway handles, for example **Ingress + Egress**. |
+| **Hosting** | How the gateway is hosted, for example **Managed**. |
+| **Status** | The status of the gateway, for example **Active**. |
+| **Last Updated** | When the gateway was last updated. |
+
+For example, the development environment has **Default Gateway - Development**, a managed **Ingress + Egress** gateway.
+
+## Add a gateway
+
+1. On the **Gateways** page, click **Add gateway**. The **Add Gateway** panel opens.
+2. Under **Gateway Details**, enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Display Name** *(required)* | The name shown for the gateway in the Console. | `Production Gateway` |
+   | **Name** *(required)* | The resource name used by the API. It must be unique in the organization and cannot be changed later. | `production-gateway` |
+   | **Environment** *(required)* | The environment that the gateway belongs to. | |
+   | **Public URL** *(required)* | The address that clients use to reach the gateway. | `https://gateway.example.com` |
+   | **Description** | A description of the gateway. | |
+
+3. Click **Create**.
+
+## View gateway details
+
+On the **Gateways** page, click a gateway to open its details page. The page shows the status and type of the gateway, when it was created, and the following:
+
+- **Virtual Host**: The URL of the gateway.
+- **Environments**: The environments that the gateway serves.
+- **Token Issuers**: The token issuers configured on the gateway, which secure agent endpoints with OAuth.
+
+| Column | Description |
+|---|---|
+| **Name** | The name of the token issuer. |
+| **Type** | The type of the token issuer. For example, the built-in **DefaultKeyManager** issuer has the type **System**. |
+| **Issuer** | The issuer URL. |
+| **Environment** | The environment that the token issuer applies to. |
+
+To add a token issuer, see [Identity Providers](./identity-providers.mdx#add-an-identity-provider).
+
+## Edit a gateway
+
+1. On the gateway details page, click **Edit gateway**.
+2. On the **Edit Gateway** page, update the **Display Name**.
+3. Click **Save**.

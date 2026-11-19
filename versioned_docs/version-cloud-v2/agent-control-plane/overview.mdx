@@ -4,6 +4,69 @@ title: Agent Control Plane
 
 # Agent Control Plane
 
-:::info
-Documentation for Agent Control Plane in WSO2 Agent Manager Cloud is coming soon.
-:::
+The Agent Control Plane is the part of WSO2 Agent Manager Cloud that manages the full lifecycle of agents: creating, configuring, building, deploying, securing, observing, and evaluating them. It also manages the shared resources that agents use, such as MCP servers, LLM service providers, gateways, and agent identities.
+
+The Agent Control Plane is available in the Agent Manager Console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/).
+
+## Capabilities
+
+| Capability | Description |
+|---|---|
+| [Create](./create/add-an-agent.mdx) | Add platform-hosted agents from source code, a sample, or the agent catalog, register externally-hosted agents, and register [MCP servers](./create/mcp-servers.mdx) that provide tools for agents. |
+| [Develop](./develop/llm-and-tool-configurations.mdx) | Connect an agent to LLM service providers and tools, build it from its source repository, configure how it is built and health-checked, update its details, and secure it with an agent identity and API keys. |
+| [Deploy](./deploy/deploy-an-agent.mdx) | Deploy a successful build to the environments of the project. |
+| [Test](./test/try-your-agent.mdx) | Chat with a deployed agent or call its API from the Console. |
+| [Publish](./publish/publish-to-the-agent-catalog.mdx) | Publish versions of an agent to the agent catalog as an agent kind, so that others in the organization can create agents from it. |
+| [Observability](./observability/traces.mdx) | Inspect the traces, runtime logs, and CPU and memory usage of a running agent. |
+| [Evaluation](./evaluation/evaluators.mdx) | Score an agent's traces with built-in or custom evaluators, using monitors. |
+| [Administer](./administer/projects.mdx) | Manage projects, gateways, [LLM service providers](./administer/llm-service-providers.mdx), and agent identity groups and roles. |
+
+## Agent lifecycle
+
+Each stage of the agent lifecycle depends on the stage before it:
+
+1. [Create the agent](./create/add-an-agent.mdx) from source code, a sample, or the agent catalog.
+2. [Build the agent](./develop/build-an-agent.mdx). A successful build is required before the agent can be deployed or published.
+3. [Deploy the agent](./deploy/deploy-an-agent.mdx) to an environment.
+4. [Try the agent](./test/try-your-agent.mdx) and [create API keys](./develop/security/api-keys.mdx) for it. Both require a deployed agent.
+5. Optionally, [publish the agent](./publish/publish-to-the-agent-catalog.mdx) to the agent catalog.
+
+## Console navigation
+
+The Console has three levels: organization, project, and agent. The breadcrumb at the top of the page shows the current level, and each level has its own left navigation menu.
+
+### Organization level
+
+| Menu | Purpose |
+|---|---|
+| **Overview** | View the organization's projects, and access evaluators, agent identity groups, and roles. |
+| **Projects** | List, search, and add projects. See [Projects](./administer/projects.mdx). |
+| **Agent catalog** | Browse the agent kinds published in the organization. See [Publish](./publish/publish-to-the-agent-catalog.mdx). |
+| **Resources** > **LLM service providers** | Add the LLM service providers that agents use. See [LLM Service Providers](./administer/llm-service-providers.mdx). |
+| **Resources** > **MCP servers** | Register MCP servers for the organization. See [MCP Servers](./create/mcp-servers.mdx). |
+| **Evaluation** > **Evaluators** | Browse built-in evaluators and create custom evaluators. See [Evaluators](./evaluation/evaluators.mdx). |
+| **Infrastructure** > **Gateways** | View and add gateways. See [Gateways](./administer/gateways.mdx). |
+| **Agent identities** > **Groups**, **Roles** | Organize agent identities and grant them permissions. See [Agent Identity Groups and Roles](./administer/agent-identity-groups-and-roles.mdx). |
+
+### Project level
+
+| Menu | Purpose |
+|---|---|
+| **Overview** | View the project's agents, deployments, and environments. See [Projects](./administer/projects.mdx). |
+| **Agents** | List the project's agents and add new agents. See [Add an Agent](./create/add-an-agent.mdx). |
+| **MCP servers** | View the MCP servers available to the project and register new MCP servers. See [MCP Servers](./create/mcp-servers.mdx). |
+
+### Agent level
+
+| Menu | Purpose |
+|---|---|
+| **Overview** | View the agent's source, latest build, and identity and deployment in each environment. See [Edit Agent Details](./develop/edit-agent-details.mdx). |
+| **Agent lifecycle** > **Configure** | Add LLM and tool configurations. See [LLM and Tool Configurations](./develop/llm-and-tool-configurations.mdx). |
+| **Agent lifecycle** > **Build** | Build the agent and change its build configuration. See [Build an Agent](./develop/build-an-agent.mdx). |
+| **Agent lifecycle** > **Deploy** | Deploy a successful build. See [Deploy an Agent](./deploy/deploy-an-agent.mdx). |
+| **Agent lifecycle** > **Try it** | Chat with the deployed agent or call its API. See [Try Your Agent](./test/try-your-agent.mdx). |
+| **Agent lifecycle** > **Publish** | Publish versions of the agent to the agent catalog. See [Publish](./publish/publish-to-the-agent-catalog.mdx). |
+| **Security** > **Agent ID** | View the agent's identity, groups, and roles. See [Agent ID](./develop/security/agent-id.mdx). |
+| **Security** > **Credentials** | Manage the API keys of the deployed agent. See [API Keys](./develop/security/api-keys.mdx). |
+| **Observability** > **Traces**, **Runtime logs**, **System metrics** | Observe the running agent. See [Traces](./observability/traces.mdx), [Runtime Logs](./observability/runtime-logs.mdx), and [System Metrics](./observability/system-metrics.mdx). |
+| **Evaluation** > **Monitors** | Evaluate the agent's traces. See [Monitors](./evaluation/monitors.mdx). |

@@ -1,0 +1,29 @@
+---
+title: Monitors
+---
+
+# Monitors
+
+A monitor runs evaluators over an agent's traces and tracks the results. Open the agent, and in the left navigation, under **Evaluation**, click **Monitors**. The **Eval Monitors** page lists the agent's monitors.
+
+## Create a monitor
+
+1. Click **Add monitor**. The **Create Monitor** page opens.
+2. Under **Basic Details**, enter:
+
+   | Field | Description |
+   |---|---|
+   | **Monitor Title** | The name shown in the monitors list. |
+   | **Description** *(optional)* | What the monitor is for. |
+
+3. Under **Data Collection**, choose which traces to evaluate:
+
+   | Field | Description |
+   |---|---|
+   | **Past Traces** or **Future Traces** | Evaluate traces that already exist, or traces as they arrive. |
+   | **Start Time**, **End Time** | For past traces, the time range to evaluate. |
+   | **Sampling Rate (%)** | The percentage of matching traces to evaluate. Defaults to 100%. |
+
+4. Click **Next** and complete the remaining steps. See [Evaluation Monitors](../../guides/evaluation-monitors.mdx).
+
+The evaluators come from your organization's [evaluators](./evaluators.mdx).

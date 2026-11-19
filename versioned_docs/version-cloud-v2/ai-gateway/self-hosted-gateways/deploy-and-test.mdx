@@ -32,7 +32,11 @@ A self-hosted gateway is never selected for you. Select it explicitly when you d
 5. Under **Deployment Configuration**, select the environment, then select your self-hosted gateway from the gateway list. The list shows **Self-hosted** next to it.
 6. Click **Add provider**.
 
+![The Add LLM Service Provider form with the OpenAI template and the self-hosted gateway selected under Deployment Configuration](../../img/ai-gateway/deploy-llm-provider-form.png)
+
 The provider page opens. Under **Deployment**, the environment shows the gateway as **Deploying**, then **Deployed**. Reload the page if the status does not change.
+
+![The Deployment tab showing the environment on the self-hosted gateway with the Deployed status](../../img/ai-gateway/llm-provider-deployed.png)
 
 On the gateway host, the controller logs show the deployment arriving and being applied:
 
@@ -49,6 +53,9 @@ msg="Runtime deploy config added" key=LlmProvider:my-openai kind=LlmProvider ...
 
 1. On the provider's **Overview** tab, find **Invoke URL & API Key**. The invoke URL combines the gateway **Public URL** with the provider context, for example `https://localhost:8443/my-openai`.
 2. Click **Generate API key** and copy the key. The key is shown once and works in all environments.
+
+   ![The Overview tab showing the invoke URL on the self-hosted gateway and the Generate API key button](../../img/ai-gateway/llm-provider-invoke-url.png)
+
 3. Send a request with the key in the `API-Key` header. The default listener certificate is self-signed, so add `-k` until you install a trusted certificate.
 
    ```bash
@@ -75,7 +82,11 @@ The gateway checks the key, adds the provider credential, and forwards the reque
 4. Under **Deployment Configuration**, select the environment, then select your self-hosted gateway.
 5. Click **Add endpoint**, then click **Create**.
 
+![The Register MCP Server form with an endpoint URL and the self-hosted gateway selected under Deployment Configuration](../../img/ai-gateway/deploy-mcp-server-form.png)
+
 The server page shows **Deployed** next to the deployment. The controller logs show `Runtime deploy config added` with `kind=Mcp`.
+
+![The MCP server page showing the Deployed status for the default environment](../../img/ai-gateway/mcp-server-deployed.png)
 
 :::note
 Self-hosted gateways support API key security for MCP servers only. On the **Security** tab, the method is **API Key**, and the key is sent in the `X-API-Key` header by default.

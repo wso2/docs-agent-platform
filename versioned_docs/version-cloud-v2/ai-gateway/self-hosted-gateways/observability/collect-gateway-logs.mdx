@@ -1,29 +1,22 @@
 ---
 sidebar_label: Collect Gateway Logs
 sidebar_position: 1
-description: "Read the logs of a self-hosted AI Gateway, set the log level and format, and ship logs to OpenSearch with the bundled logging profile."
+description: "Collect self-hosted AI Gateway logs with the demonstration Fluent Bit and OpenSearch stack, or send them to your own logging system."
 ---
 
 # Collect Gateway Logs
 
-The Gateway Controller and Gateway Runtime write their logs to the container output. The gateway bundle also includes an optional logging stack, so you can search the logs of both components in one place.
+The Gateway Controller and Gateway Runtime write their logs to stdout and stderr, and Docker stores those logs. You can read them from each container, or start the demonstration logging stack to search them in one place.
 
-## Read the Logs
+The demonstration stack is Fluent Bit, OpenSearch, and OpenSearch Dashboards. It is a starting point, and you can replace it with another logging system.
 
-```bash
-docker compose logs gateway-controller
-docker compose logs gateway-runtime
-```
+## Set the Log Level and Format
 
-The runtime log includes the router access log, with one line for each request.
-
-## Change the Log Level and Format
-
-Edit `configs/config.toml`, then recreate the containers with `docker compose up -d --force-recreate`.
+The logging stack parses JSON log lines, so set the format to `json`. Edit `configs/config.toml`, then recreate the containers with `docker compose up -d --force-recreate`.
 
 ```toml
 [controller.logging]
-level = "debug"   # debug, info, warn, or error
+level = "info"    # debug, info, warn, or error
 format = "json"   # text or json
 
 [policy_engine.logging]
@@ -35,22 +28,82 @@ enabled = true
 format = "json"
 ```
 
-Set `format` to `json` for the logging stack, because it parses JSON log lines.
+## Start the Logging Stack
 
-## Search Logs with the Logging Stack
+Start the gateway with log collection:
 
-The `logging` profile adds Fluent Bit, OpenSearch, and OpenSearch Dashboards. Fluent Bit reads the Docker log files, adds a `component` field, and stores the logs in OpenSearch in daily `gateway-logs-*` indexes.
+```bash
+docker compose --profile logging up -d
+```
 
-1. Start the gateway with the profile:
+This starts:
 
-   ```bash
-   docker compose --profile logging up -d
-   ```
+- **gateway-controller** and **gateway-runtime**, which log to stdout and stderr
+- **Fluent Bit**, which reads the Docker log files, adds the component name, and forwards the logs
+- **OpenSearch**, which stores the logs
+- **OpenSearch Dashboards**, which is the search UI
 
-2. Open OpenSearch Dashboards at `http://localhost:5601`.
-3. Create an index pattern named `gateway-logs-*`, then search under **Discover**.
+To run the gateway without that stack:
 
-The stack is a starting point. To use your own logging system, point your collector at the container output instead.
+```bash
+docker compose up -d
+```
+
+The components still log. Read them with:
+
+```bash
+docker compose logs gateway-controller
+docker compose logs gateway-runtime
+```
+
+The runtime log includes the router access log, with one line for each request.
+
+Stop the stack, and the stored logs:
+
+```bash
+docker compose --profile logging down
+```
+
+```bash
+docker compose --profile logging down -v
+```
+
+The second command deletes the `opensearch-data` volume.
+
+## View Logs in OpenSearch Dashboards
+
+1. Open `http://localhost:5601`.
+2. Open the menu, then **Management** → **Dashboard Management** → **Index Patterns**.
+3. Click **Create index pattern**.
+4. Enter `gateway-logs-*` and click **Next step**.
+5. Select **@timestamp** as the time field and click **Create index pattern**.
+6. Open the menu, then **OpenSearch Dashboards** → **Discover**.
+7. Select the `gateway-logs-*` index pattern. Change the time range if you need more than the last 15 minutes.
+
+Fluent Bit sets the `component` field to the name of the container, which includes the Compose project name. To filter by component, enter a query with wildcards in the search bar:
+
+| Component | Query |
+|---|---|
+| Gateway Controller | `component:*gateway-controller*` |
+| Gateway Runtime (router and policy engine) | `component:*gateway-runtime*` |
+
+To filter by level, click **Add filter**, set **Field** to `level`, **Operator** to `is`, and **Value** to `error`, `info`, `warn`, or `debug`.
+
+Example queries:
+
+```
+error
+```
+
+```
+component:*gateway-runtime* AND level:error
+```
+
+```
+component:*gateway-controller* AND message:*openai*
+```
+
+In **Discover**, use the gear icon to choose columns, click a column header to sort, and click **>** on a row to see the JSON. Click **Save** to keep a search.
 
 ## Log Requests and Responses
 
@@ -63,3 +116,137 @@ masked_headers = ["authorization", "x-api-key", "x-jwt-assertion"]
 ```
 
 The lines go to the container output, so the logging stack picks them up. Headers and bodies appear only if you also enable them under `[collector]` and `[traffic_logging]`. Bodies can contain sensitive data, so enable them deliberately.
+
+## Use Another Logging System
+
+Point Fluent Bit, or another collector, at the Docker container logs. The gateway components stay the same.
+
+### Elastic Stack
+
+Replace OpenSearch with the Elastic Stack:
+
+```yaml
+elasticsearch:
+  image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+  environment:
+    - discovery.type=single-node
+    - xpack.security.enabled=false
+  ports:
+    - "9200:9200"
+  networks:
+    - gateway-network
+
+kibana:
+  image: docker.elastic.co/kibana/kibana:8.11.0
+  environment:
+    - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+  ports:
+    - "5601:5601"
+  networks:
+    - gateway-network
+  depends_on:
+    - elasticsearch
+```
+
+Update the Fluent Bit output in `observability/fluent-bit/fluent-bit.conf`:
+
+```conf
+[OUTPUT]
+    Name es
+    Match docker.*
+    Host elasticsearch
+    Port 9200
+    Logstash_Format On
+    Logstash_Prefix gateway-logs
+```
+
+### Grafana Loki
+
+For a lightweight logging solution, add Loki, Promtail, and Grafana. Provide your own Promtail configuration file at `observability/promtail/config.yaml`.
+
+```yaml
+loki:
+  image: grafana/loki:latest
+  ports:
+    - "3100:3100"
+  command: -config.file=/etc/loki/local-config.yaml
+  networks:
+    - gateway-network
+
+promtail:
+  image: grafana/promtail:latest
+  volumes:
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    - ./observability/promtail/config.yaml:/etc/promtail/config.yaml:ro
+  command: -config.file=/etc/promtail/config.yaml
+  networks:
+    - gateway-network
+
+grafana:
+  image: grafana/grafana:latest
+  ports:
+    - "3000:3000"
+  networks:
+    - gateway-network
+  depends_on:
+    - loki
+```
+
+### AWS CloudWatch
+
+Configure Fluent Bit to send logs to CloudWatch:
+
+```conf
+[OUTPUT]
+    Name cloudwatch_logs
+    Match *
+    region us-east-1
+    log_group_name /aws/gateway
+    log_stream_prefix gateway-
+    auto_create_group true
+```
+
+Provide AWS credentials with environment variables or an IAM role.
+
+### Datadog
+
+Use the Datadog Agent:
+
+```yaml
+datadog:
+  image: datadog/agent:latest
+  environment:
+    - DD_API_KEY=${DD_API_KEY}
+    - DD_LOGS_ENABLED=true
+    - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+    - DD_AC_EXCLUDE=name:datadog-agent
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  networks:
+    - gateway-network
+```
+
+### Splunk
+
+Configure Fluent Bit to forward to Splunk HEC:
+
+```conf
+[OUTPUT]
+    Name splunk
+    Match *
+    Host splunk.example.com
+    Port 8088
+    Splunk_Token ${SPLUNK_HEC_TOKEN}
+    TLS On
+    TLS.Verify Off
+```
+
+Turn TLS verification on for production.
+
+## Additional Resources
+
+- [Fluent Bit Documentation](https://docs.fluentbit.io/)
+- [OpenSearch Documentation](https://opensearch.org/docs/latest/)
+- [OpenSearch Dashboards User Guide](https://opensearch.org/docs/latest/dashboards/)
+- [Docker Compose Profiles](https://docs.docker.com/compose/profiles/)

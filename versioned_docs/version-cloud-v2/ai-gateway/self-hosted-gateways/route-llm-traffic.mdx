@@ -1,10 +1,10 @@
 ---
-sidebar_label: Deploy an LLM Service Provider
+sidebar_label: Route LLM Traffic
 sidebar_position: 3
-description: "Put your self-hosted AI Gateway in front of an LLM API. Register an LLM service provider, deploy it to the gateway, and send a request through it."
+description: "Route LLM traffic through your self-hosted AI Gateway. Register an LLM service provider, deploy it to the gateway, and send a request through it."
 ---
 
-# Deploy an LLM Service Provider
+# Route LLM Traffic Through a Self-Hosted Gateway
 
 An LLM service provider connects Agent Control Plane to an upstream LLM API, such as OpenAI. When you deploy it to your self-hosted gateway, the gateway becomes the single entry point for that LLM API. Agents call the gateway, and the gateway calls the LLM API.
 
@@ -107,6 +107,6 @@ The gateway checks the key, adds the credential that you entered for the LLM ser
 
 ## Next Steps
 
-- [Deploy an MCP Server](./deploy-an-mcp-server.mdx)
+- [Route MCP Traffic Through a Self-Hosted Gateway](./route-mcp-traffic.mdx)
 - [LLM Service Providers](../../agent-control-plane/administer/llm-service-providers.mdx)
 - [Register an LLM Service Provider](../../guides/register-llm-service-provider.mdx)

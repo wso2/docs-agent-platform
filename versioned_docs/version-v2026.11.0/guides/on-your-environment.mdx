@@ -408,7 +408,88 @@ Full GKE guidance is coming soon.
 </TabItem>
 <TabItem value="aks" label="AKS">
 
-Full AKS guidance is coming soon.
+Use Azure Key Vault with Microsoft Entra Workload ID:
+
+:::warning Use OpenBao 2.6
+The `0.25.6` chart installs OpenBao 2.5.1, whose Azure Key Vault seal cannot use Workload ID. The webhook sets `AZURE_CLIENT_ID` on the pod, and 2.5.x then always authenticates through the node's managed identity endpoint, failing with `ManagedIdentityCredential authentication failed ... Identity not found`. Granting the kubelet identity access to the key works around this, but lets any pod on those nodes use the unseal key. OpenBao 2.6 adds the `auth_method` seal parameter used below, so override the image tag. Do not use 2.7 or later with this guide: it removes the built-in Azure Key Vault seal and the `file` storage backend.
+:::
+
+1. Enable the OIDC issuer and Workload ID on the cluster, and note the issuer URL:
+
+```bash
+az aks update --resource-group <resource-group> --name <cluster-name> \
+  --enable-oidc-issuer --enable-workload-identity
+
+AKS_OIDC_ISSUER=$(az aks show --resource-group <resource-group> --name <cluster-name> \
+  --query oidcIssuerProfile.issuerUrl -o tsv)
+```
+
+2. Create an RSA key in your key vault. The seal wraps its root key with `RSA-OAEP-256`, so the key must be RSA:
+
+```bash
+az keyvault key create --vault-name <key-vault-name> --name openbao-unseal --kty RSA --size 2048
+```
+
+3. Create a user-assigned managed identity and give it the **Key Vault Crypto User** role on the vault. With access policies instead of Azure RBAC, grant the `get`, `wrapKey`, and `unwrapKey` key permissions:
+
+```bash
+az identity create --resource-group <resource-group> --name <cluster-name>-openbao
+
+az role assignment create --role "Key Vault Crypto User" \
+  --assignee $(az identity show --resource-group <resource-group> --name <cluster-name>-openbao --query principalId -o tsv) \
+  --scope $(az keyvault show --name <key-vault-name> --query id -o tsv)
+```
+
+4. Federate the identity with the `openbao` ServiceAccount, which the chart creates:
+
+```bash
+az identity federated-credential create --name openbao \
+  --identity-name <cluster-name>-openbao --resource-group <resource-group> \
+  --issuer "${AKS_OIDC_ISSUER}" \
+  --subject system:serviceaccount:openbao:openbao \
+  --audience api://AzureADTokenExchange
+```
+
+5. Install OpenBao with this values file in place of the `--set` flags above. `auth_method = "workload_identity"` is required: without it, OpenBao 2.6 still picks the managed identity endpoint whenever a client ID is present. Do not set `AZURE_CLIENT_ID` yourself; the Workload ID webhook injects it from the ServiceAccount annotation:
+
+```yaml
+server:
+  image:
+    tag: "2.6.6"
+  dataStorage:
+    size: 10Gi
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: <managed-identity-client-id>
+  extraLabels:
+    azure.workload.identity/use: "true"
+  standalone:
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "file" {
+        path = "/openbao/data"
+      }
+      seal "azurekeyvault" {
+        auth_method = "workload_identity"
+        tenant_id   = "<tenant-id>"
+        vault_name  = "<key-vault-name>"
+        key_name    = "openbao-unseal"
+      }
+```
+
+6. Initialize OpenBao with recovery-key flags, and skip the `unseal` commands:
+
+```bash
+kubectl exec -n openbao openbao-0 -- bao operator init -recovery-shares=5 -recovery-threshold=3
+```
+
+Store the recovery keys and root token in your secret manager. `bao status` should show `Sealed false` once the pod is Ready.
 
 </TabItem>
 </Tabs>
@@ -675,6 +756,17 @@ CREATE ROLE thunder LOGIN PASSWORD '...';
 GRANT thunder TO CURRENT_USER;  -- required on managed PostgreSQL; harmless elsewhere
 CREATE DATABASE configdb OWNER thunder;  -- likewise entitydb, runtime_transient, runtime_persistent
 ```
+
+:::warning Azure Database for PostgreSQL
+On Azure Database for PostgreSQL flexible server, the `public` schema of every database is owned by `azure_pg_admin`, not by the database owner. If loading the schema fails with `permission denied for schema public`, hand the schema to the owning role in each database as the admin user. This relies on the `GRANT` and `OWNER` above:
+
+```bash
+for db in configdb entitydb runtime_transient runtime_persistent; do
+  psql "host=your-db.example.com user=<admin-user> dbname=${db} sslmode=require" \
+    -c 'ALTER SCHEMA public OWNER TO thunder;'
+done
+```
+:::
 
 Load the schema into each database from the Thunder image:
 
@@ -1897,6 +1989,15 @@ The script checks these settings before it creates anything and stops with a mes
    ```
 
    The role must own the databases, or hold `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on every table in them. The `GRANT` line matters on managed services such as RDS, Cloud SQL, and Azure Database; [Step 4](#step-4-install-thunder-extension-identity-provider) explains why. The prefix can use up to 41 lowercase letters, digits, and underscores, and must start with a letter.
+
+   On Azure Database for PostgreSQL flexible server, the `public` schema of each database is owned by `azure_pg_admin`. If the next step fails with `permission denied for schema public`, hand the schema to the role in each database as the admin user:
+
+   ```bash
+   for db in configdb entitydb runtime_transient runtime_persistent; do
+     psql "host=your-db.example.com user=<admin-user> dbname=th_default_${db} sslmode=require" \
+       -c 'ALTER SCHEMA public OWNER TO thunder_default;'
+   done
+   ```
 
 2. Load Thunder's schema into each database. The script does not create tables, and an empty database makes the install fail. Take the schema from the same ThunderID version the script installs:
 

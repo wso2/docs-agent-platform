@@ -242,6 +242,21 @@ kubectl create secret generic amp-db-credentials \
   --from-literal=password='<AMP_DB_PASSWORD>'
 ```
 
+:::warning Azure Database for PostgreSQL
+On Azure Database for PostgreSQL flexible server, the `public` schema of every database is owned by `azure_pg_admin`, not by the database owner. If the `amp-db-migration` job fails with `permission denied for schema public`, the `agentmanager` role cannot create tables there. Create the database owned by that role, then, as the admin user, hand the schema to it. `ALTER SCHEMA ... OWNER TO` needs the admin to be a member of the role and the role to own the database (or hold `CREATE` on it):
+
+```sql
+CREATE ROLE agentmanager LOGIN PASSWORD '...';
+GRANT agentmanager TO CURRENT_USER;
+CREATE DATABASE agentmanager OWNER agentmanager;
+```
+
+```bash
+psql "host=your-db.example.com user=<admin-user> dbname=agentmanager sslmode=require" \
+  -c 'ALTER SCHEMA public OWNER TO agentmanager;'
+```
+:::
+
 Then install, wiring the external database and the platform client secrets generated earlier:
 
 ```bash

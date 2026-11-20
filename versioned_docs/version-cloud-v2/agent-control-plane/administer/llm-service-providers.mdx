@@ -4,8 +4,48 @@ title: LLM Service Providers
 
 # LLM Service Providers
 
-An LLM service provider gives agents access to models. Adding one starts routing AI traffic through the gateway. LLM service providers belong to the organization, and agents use them through their [LLM configurations](../develop/llm-and-tool-configurations.mdx) or the **LLM Providers** section when you create the agent.
+An LLM service provider gives agents access to models. Adding one starts routing AI traffic through the gateway. LLM service providers belong to the organization, and agents use them through their [LLM configurations](../develop/llm-configurations.mdx) or the **LLM Providers** section when you create the agent.
 
-At the organization level, in the left navigation, under **Resources**, click **LLM service providers**. To add one, click **Add service provider**. For the steps, see [Register an LLM Service Provider](../../guides/register-llm-service-provider.mdx).
+For information on how LLM service providers work, see [LLM Service Provider](../../concepts/llm-service-provider.mdx).
 
-For how LLM service providers work, see [LLM Service Provider](../../concepts/llm-service-provider.mdx).
+## Add an LLM service provider
+
+1. At the organization level, in the left navigation, under **Resources**, click **LLM service providers**.
+2. Click **Add service provider**.
+3. Select the provider, for example **Gemini**, **Mistral**, or **OpenAI**.
+4. Under **Runtime Configuration**, enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Endpoint URL** | The URL of the provider's API. | `https://api.openai.com/v1` |
+   | **API key / Credential** | The credential that the gateway uses to call the provider. The value is hidden; click the eye icon to show it. | |
+
+5. Optionally, expand **Resilience** and set the timeouts:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Request Timeout** | How long to wait for a response from the provider. | `60s` |
+   | **Idle Timeout** | How long an idle connection to the provider is kept open. | `300s` |
+
+6. Optionally, add guardrails. See [Add a guardrail](#add-a-guardrail).
+7. Click **Add provider**.
+
+## Add a guardrail
+
+Guardrails are safety policies that enforce consistent protections on the traffic to the provider.
+
+1. Under **Guardrails**, click **Add guardrail**. The **Add Guardrail** panel opens.
+2. Select a guardrail. Use **Search guardrails** to find a guardrail by name. Each guardrail shows its version and what it does, for example:
+
+   | Guardrail | Description |
+   |---|---|
+   | **AWS Authentication** | Signs outbound requests to AWS-hosted backends using AWS Signature Version 4 (SigV4) before they are forwarded upstream. |
+   | **Azure LLM Cost** | Calculates the cost of Azure OpenAI and Azure AI Foundry calls from the token usage in the response. |
+   | **Content Length Guardrail** | Validates content byte lengths in request or response payloads using minimum and maximum limits. |
+   | **interceptor-service** | Calls a user-defined HTTP interceptor service for the request phase, the response phase, or both. The interceptor can change headers, the body, or the path, route to a dynamic endpoint, or return a direct response. |
+   | **JSON Schema Guardrail** | Validates request or response content against a JSON Schema. |
+
+3. Under **Parameters**, configure the guardrail. For example, **Content Length Guardrail** has the optional **request** and **response** parameters.
+4. Click **Add**.
+
+The guardrail is listed under **Guardrails**. To remove it, click the delete icon.

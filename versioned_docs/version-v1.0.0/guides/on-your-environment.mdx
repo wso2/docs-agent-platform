@@ -371,6 +371,45 @@ kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-3>
 
 A sealed OpenBao must be unsealed again after every pod restart. For unattended restarts, configure [auto-unseal](https://openbao.org/docs/concepts/seal/) against your cloud KMS through the `server.standalone.config` seal stanza.
 
+:::warning AKS: use OpenBao 2.6 for Workload ID
+The `0.25.6` chart installs OpenBao 2.5.1, whose Azure Key Vault seal cannot authenticate with Microsoft Entra Workload ID. The webhook sets `AZURE_CLIENT_ID` on the pod, and 2.5.x then always calls the node's managed identity endpoint, failing with `ManagedIdentityCredential authentication failed ... Identity not found`. Granting the kubelet identity access to the key works around this, but lets any pod on those nodes use the unseal key.
+
+To use Workload ID, keep the `0.25.6` chart, override the image to OpenBao 2.6, and set `auth_method = "workload_identity"` in the seal stanza. Without that parameter, 2.6 still picks the managed identity endpoint whenever a client ID is present. Do not use OpenBao 2.7 or later with this guide: it removes the built-in Azure Key Vault seal and the `file` storage backend.
+
+```yaml
+server:
+  image:
+    tag: "2.6.6"
+  dataStorage:
+    size: 10Gi
+  serviceAccount:
+    annotations:
+      azure.workload.identity/client-id: <managed-identity-client-id>
+  extraLabels:
+    azure.workload.identity/use: "true"
+  standalone:
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "file" {
+        path = "/openbao/data"
+      }
+      seal "azurekeyvault" {
+        auth_method = "workload_identity"
+        tenant_id   = "<tenant-id>"
+        vault_name  = "<key-vault-name>"
+        key_name    = "openbao-unseal"
+      }
+```
+
+Do not set `AZURE_CLIENT_ID` yourself; the webhook injects it from the ServiceAccount annotation. The managed identity needs a federated credential for the subject `system:serviceaccount:openbao:openbao` with your cluster's OIDC issuer, and the **Key Vault Crypto User** role on the vault (or the `get`, `wrapKey`, and `unwrapKey` key permissions with access policies). The key must be RSA. With a KMS seal, initialize with `bao operator init -recovery-shares=5 -recovery-threshold=3` instead of the `-key-shares` command above, and skip the `unseal` commands.
+:::
+
 Create the KV v2 mount, the Kubernetes auth role the platform expects, and the seeded secrets (dev mode does this automatically; a sealed installation does not):
 
 ```bash

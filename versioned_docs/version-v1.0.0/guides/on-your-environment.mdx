@@ -44,7 +44,7 @@ The main flow assumes you control a DNS zone. If you are evaluating on a cluster
 
 | Requirement | Minimum |
 |-------------|---------|
-| Kubernetes version | 1.32+ |
+| Kubernetes version | 1.32 to 1.35. Kubernetes 1.36 and later are outside kgateway's supported range and not validated; see the kgateway note in Phase 1, Step 1 |
 | Nodes | 3 |
 | CPU per node | 4 cores |
 | RAM per node | 8 GB |
@@ -288,20 +288,28 @@ helm upgrade --install external-secrets oci://ghcr.io/external-secrets/charts/ex
   --wait --timeout 180s
 ```
 
-**kgateway (v2.2.1)** — the network gateway for OpenChoreo planes:
+**kgateway (v2.3.11)** — the network gateway for OpenChoreo planes:
 
 ```bash
 helm upgrade --install kgateway-crds oci://cr.kgateway.dev/kgateway-dev/charts/kgateway-crds \
   --create-namespace \
   --namespace openchoreo-control-plane \
-  --version v2.2.1
+  --version v2.3.11
 
 helm upgrade --install kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgateway \
   --namespace openchoreo-control-plane \
   --create-namespace \
-  --version v2.2.1 \
+  --version v2.3.11 \
   --set controller.extraEnv.KGW_ENABLE_GATEWAY_API_EXPERIMENTAL_FEATURES=true
 ```
+
+:::note
+Install kgateway v2.3.11 as shown, even though Agent Manager 1.0.0 was first released with v2.2.1. Kubernetes 1.37 and later, and some managed 1.36 builds such as AKS 1.36.5, reject the CRDs of kgateway v2.2.x and v2.3.0 to v2.3.6 with `estimated rule cost exceeds budget`. The `kgateway` chart then installs without those CRDs.
+
+kgateway v2.3.11 fixes the CRD rejection, but kgateway lists Kubernetes 1.31 to 1.35 as [supported for 2.3.x](https://kgateway.dev/docs/envoy/2.3.x/reference/versions/). Neither kgateway nor Agent Manager 1.0.0 has been validated on Kubernetes 1.36 or later. For a supported installation, use Kubernetes 1.35 or earlier.
+
+If an earlier attempt failed with this error, run the same two commands again. They upgrade the existing releases in place.
+:::
 
 :::note
 Evaluating on Rancher Desktop / k3s? See the [Rancher Desktop / k3s appendix](#appendix-rancher-desktop--k3s) — Traefik must be removed before this step.

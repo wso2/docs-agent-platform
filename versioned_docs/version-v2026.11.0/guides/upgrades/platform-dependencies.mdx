@@ -26,7 +26,7 @@ The WSO2 Agent Manager version is not the version of every dependency. Set each 
 | `wso2-amp-observability-extension` | v1.0.0 | 2026.11.0 | Upgrade after the Observability Plane. |
 | `wso2-amp-evaluation-extension` | v1.0.0 | 2026.11.0 | Upgrade after the Workflow Plane. |
 | `wso2-amp-api-platform-gateway-extension` | v1.0.0 | 2026.11.0 | Upgrade once for each gateway. |
-| `kgateway-crds`, `kgateway` | v2.2.1 | v2.3.11 | Upgrade `kgateway-crds` first. This is separate from the WSO2 Gateway Operator. Skip it if your installation already runs v2.3.11. |
+| `kgateway-crds`, `kgateway` | v2.2.1 | v2.3.11 | Upgrade `kgateway-crds` first. This is separate from the WSO2 Gateway Operator. Skip it only if both `kgateway-crds` and `kgateway` already run v2.3.11. |
 | `gateway-operator` | 0.11.0 | 0.11.3 | Chart 0.11.3 runs operator image 0.11.1. |
 | Operator-managed API Platform gateway | Chart 1.2.2, images 1.2.1 from `ghcr.io` | Chart and images 2026.10.0 from `registry.wso2.com/<project>/sts` | Pinned in the operator values. Existing gateways need an explicit redeploy. |
 

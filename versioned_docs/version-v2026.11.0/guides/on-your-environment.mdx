@@ -758,7 +758,7 @@ CREATE DATABASE configdb OWNER thunder;  -- likewise entitydb, runtime_transient
 ```
 
 :::warning Azure Database for PostgreSQL
-On Azure Database for PostgreSQL flexible server, the `public` schema of every database is owned by `azure_pg_admin`, not by the database owner, so loading the schema fails with `permission denied for schema public`. As the admin user, hand the schema to the owning role in each database. This relies on the `GRANT` above:
+On Azure Database for PostgreSQL flexible server, the `public` schema of every database is owned by `azure_pg_admin`, not by the database owner. If loading the schema fails with `permission denied for schema public`, hand the schema to the owning role in each database as the admin user. This relies on the `GRANT` and `OWNER` above:
 
 ```bash
 for db in configdb entitydb runtime_transient runtime_persistent; do
@@ -1990,7 +1990,7 @@ The script checks these settings before it creates anything and stops with a mes
 
    The role must own the databases, or hold `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on every table in them. The `GRANT` line matters on managed services such as RDS, Cloud SQL, and Azure Database; [Step 4](#step-4-install-thunder-extension-identity-provider) explains why. The prefix can use up to 41 lowercase letters, digits, and underscores, and must start with a letter.
 
-   On Azure Database for PostgreSQL flexible server, the `public` schema of each database is owned by `azure_pg_admin`, so the next step fails with `permission denied for schema public`. As the admin user, hand the schema to the role in each database:
+   On Azure Database for PostgreSQL flexible server, the `public` schema of each database is owned by `azure_pg_admin`. If the next step fails with `permission denied for schema public`, hand the schema to the role in each database as the admin user:
 
    ```bash
    for db in configdb entitydb runtime_transient runtime_persistent; do

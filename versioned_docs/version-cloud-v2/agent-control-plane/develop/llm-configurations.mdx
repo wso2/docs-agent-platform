@@ -51,21 +51,7 @@ On the configuration's details page, click **Environment Variables & Integration
 - **Environment Variables References**: the environment variable names, which you can rename if your code already uses different names. Save the configuration after you rename them.
 - **Integration Guide**: a snippet to copy into your agent code, on the **Python** tab, or a prompt for a coding assistant, on the **Copilot prompt** tab.
 
-Requests to the provider must carry the API key in the `API-Key` header. The snippet sets this header for you. Read the values from the environment variables, and do not hardcode them. For example, for an OpenAI provider:
-
-```python
-import os
-from openai import OpenAI
-
-url = os.environ.get('OPENAI_URL')
-apikey = os.environ.get('OPENAI_API_KEY')
-
-client = OpenAI(
-    base_url=url,
-    api_key=apikey,
-    default_headers={"API-Key": apikey},
-)
-```
+Requests to the provider must carry the API key in the `API-Key` header. The snippet sets this header for you. Read the values from the environment variables, and do not hardcode them.
 
 ## Delete an LLM configuration
 

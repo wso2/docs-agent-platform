@@ -27,9 +27,9 @@ The **Create a Platform-Hosted Agent** form opens.
 | Field | Description |
 |---|---|
 | **Repository Visibility** | For example, **Public repository**. |
-| **GitHub Repository** | The repository URL, for example `https://github.com/username/repo`. |
-| **Branch** | The branch to build. Defaults to `main`. |
-| **Project Path** | The folder of the agent in the repository. Defaults to `/`. |
+| **GitHub Repository** | The repository URL, up to 2048 characters, for example `https://github.com/username/repo`. |
+| **Branch** | The branch to build, up to 255 characters. Defaults to `main`. |
+| **Project Path** | The folder of the agent in the repository, up to 512 characters. Defaults to `/`. |
 
 ## Step 3: Choose how to build the agent
 
@@ -43,7 +43,7 @@ For **Python**, set the **Python configuration**:
 
 | Field | Description |
 |---|---|
-| **Start Command** | The command that starts the agent, for example `python main.py`. Dependencies are installed automatically from `package.json`, `requirements.txt`, or `pyproject.toml`. |
+| **Start Command** | The command that starts the agent, up to 4096 characters, for example `python main.py`. Dependencies are installed automatically from `package.json`, `requirements.txt`, or `pyproject.toml`. |
 | **Language Version** | The Python runtime version, for example `3.11`. |
 | **Auto instrumentation** | On by default. Adds OpenTelemetry tracing to your agent automatically, so its traces show up under [Traces](../observability/traces.mdx). |
 | **AMP Instrumentation Version** | Pins the init-container image and the bundled OpenLLMetry SDK version, for example `0.5.0 (OpenLLMetry v0.63.0)`. |

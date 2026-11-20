@@ -4,35 +4,105 @@ title: Build an Agent
 
 # Build an Agent
 
-A platform-hosted agent is built from its source repository. A successful build is needed before you can deploy or publish the agent.
+A platform-hosted agent is built from its source repository. A successful build is required before the agent can be deployed or published.
 
 ## Open the Build page
 
-Open the agent, and in the left navigation, under **Agent lifecycle**, click **Build**.
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Agent lifecycle**, click **Build**.
 
-The page shows:
+The **Build** page shows the following:
 
-- **Latest build status**, for example **Running**.
-- **Build success rate**, as a percentage.
-- **Total builds**.
-- A list of builds, with their **Branch** (and commit), **Build Name**, **Started At** time, and **Status**.
+| Field | Description |
+|---|---|
+| **Latest build status** | The status of the latest build, for example **Running** or **Completed**. |
+| **Build success rate** | The percentage of builds that succeeded. |
+| **Total builds** | The number of builds of the agent. |
+
+The page also lists the builds with their **Branch** and commit, **Build Name**, **Started At** time, and **Status**.
 
 ## Trigger a build
 
-1. Click **Trigger a Build**.
-2. In the **Trigger Build** panel, choose a **Commit**, or leave **Latest commit** selected to build the latest commit.
+1. On the **Build** page, click **Trigger a Build**. The **Trigger Build** panel opens.
+2. Under **Commit**, select the commit to build. To build the latest commit, leave **Latest commit** selected.
 3. Click **Trigger build**.
 
-The new build shows up in the list.
+The build is listed on the **Build** page.
 
-## See a build's progress and logs
+## View the progress and logs of a build
 
-Click **Details** on a build. The **Build Details** panel shows when the build was triggered, its stages, and its **Log**. The stages are:
+On the **Build** page, click **Details** of a build. The **Build Details** panel shows when the build was triggered, the stages of the build, and its **Log**.
 
-1. **Initiated**
-2. **Triggered**
-3. **Build execution**
-4. **Build workflow**
-5. **Workload update**
+## Deploy a build
 
-To change the repository, build type, or health checks used by later builds, click **Configure build**. See [Configure the Build](./configure-the-build.mdx).
+When a build is **Completed**, click **Deploy** of the build. For more information, see [Deploy an Agent](../deploy/deploy-an-agent.mdx).
+
+## Configure the build
+
+The build configuration defines where the source of the agent comes from, how the agent is built, how it receives requests, and how Kubernetes checks it. Changes apply from the next build.
+
+On the **Build** page, click **Configure build**. The **Configure Build** panel opens.
+
+### Repository Details
+
+| Field | Description | Example |
+|---|---|---|
+| **GitHub Repository** | The URL of the repository, up to 2048 characters. | `https://github.com/wso2/agent-manager` |
+| **Branch** | The branch to build, up to 255 characters. | `main` |
+| **Project Path** | The folder of the agent in the repository, up to 512 characters. | `/samples/hotel-booking-agent/agent` |
+
+### Build Details
+
+Select how the agent is built:
+
+- **Python**: Run a Python app.
+- **Ballerina**: Run a Ballerina program.
+- **Docker**: Build from your Dockerfile.
+
+For **Python**, set the following:
+
+| Field | Description | Example |
+|---|---|---|
+| **Language Version** | The runtime version, up to 255 characters. | `3.11` |
+| **Start Command** | The command that starts the agent, up to 4096 characters. Dependencies are installed automatically from `package.json`, `requirements.txt`, or `pyproject.toml`. | `python -m uvicorn app:app --host 0.0.0.0 --port 8000` |
+
+### Agent Interface
+
+Select how the agent receives requests:
+
+| Type | Description |
+|---|---|
+| **Chat agent** | Uses the standard chat interface: `POST /chat` on port `8000`. |
+| **Custom API agent** | Uses your OpenAPI specification and port. |
+
+A chat agent receives requests and returns responses in the following form:
+
+```
+Request:  {message: string, session_id: string, context: JSON}
+Response: {response: string}
+```
+
+### Health Checks
+
+Health checks define how Kubernetes checks the agent. Turn each check on or off, and set its fields:
+
+| Field | Description |
+|---|---|
+| **Type** | The type of check, for example **TCP**. |
+| **Port** | The port to check. |
+| **Initial delay (s)** | How long to wait before the first check, in seconds. |
+| **Interval (s)** | How often to run the check, in seconds. |
+| **Timeout (s)** | How long to wait for the check to respond, in seconds. |
+| **Failures allowed** | How many consecutive failures are allowed before the check fails. |
+
+Empty fields use the following defaults:
+
+| Check | Description | Default state | Default values |
+|---|---|---|---|
+| **Startup** | Waits for the agent to start, and runs until it first passes. | On | TCP on port 8000. Initial delay 10 s, interval 5 s, timeout 1 s, 60 failures allowed. |
+| **Readiness** | Decides whether the agent receives traffic, and runs for as long as the agent runs. | On | TCP on port 8000. Initial delay 0 s, interval 5 s, timeout 1 s, 6 failures allowed. |
+| **Liveness** | Restarts the agent when it stops responding. | Off | |
+
+### Save the configuration
+
+Click **Update build configuration**. To build the agent with the new configuration, [trigger a build](#trigger-a-build).

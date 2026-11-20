@@ -4,10 +4,48 @@ title: API Keys
 
 # API Keys
 
-API keys let clients call a deployed agent. They're issued for a running agent, in the environment it runs in.
+API keys authenticate requests to an agent. They are issued for a running agent, in the environment that it runs in. For information on how API keys secure the endpoints of an agent, see [Secure Agent Endpoints with API Keys](../../../guides/secure-agent-endpoints-with-api-keys.mdx).
 
-Open the agent, and in the left navigation, under **Security**, click **Credentials**. The **API Keys** page opens.
+## Open the API Keys page
 
-If the agent isn't deployed in the environment yet, the page shows **Deploy your agent to manage its keys**, with the steps **Build**, **Deploy**, and **Create keys**. Click **Go to Deploy** to deploy it. See [Deploy an Agent](../../deploy/deploy-an-agent.mdx).
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Security**, click **Credentials**. The **API Keys** page opens.
 
-For how API keys secure an agent's endpoints, see [Secure Agent Endpoints with API Keys](../../../guides/secure-agent-endpoints-with-api-keys.mdx).
+If the agent is not deployed in the environment yet, the page shows **Deploy your agent to manage its keys**. Click **Go to Deploy** to deploy the agent first. For more information, see [Deploy an Agent](../../deploy/deploy-an-agent.mdx).
+
+## Create an API key
+
+1. On the **API Keys** page, click **Create API key**. The **Create API Key** panel opens.
+2. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Display name** | A name for the API key. | `production key` |
+   | **Expires** | The date on which the key expires. The key expires at the end of the selected day. | `12/20/2026` |
+
+3. Click **Create**.
+
+The API key is shown at the top of the page. Click the copy icon to copy it.
+
+:::caution
+The API key is shown only once. Copy it and store it securely before you close the message.
+:::
+
+## View API keys
+
+The **API Keys** page lists the agent's API keys with the following:
+
+| Column | Description |
+|---|---|
+| **Name** | The display name of the key. |
+| **Key** | The last characters of the key, for example `****f520`. |
+| **Status** | The status of the key, for example **Active**. |
+| **Expires** | The date and time when the key expires. |
+
+## Delete an API key
+
+On the **API Keys** page, click the delete icon of the key.
+
+## Next steps
+
+- To chat with the deployed agent or call its API, see [Try Your Agent](../../test/try-your-agent.mdx).

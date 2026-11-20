@@ -4,36 +4,47 @@ title: Agent ID
 
 # Agent ID
 
-Each agent has an identity in each environment: an OAuth2 client that the agent uses to get tokens, plus the groups and roles that decide what it may do. For how agent identities work, see [AgentID](../../../concepts/agentid.mdx).
+An agent has an identity in each environment that it runs in. The identity is an OAuth2 client that the agent uses to get tokens, together with the groups and roles that decide what the agent is allowed to do. For information on how agent identities work, see [AgentID](../../../concepts/agentid.mdx).
 
-Open the agent, and in the left navigation, under **Security**, click **Agent ID**. The page has three tabs.
+## Open the Agent ID page
+
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Security**, click **Agent ID**.
+
+The **Agent ID** page has three tabs: **Overview**, **Groups**, and **Roles**. The agent's **Overview** page also shows its agent ID in each environment, and its roles and groups.
 
 ## Overview
 
-**Client Credentials**
+The **Overview** tab shows the agent's credentials and the OAuth2 endpoints of the identity provider. To copy a value, click its copy icon.
+
+### Client Credentials
 
 | Field | Description |
 |---|---|
-| **Client ID** | The agent's OAuth2 client ID. |
-| **Client Secret** | Shown only once, when it's generated. Regenerate it to get a new one. |
-| **Agent ID** | The agent's identity ID. |
+| **Client ID** | The OAuth2 client ID of the agent. |
+| **Client Secret** | The OAuth2 client secret of the agent. The secret is shown only once, when it is generated. To get a new secret, regenerate it. |
+| **Agent ID** | The ID of the agent's identity, in UUID format. |
 
-**OAuth2 Endpoints**
+### OAuth2 Endpoints
 
-| Field | Example |
-|---|---|
-| **Issuer URL** | `https://<identity-provider-host>` |
-| **Token Endpoint** | `https://<identity-provider-host>/oauth2/token` |
-| **JWKS Endpoint** | `https://<identity-provider-host>/oauth2/jwks` |
-
-Each value has a copy icon.
+| Field | Description | Example |
+|---|---|---|
+| **Issuer URL** | The issuer of the agent's tokens. | `https://<identity-provider-host>` |
+| **Token Endpoint** | The endpoint from which the agent gets tokens. | `https://<identity-provider-host>/oauth2/token` |
+| **JWKS Endpoint** | The endpoint that publishes the keys for validating the tokens. | `https://<identity-provider-host>/oauth2/jwks` |
 
 ## Groups
 
-The groups the agent is a member of in this environment. See [Agent Identity Groups and Roles](../../administer/agent-identity-groups-and-roles.mdx).
+The **Groups** tab lists the groups that the agent is a member of in this environment. If the agent is not a member of any group, the tab shows **No groups assigned**.
+
+To add the agent to a group, see [Add agents to a group](../../administer/agent-identity-groups-and-roles.mdx#add-agents-to-a-group).
 
 ## Roles
 
-The roles assigned to the agent in this environment.
+The **Roles** tab lists the roles assigned to the agent in this environment. If the agent has no role assignments, the tab shows **No roles assigned**.
 
-Roles and groups can be changed only when the agent has an active identity binding in the environment. Until then, the page shows a message saying so.
+To assign a role to the agent, see [Assign permissions, agents, and groups to a role](../../administer/agent-identity-groups-and-roles.mdx#assign-permissions-agents-and-groups-to-a-role).
+
+:::note
+Roles and groups can be changed only when the agent has an active identity binding in the environment. Until then, each tab shows the message: *This agent has no active identity binding in this environment, so roles and groups cannot be changed yet.*
+:::

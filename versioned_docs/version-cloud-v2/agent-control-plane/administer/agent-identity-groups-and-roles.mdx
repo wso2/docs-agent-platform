@@ -4,16 +4,65 @@ title: Agent Identity Groups and Roles
 
 # Agent Identity Groups and Roles
 
-Groups and roles decide what agent identities may do. Groups collect agent identities so access is granted to them together. Roles decide what each agent identity is allowed to do, by granting it a set of permissions. Both live in the selected environment's identity provider. For how agent identities work, see [AgentID](../../concepts/agentid.mdx).
+Groups and roles control what agent identities are allowed to do:
 
-## Groups
+- A **group** collects agents so that access can be granted to them together.
+- A **role** grants a set of permissions, as scopes. You assign a role to agents, to groups, or to both.
 
-At the organization level, in the left navigation, under **Agent identities**, click **Groups**. The page lists the groups in the selected environment. To create one, click **Create group**.
+Groups and roles are available in the selected environment's identity provider. For information on how agent identities work, see [AgentID](../../concepts/agentid.mdx).
 
-## Roles
+## Create a group
 
-Under **Agent identities**, click **Roles**. The page lists the roles in the selected environment. To create one, click **Create role**.
+1. At the organization level, in the left navigation, under **Agent identities**, click **Groups**.
+2. Click **Create group**. The **Create Group** page opens.
+3. Enter the following:
 
-## See an agent's groups and roles
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | The name of the group. | `on-call-agents` |
+   | **Description** *(optional)* | The purpose of the group. | |
 
-An agent's groups and roles are on its **Agent ID** page, in the **Groups** and **Roles** tabs. See [Agent ID](../develop/security/agent-id.mdx).
+4. Click **Create group**.
+
+The group's details page opens.
+
+## Add agents to a group
+
+1. On the **Groups** page, click the group. Use **Search groups** to find a group by name.
+2. On the **Agents** tab, under **Add Agent**, search for and select an agent. Each agent is shown with its project.
+
+   The agent is listed with its **Agent ID**. To remove an agent, click its delete icon.
+
+3. Click **Save changes**.
+
+To assign roles to the group, use the **Roles** tab of the group in the same way. Roles that are assigned to the group from a role's **Groups** tab are also listed there.
+
+## Create a role
+
+1. At the organization level, in the left navigation, under **Agent identities**, click **Roles**.
+2. Click **Create role**. The **Create Role** page opens.
+3. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | The name of the role. | `agent-admin` |
+   | **Description** *(optional)* | The purpose and permissions of the role. | |
+   | **Scopes** *(optional)* | The scopes that the role grants. Search for and select the scopes. | |
+
+4. Click **Create role**.
+
+## Assign permissions, agents, and groups to a role
+
+On the **Roles** page, click the role. The role's details page has the following tabs:
+
+| Tab | Description |
+|---|---|
+| **Permissions** | Select the scopes to assign to the role. If no scopes are available, the tab shows **No scopes in the catalog**. |
+| **Agents** | Under **Add Agent**, search for and select the agents to assign the role to. |
+| **Groups** | Under **Add Group**, search for and select the groups to assign the role to. |
+
+To remove an agent or a group, click its delete icon. Click **Save changes** to apply the changes.
+
+## View an agent's groups and roles
+
+An agent's groups and roles are listed on its **Agent ID** page, in the **Groups** and **Roles** tabs. For more information, see [Agent ID](../develop/security/agent-id.mdx).

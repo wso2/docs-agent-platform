@@ -4,11 +4,52 @@ title: Tool Configurations
 
 # Tool Configurations
 
-A tool configuration adds tools that an agent can use. Tools come from MCP servers. For information on registering an MCP server, see [MCP Servers](../create/mcp-servers.mdx).
+A tool configuration gives an agent the tools of an MCP server. The platform injects the MCP server's URL and API key into the agent as environment variables at runtime, with the values for each environment, so the agent code never contains them.
 
-## Add a tool configuration
+The MCP servers that you can select are the ones registered for the organization or the project. For instructions on registering one, see [MCP Servers](../create/mcp-servers.mdx).
+
+## Open the Tool Configurations tab
 
 1. Open the agent from the breadcrumb at the top of the Console.
 2. In the left navigation, under **Agent lifecycle**, click **Configure**.
 3. On the **Configure Agent** page, click the **Tool Configurations** tab.
-4. Click **Add tool configuration**.
+
+The tab lists the agent's tool configurations with their **Name** and when they were **Created**. Use the search box to find a configuration by name or description.
+
+## Add a tool configuration
+
+1. On the **Tool Configurations** tab, click **Add tool configuration**. The **Add Tool Configuration** panel opens.
+2. Select the MCP server for the agent. Use **Search MCP servers** to find a server by name. Each server shows its context and version.
+3. Under **Configuration Name**, enter a **Name** for the configuration. The name defaults to the handle of the MCP server, for example `new-mcp-server`.
+4. Under **Environment Variable Names**, review the names of the environment variables that the platform injects into the agent. For example, for an MCP server named `New-MCP-Server`:
+
+   | Variable Name | Description |
+   |---|---|
+   | `NEW_MCP_SERVER_URL` | Base URL of the MCP server endpoint |
+   | `NEW_MCP_SERVER_API_KEY` | API key for authenticating with the MCP server endpoint |
+
+   These names are shared across all environments, and the platform injects the actual URL and API key values at runtime for each environment. In environments that the MCP server is not configured for, the values are empty. Change a name, up to 128 characters, only if your agent code uses a different one.
+
+5. Click **Save**.
+
+The configuration is listed on the **Tool Configurations** tab.
+
+## Tool configuration details
+
+On the **Tool Configurations** tab, click a configuration to open its details page. The page shows:
+
+- **MCP Server**: the name, context, and version of the MCP server. Click the external link icon to open the MCP server.
+- **Tools**: the tools of the MCP server, and the **Status** of each tool, for example **Allowed**.
+
+## Use the tool configuration in agent code
+
+On the configuration's details page, click **Environment Variables & Integration Guide**. The panel shows:
+
+- **Environment Variables References**: the environment variable names, which you can rename if your code already uses different names. Save the configuration after you rename them.
+- **Integration Guide**: a pattern to copy into your agent code, which loads the MCP tools through the injected URL and API key.
+
+Read the values from the environment variables, and do not hardcode them.
+
+## Delete a tool configuration
+
+On the **Tool Configurations** tab, click the delete icon of the configuration.

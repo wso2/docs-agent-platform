@@ -37,7 +37,7 @@ problem the previous one leaves behind, so they're meant to be read in order.
 - An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
 - An OpenAI API key.
 
-The agent itself is an [`it-helpdesk-agent`](https://github.com/wso2/agent-manager/tree/main/samples/it-helpdesk-agent).
+The agent itself is an [`it-helpdesk-agent`](https://github.com/wso2/agent-manager-samples/tree/main/it-helpdesk-agent).
 It's a LangGraph agent on FastAPI with nine tools over mock data such as employee lookup,
 identity verification, tickets, password resets, software access, system status,
 policy search, and escalation to L2.
@@ -93,9 +93,9 @@ Choose **Platform-Hosted Agent**, then **Source Code** as the source type, and f
 | Field | Value |
 |---|---|
 | **Name** | `it-helpdesk` |
-| **GitHub Repository** | `https://github.com/wso2/agent-manager` |
+| **GitHub Repository** | `https://github.com/wso2/agent-manager-samples` |
 | **Branch** | `main` |
-| **Project Path** | `/samples/it-helpdesk-agent` |
+| **Project Path** | `/it-helpdesk-agent` |
 
 
 The repository is public, so no Git Secret is needed.
@@ -162,8 +162,8 @@ to connect the agent.
 ### Run the Sample Yourself
 
 ```bash
-git clone https://github.com/wso2/agent-manager
-cd agent-manager/samples/it-helpdesk-agent
+git clone https://github.com/wso2/agent-manager-samples
+cd agent-manager-samples/it-helpdesk-agent
 
 python -m venv env && source env/bin/activate
 pip install -r requirements.txt

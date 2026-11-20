@@ -304,7 +304,7 @@ helm upgrade --install kgateway oci://cr.kgateway.dev/kgateway-dev/charts/kgatew
 ```
 
 :::note
-Install kgateway v2.3.11 as shown, even though Agent Manager 1.0.0 was first released with v2.2.1. Kubernetes 1.37 and later, and some managed 1.36 builds such as AKS 1.36.5, reject the CRDs of kgateway v2.2.x and v2.3.0 to v2.3.6 with `estimated rule cost exceeds budget`, and the `kgateway` chart then installs without them.
+Install kgateway v2.3.11 as shown, even though Agent Manager 1.0.0 was first released with v2.2.1. Kubernetes 1.37 and later, and some managed 1.36 builds such as AKS 1.36.5, reject the CRDs of kgateway v2.2.x and v2.3.0 to v2.3.6 with `estimated rule cost exceeds budget`. The `kgateway` chart then installs without those CRDs.
 
 If an earlier attempt failed with this error, run the same two commands again. They upgrade the existing releases in place.
 :::

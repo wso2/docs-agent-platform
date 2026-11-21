@@ -4,30 +4,66 @@ title: Traces
 
 # Traces
 
-A trace records one run of the agent: its input and output, how long it took, the tokens it used, and its spans. Open the agent, and in the left navigation, under **Observability**, click **Traces**.
+A trace records one run of the agent: its input and output, how long it took, the tokens it used, and its spans.
 
 A platform-hosted Python agent sends traces when **Auto instrumentation** is on, which it is by default. To instrument an agent yourself, see [AMP Instrumentation](../../guides/amp-instrumentation.mdx).
 
-## The traces list
+## Open the Traces page
+
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Observability**, click **Traces**.
+
+## View traces
+
+The **Traces** page lists the traces of the agent with the following:
 
 | Column | Description |
 |---|---|
-| **Status** | Whether the run succeeded. |
-| **Trace ID** | The trace's ID. |
-| **Conversation** | The conversation the run belongs to. |
-| **Input**, **Output** | What the agent received and returned. |
-| **Start Time** | When the run started. The list is sorted by it. |
+| **Status** | Whether the run succeeded or failed. |
+| **Trace ID** | The ID of the trace. |
+| **Conversation** | The conversation that the run belongs to. |
+| **Input** | The input that the agent received. |
+| **Output** | The output that the agent returned. |
+| **Start Time** | When the run started. The list is sorted by this column, latest first. |
 | **Duration** | How long the run took. |
-| **Tokens** | The tokens used. |
-| **Spans** | The number of spans. |
-| **Score** | The evaluation score. See [Monitors](../evaluation/monitors.mdx). |
+| **Tokens** | The number of tokens that the run used. |
+| **Spans** | The number of spans in the trace. |
+| **Score** | The evaluation score of the trace. For more information, see [Monitors](../evaluation/monitors.mdx). |
 
-## Find traces
+To show or hide the **Trace ID**, **Conversation**, **Input**, and **Output** columns, click the columns icon and select or clear each column.
 
-- Choose the time range, for example **1 hour**.
-- Show **All** traces, only **Errors**, or only **Success**.
-- Enter a trace ID in **Go to trace ID**.
-- Use **Advanced filters** to filter further.
-- Choose the columns to show, refresh the list, or **Export** it.
+To reload the list, click the refresh icon. To download the list, click **Export**.
 
-If no trace matches, the page shows **No traces found!**; try changing the time range.
+If no trace matches the selected time range and filters, the page shows **No traces found!**. Select a longer time range or change the filters.
+
+## Select the time range
+
+In the time range list, select one of the following: **10 minutes**, **30 minutes**, **1 hour**, **6 hours**, **12 hours**, **1 day**, or **7 days**. To set a start and end time, select **Custom time range**.
+
+The default time range is **1 hour**.
+
+## Filter traces
+
+- To show only failed or successful runs, click **Errors** or **Success**. To show all runs, click **All**.
+- To go to a specific trace, enter its ID in **Go to trace ID**.
+
+### Advanced filters
+
+1. Click **Advanced filters**. The **Advanced Filters** panel opens.
+2. Set the filters as required:
+
+   | Filter | Description | Example |
+   |---|---|---|
+   | **Latency at least** | The minimum duration of the run. Select **Any**, **1s**, **5s**, **10s**, **30s**, or **Custom**. | `5s` |
+   | **Tokens at least** | The minimum number of tokens that the run used. Select **Any**, **1k**, **5k**, **10k**, **50k**, or **Custom**. | `1k` |
+   | **Steps at least** | The minimum number of steps in the run. Select **Any**, **10**, **20**, **50**, or **Custom**. | `10` |
+   | **Model** | The model that the agent called. | `gpt-4o` |
+   | **Tool called** | A tool that the agent called. | `search_web` |
+   | **Only traces where a tool call failed** | Shows only the traces in which a tool call failed. | |
+   | **MCP server** | An MCP server that the agent called. | `github` |
+   | **Conversation ID** | The ID of the conversation that the run belongs to. | |
+   | **Only traces without a conversation ID** | Shows only the traces that do not belong to a conversation. | |
+
+3. Click **Filter**.
+
+To clear the advanced filters, click **Reset**.

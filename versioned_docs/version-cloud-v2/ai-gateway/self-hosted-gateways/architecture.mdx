@@ -10,7 +10,7 @@ A self-hosted AI Gateway runs in a private data plane that you manage and connec
 
 ## Agent Control Plane
 
-Agent Control Plane is hosted by WSO2. You use it to register gateways, deploy LLM service providers and MCP servers, and manage policies.
+Agent Control Plane is hosted by Choreo Labs. You use it to register gateways, deploy LLM service providers and MCP servers, and manage policies.
 
 The gateway opens an outbound WebSocket connection to Agent Control Plane over **port 443**, using the registration token you configured. The gateway receives deployment and policy updates over this connection. Because the connection starts in your network, you do not need to expose the gateway's management services to the public internet.
 
@@ -20,7 +20,7 @@ The private data plane runs in your infrastructure. It handles agent traffic, ap
 
 ```mermaid
 flowchart LR
-  subgraph CP["Agent Control Plane (hosted by WSO2)"]
+  subgraph CP["Agent Control Plane (hosted by Choreo Labs)"]
     M["Gateway management"]
   end
   subgraph DP["Your infrastructure (private data plane)"]

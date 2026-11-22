@@ -1,11 +1,11 @@
 ---
 title: Quick Start Guide
-description: Deploy a sample AI agent to WSO2 Agent Manager Cloud from GitHub, chat with it, and inspect the trace it produces.
+description: Deploy a sample AI agent to Choreo Agent Management from GitHub, chat with it, and inspect the trace it produces.
 ---
 
 # Quick Start Guide
 
-WSO2 Agent Manager Cloud deploys, governs, and observes AI agents at scale. You can, for example, give it an agent's source code. Agent Manager then builds the agent, runs it, and records a trace of every request.
+Choreo Agent Management deploys, governs, and observes AI agents at scale. You can, for example, give it an agent's source code. Choreo Agent Management then builds the agent, runs it, and records a trace of every request.
 
 This quick start guides you through the following tasks:
 
@@ -14,7 +14,7 @@ This quick start guides you through the following tasks:
 - [Part 3: Chat with the Agent](#part-3-chat-with-the-agent)
 - [Part 4: Inspect the Trace](#part-4-inspect-the-trace)
 
-It's intended for developers who build AI agents and want to run one on Agent Manager Cloud. It assumes that you have basic knowledge of the following:
+It's intended for developers who build AI agents and want to run one on Choreo Agent Management. It assumes that you have basic knowledge of the following:
 
 - AI agents and how they call large language models (LLMs)
 - [Projects](./concepts/project.mdx)
@@ -36,7 +36,7 @@ In this part, you sign in to the Console and open the project that holds your ag
 
 ### Step 1.1: Sign In to the Console
 
-In your browser, go to the [Agent Manager Console](https://console.cloud.choreolabs.com/agent-management/) and sign in with your Google or GitHub account. 
+In your browser, go to the [Choreo Agent Management Console](#) and sign in with your Google or GitHub account. 
 
 The Console opens. If you don't belong to an organization yet, it prompts you to create one.
 
@@ -50,7 +50,7 @@ The Console opens inside the organization's __default__ project. You deploy the 
 
 ## Part 2: Deploy the Sample Agent
 
-In this part, you create a platform-hosted agent from the sample's GitHub folder. Agent Manager builds the agent, deploys it to your first environment, and adds tracing.
+In this part, you create a platform-hosted agent from the sample's GitHub folder. Choreo Agent Management builds the agent, deploys it to your first environment, and adds tracing.
 
 ### Step 2.1: Open the Add a New Agent Page
 
@@ -82,7 +82,7 @@ On the same form, configure the agent to build and run as a Python app with trac
 3. In the __Language version__ list, select `3.11` or later.
 4. Keep auto instrumentation turned on, with the default __AMP instrumentation version__.
 
-Auto instrumentation makes the agent send traces to Agent Manager without any tracing code in the sample. Both the __Auto instrumentation__ toggle and the version are already set the way the sample needs.
+Auto instrumentation makes the agent send traces to Choreo Agent Management without any tracing code in the sample. Both the __Auto instrumentation__ toggle and the version are already set the way the sample needs.
 
 ### Step 2.5: Select the Chat Agent Type
 
@@ -102,7 +102,7 @@ Leave every other setting at its default.
 
 To create the agent and start the build, click __Create and deploy__.
 
-The build process starts and the Console opens the agent's overview page. The first build takes a few minutes. When the build completes, Agent Manager deploys the agent to your first environment.
+The build process starts and the Console opens the agent's overview page. The first build takes a few minutes. When the build completes, Choreo Agent Management deploys the agent to your first environment.
 
 ### Step 2.8: Check the Deployment Status
 
@@ -195,5 +195,5 @@ After completing this quick start, continue with the tutorial series. It builds 
 
 - [Secure Agent Endpoints with API Keys](./guides/secure-agent-endpoints-with-api-keys.mdx): call your agent from outside the Console.
 - [AMP Instrumentation](./guides/amp-instrumentation.mdx): trace an agent that runs on your own infrastructure.
-- [Observability](./concepts/observability.mdx): how Agent Manager collects and shows traces.
-- [Internal and External Agent](./concepts/internal-and-external-agent.mdx): when to let Agent Manager run your agent and when to host it yourself.
+- [Observability](./concepts/observability.mdx): how Choreo Agent Management collects and shows traces.
+- [Internal and External Agent](./concepts/internal-and-external-agent.mdx): when to let Choreo Agent Management run your agent and when to host it yourself.

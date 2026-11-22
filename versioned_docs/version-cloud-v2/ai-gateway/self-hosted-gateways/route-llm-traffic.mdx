@@ -38,7 +38,7 @@ The gateway host needs outbound access to the LLM API.
 A self-hosted gateway is never selected for you. Select it explicitly when you deploy.
 :::
 
-1. In [Agent Control Plane](https://console.agent-manager.cloud.wso2.com/), go to **Resources** → **LLM service providers** and click **Add service provider**.
+1. In [Agent Control Plane](#), go to **Resources** → **LLM service providers** and click **Add service provider**.
 2. Enter a **Name** and a **Version** in the form `v1.0`. Optionally, enter a **Context path** such as `/my-openai`. The context path becomes part of the URL that agents call.
 3. Select a **Provider Template**, for example **OpenAI**. The template fills in the **Endpoint URL** of the LLM API.
 4. Enter your credential in **API key / Credential**. The gateway sends it to the LLM API, so agents never handle it.

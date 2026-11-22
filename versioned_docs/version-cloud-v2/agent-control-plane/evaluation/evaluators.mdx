@@ -4,35 +4,68 @@ title: Evaluators
 
 # Evaluators
 
-Evaluators are checks that score your agents' traces. Your organization has built-in evaluators, and you can create your own. You use evaluators in [monitors](./monitors.mdx). For how evaluation works, see [Evaluation](../../concepts/evaluation.mdx).
+Evaluators score the traces of your agents. An organization has built-in evaluators, and you can create custom evaluators. You use evaluators in [monitors](./monitors.mdx). For information on how evaluation works, see [Evaluation](../../concepts/evaluation.mdx).
 
-At the organization level, in the left navigation, under **Evaluation**, click **Evaluators**. Search by name, or filter to **Built-in** or **Custom** evaluators.
+## Evaluator types
 
-Each evaluator shows:
+Custom evaluators that you create are one of the following types:
 
-- Its **scope**: what it scores, such as a whole **Trace**, the **Agent**, or each **LLM** call.
-- Its **type**: **Rule-based**, or **LLM Judge** (scored by an LLM).
-- Tags, such as `quality`, `efficiency`, `safety`, or `tool-use`.
+| Type | Description | Shown as |
+|---|---|---|
+| **Code** | A Python function that evaluates traces programmatically. | **Rule-based** |
+| **LLM Judge** | An LLM that assesses traces with a natural language prompt. | **LLM Judge** |
+
+To create a custom evaluator, see [Create a Custom Code Evaluator](./evaluators/create-a-code-evaluator.mdx) or [Create a Custom LLM Judge Evaluator](./evaluators/create-an-llm-judge-evaluator.mdx).
+## Evaluation levels
+
+| Level | Description | Object that the evaluator receives |
+|---|---|---|
+| **Trace** | Evaluates the full end-to-end trace. | `Trace` |
+| **Agent** | Evaluates each agent individually within a trace. | `AgentTrace` |
+| **LLM** | Evaluates individual LLM calls within a trace. | `LLMSpan` |
+
+## View evaluators
+
+1. At the organization level, in the left navigation, under **Evaluation**, click **Evaluators**.
+2. To find an evaluator, enter its name in **Search evaluators**. To show only built-in or only custom evaluators, select **Built-in** or **Custom** in the filter list. Both are selected by default.
+
+Each evaluator is listed with the following:
+
+| Item | Description |
+|---|---|
+| **Name** | The name of the evaluator. |
+| **Custom** | Shown for custom evaluators. |
+| **Evaluation level** | What the evaluator scores: **Trace**, **Agent**, or **LLM**. |
+| **Type** | **Rule-based** or **LLM Judge**. |
+| **Description** | What the evaluator checks. |
+| **Tags** | Tags that categorize the evaluator, for example `quality`, `efficiency`, `safety`, or `tool-use`. |
+
+To view the details of an evaluator, click it. The details page shows the evaluator's description, its **Source Code** or **Prompt Template**, its **Tags**, and its **Configuration Parameters** with their **Type**, **Description**, **Default**, and whether they are **Required**.
+
+Custom evaluators have edit and delete icons on the **Evaluators** page. Built-in evaluators cannot be edited or deleted.
 
 ## Built-in evaluators
 
-The built-in evaluators include:
+The following table lists some of the built-in evaluators. The **Evaluators** page lists all of them.
 
-| Evaluator | Scope | Type | What it checks |
+| Evaluator | Evaluation level | Type | What it checks |
 |---|---|---|---|
-| **Length Compliance** | Trace | Rule-based | Whether the output length is within the configured minimum and maximum. |
-| **Iteration Efficiency** | Agent | Rule-based | Whether the agent completed within its iteration limit, measured by LLM call count. |
-| **Latency Performance** | Trace | Rule-based | Execution speed against a configurable time limit. |
-| **Content Safety** | Trace | Rule-based | Whether the output has prohibited strings or patterns. |
-| **Content Coverage** | Trace | Rule-based | How many required strings and patterns the output has. |
-| **Tool Coverage** | Agent | Rule-based | How many required tools were called at least once. |
-| **Step Success Rate** | Agent | Rule-based | The share of tool execution steps that completed without errors. |
-| **Token Efficiency** | Trace | Rule-based | Total token usage against a configurable limit. |
-| **Sequence Adherence** | Agent | Rule-based | How closely the tool call order matches the expected order. |
+| **Length Compliance** | Trace | Rule-based | Whether the output length is within the configured minimum and maximum number of characters. |
+| **Iteration Efficiency** | Agent | Rule-based | Whether the agent completed within its iteration limit, measured by the number of LLM calls. |
+| **Latency Performance** | Trace | Rule-based | The execution speed against a configurable time limit. |
+| **Content Safety** | Trace | Rule-based | Whether the output contains prohibited strings or patterns. |
+| **Content Coverage** | Trace | Rule-based | How many of the required strings and patterns the output contains. |
+| **Tool Coverage** | Agent | Rule-based | How many of the required tools were called at least once. |
+| **Step Success Rate** | Agent | Rule-based | The proportion of tool execution steps that completed without errors. |
+| **Token Efficiency** | Trace | Rule-based | The total token usage against a configurable limit. |
+| **Sequence Adherence** | Agent | Rule-based | How closely the order of tool calls matches the expected order. |
 | **Accuracy** | Trace | LLM Judge | The factual correctness of the response. |
-| **Clarity** | Trace | LLM Judge | The response's readability, structure, and lack of ambiguity. |
-| **Coherence** | LLM | LLM Judge | Each LLM call's logical flow, consistency, and structure. |
+| **Clarity** | Trace | LLM Judge | The readability and structure of the response, and whether it is free of ambiguity. |
+| **Coherence** | LLM | LLM Judge | The logical flow, consistency, and structure of each LLM call. |
 
-## Create an evaluator
+For example, **Length Compliance** has the following configuration parameters:
 
-Click **Create evaluator**. See [Custom Evaluators](../../guides/custom-evaluators.mdx).
+| Parameter | Type | Description | Default | Required |
+|---|---|---|---|---|
+| `max_length` | integer | The maximum acceptable length. | `10000` | No |
+| `min_length` | integer | The minimum acceptable length. | `1` | No |

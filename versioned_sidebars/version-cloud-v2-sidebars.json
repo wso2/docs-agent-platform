@@ -1,0 +1,380 @@
+{
+  "docsSidebar": [
+    {
+      "type": "doc",
+      "id": "get-started/what-is-amp",
+      "label": "Overview",
+      "className": "sidebar-section-icon-overview"
+    },
+    {
+      "type": "doc",
+      "id": "quick-start",
+      "label": "Quick Start Guide",
+      "className": "sidebar-section-icon-quick-start"
+    },
+    {
+      "type": "category",
+      "label": "Concepts",
+      "collapsed": true,
+      "items": [
+        "concepts/organization",
+        "concepts/environment",
+        "concepts/project",
+        "concepts/agent-lifecycle",
+        "concepts/internal-and-external-agent",
+        "concepts/agent-kind-and-catalog",
+        "concepts/observability",
+        "concepts/evaluation",
+        "concepts/agentid",
+        "concepts/gateway",
+        "concepts/deployment-pipeline",
+        "concepts/llm-service-provider",
+        "concepts/mcp-proxy"
+      ],
+      "className": "sidebar-section-icon-concepts"
+    },
+    {
+      "type": "category",
+      "label": "Agent Control Plane",
+      "className": "sidebar-section-icon-control-plane",
+      "collapsed": true,
+      "items": [
+        {
+          "type": "doc",
+          "id": "agent-control-plane/overview",
+          "label": "Overview"
+        },
+        {
+          "type": "category",
+          "label": "Create",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "category",
+              "label": "Agents",
+              "collapsed": true,
+              "items": [
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/create/add-an-agent",
+                  "label": "Add an Agent"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/create/create-from-source-code",
+                  "label": "Create an Agent from Source Code"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/create/create-from-the-agent-catalog",
+                  "label": "Create an Agent from the Agent Catalog"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/create/create-from-a-sample",
+                  "label": "Create an Agent from a Sample"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/create/register-an-externally-hosted-agent",
+                  "label": "Register an Externally-Hosted Agent"
+                }
+              ]
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/create/mcp-servers",
+              "label": "MCP Servers"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Develop",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "doc",
+              "id": "agent-control-plane/develop/llm-configurations",
+              "label": "LLM Configurations"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/develop/tool-configurations",
+              "label": "Tool Configurations"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/develop/build-an-agent",
+              "label": "Build an Agent"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/develop/edit-agent-details",
+              "label": "Edit Agent Details"
+            },
+            {
+              "type": "category",
+              "label": "Security",
+              "collapsed": true,
+              "items": [
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/develop/security/agent-id",
+                  "label": "Agent ID"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/develop/security/api-keys",
+                  "label": "API Keys"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "doc",
+          "id": "agent-control-plane/deploy/deploy-an-agent",
+          "label": "Deploy"
+        },
+        {
+          "type": "doc",
+          "id": "agent-control-plane/test/try-your-agent",
+          "label": "Test"
+        },
+        {
+          "type": "doc",
+          "id": "agent-control-plane/publish/publish-to-the-agent-catalog",
+          "label": "Publish"
+        },
+        {
+          "type": "category",
+          "label": "Observability",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "doc",
+              "id": "agent-control-plane/observability/traces",
+              "label": "Traces"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/observability/runtime-logs",
+              "label": "Runtime Logs"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/observability/system-metrics",
+              "label": "System Metrics"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Evaluation",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "category",
+              "label": "Evaluators",
+              "collapsed": true,
+              "items": [
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/evaluation/evaluators",
+                  "label": "Overview"
+                },
+                {
+                  "type": "category",
+                  "label": "Create a Custom Evaluator",
+                  "collapsed": true,
+                  "items": [
+                    {
+                      "type": "doc",
+                      "id": "agent-control-plane/evaluation/evaluators/create-a-code-evaluator",
+                      "label": "Code Evaluator"
+                    },
+                    {
+                      "type": "doc",
+                      "id": "agent-control-plane/evaluation/evaluators/create-an-llm-judge-evaluator",
+                      "label": "LLM Judge Evaluator"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "Monitors",
+              "collapsed": true,
+              "items": [
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/evaluation/monitors",
+                  "label": "Overview"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/evaluation/monitors/create-a-monitor",
+                  "label": "Create a Monitor"
+                },
+                {
+                  "type": "doc",
+                  "id": "agent-control-plane/evaluation/monitors/view-monitor-results",
+                  "label": "View Monitor Results"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Administer",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "doc",
+              "id": "agent-control-plane/administer/projects",
+              "label": "Manage Projects"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/administer/gateways",
+              "label": "Manage Gateways"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/administer/identity-providers",
+              "label": "Manage Identity Providers"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/administer/llm-service-providers",
+              "label": "Manage LLM Service Providers"
+            },
+            {
+              "type": "doc",
+              "id": "agent-control-plane/administer/agent-identity-groups-and-roles",
+              "label": "Manage Agent Identity Groups and Roles"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "AI Gateway",
+      "className": "sidebar-section-icon-ai-gateway",
+      "collapsed": true,
+      "items": [
+        {
+          "type": "doc",
+          "id": "ai-gateway/overview",
+          "label": "Overview"
+        },
+        {
+          "type": "category",
+          "label": "Self-Hosted Gateways",
+          "collapsed": true,
+          "items": [
+            "ai-gateway/self-hosted-gateways/architecture",
+            "ai-gateway/self-hosted-gateways/quickstart-guide",
+            "ai-gateway/self-hosted-gateways/route-llm-traffic",
+            "ai-gateway/self-hosted-gateways/route-mcp-traffic",
+            "ai-gateway/self-hosted-gateways/setting-up",
+            "ai-gateway/self-hosted-gateways/high-availability",
+            {
+              "type": "category",
+              "label": "Observability",
+              "collapsed": true,
+              "items": [
+                "ai-gateway/self-hosted-gateways/observability/collect-gateway-logs",
+                "ai-gateway/self-hosted-gateways/observability/trace-requests",
+                "ai-gateway/self-hosted-gateways/observability/monitor-gateway-metrics"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Guides",
+      "collapsed": true,
+      "items": [
+        "guides/deploy-an-a2a-agent",
+        {
+          "type": "category",
+          "label": "Evaluation & Observability",
+          "collapsed": true,
+          "items": [
+            "guides/custom-evaluators",
+            "guides/evaluation-monitors",
+            "guides/configure-trace-sampling"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Securing Agent Endpoints",
+          "collapsed": true,
+          "items": [
+            "guides/secure-agent-endpoints-with-api-keys",
+            "guides/secure-agents-with-jwt-authentication",
+            "guides/configure-cors-for-agent-endpoints"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Platform Administration",
+          "collapsed": true,
+          "items": [
+            {
+              "type": "doc",
+              "id": "guides/register-llm-service-provider",
+              "label": "LLM Service Providers"
+            },
+            "guides/configure-agent-llm-configuration",
+            {
+              "type": "doc",
+              "id": "guides/register-mcp-proxy",
+              "label": "MCP Proxies"
+            },
+            "guides/environment-management",
+            "guides/amp-instrumentation"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Agent Identity and Access Management",
+          "collapsed": true,
+          "items": [
+            "guides/authorize-agent-access-to-mcp-tools",
+            "guides/configure-agent-mcp-proxies",
+            "guides/use-agentid-in-platform-hosted-agents",
+            "guides/retrieve-agentid-for-externally-hosted-agents"
+          ]
+        }
+      ],
+      "className": "sidebar-section-icon-guides"
+    },
+    {
+      "type": "category",
+      "label": "Tutorials",
+      "collapsed": true,
+      "items": [
+        "tutorials/create-your-first-agent",
+        "tutorials/govern-the-model",
+        "tutorials/give-the-agent-real-tools",
+        "tutorials/observe-first-agent",
+        "tutorials/promote-your-agent",
+        {
+          "type": "doc",
+          "id": "tutorials/build-a-ballerina-agent",
+          "label": "Deploy the Ballerina Leave Assistant Sample"
+        },
+        "tutorials/deploy-the-a2a-notes-agent-sample"
+      ],
+      "className": "sidebar-section-icon-tutorials"
+    }
+  ]
+}

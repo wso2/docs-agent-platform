@@ -1,0 +1,69 @@
+---
+sidebar_position: 5
+---
+
+# LLM Service Provider
+
+LLM Service Providers are organization-level resources that represent connections to upstream LLM APIs (e.g., OpenAI, Anthropic, AWS Bedrock). Once registered, they are exposed through an AI Gateway and can be attached to agents across any project in the organization.
+
+## Why Register a Provider Instead of Calling the Model Directly
+
+An agent could hold an api key and call the upstream llm provider url itself. That works until you have more than one agent, and then the problems arrive together. the same credential might be copied into every agent that needs it, rotating it means redeploying all of them, nobody can see how many tokens are being spent or by whom, and there is no place to enforce a limit or a safety policy short of editing agent code.
+
+An LLM Service Provider is the indirection that fixes all of those at once. The upstream credential is stored once, centrally, and never handed to an agent. Agents are given a **gateway URL and a platform-issued API key** instead, so what they actually call is Agent Manager's gateway, which then calls the model on their behalf. Because every request passes through that one point:
+
+- **Credentials rotate in one place.** Update the provider's upstream credential and every agent using it picks up the change, no redeployment, no agent ever having held the real key.
+- **Usage is attributable.** Traffic is identified per consumer rather than arriving at the model provider as one anonymous key.
+- **Limits and policies are enforceable** without touching the agent, because they live in the request path rather than in agent code.
+
+
+## How Gateways Expose a Provider
+
+A provider is defined once at the organization level, but it isn't reachable until it's deployed to a [Gateway](./gateway.mdx). The platform deploys one gateway artifact per [environment](./environment.mdx) the provider is configured for, onto an egress gateway in that environment. This is the same define-once/deploy-per-environment pattern the rest of the platform follows: one provider record, several running exposures of it.
+
+Each provider takes a **context path** that is unique within the organization, and the invoke URL agents call is that path on the gateway host. Several providers can share a gateway as long as their context paths differ.
+
+There are two distinct credentials in play, and keeping them apart is the point of the whole design:
+
+| | Who holds it | What it authenticates |
+|---|---|---|
+| **Upstream credential** | Stored on the provider, never exposed | The gateway calling the model vendor |
+| **Platform-issued API key** | Given to the agent | The agent calling the gateway |
+
+Because the gateway terminates the agent's call before making its own, it can apply controls the agent has no ability to bypass:
+
+- **Access control** — which API operations are reachable through this provider, as an allow-list or a deny-list.
+- **Inbound security** — the authentication scheme and header the gateway requires on calls from agents.
+- **Rate limiting** — request-count and token-count thresholds, set provider-wide or per API operation, and applied at the provider level or per consumer.
+- **Guardrails** — content safety policies, covered below.
+
+### How Agents Receive the Connection
+
+The provider is attached to an agent rather than assumed, and how the agent then gets the connection details depends on where it runs (see [Internal and External Agent](./internal-and-external-agent.mdx)):
+
+- **[Platform-Hosted agents](./internal-and-external-agent.mdx)** receive the invoke URL and API key as injected environment variables — conventionally `LLM_PROVIDER_URL` and `LLM_PROVIDER_KEY`. These are system-managed. The platform writes them per environment and they're read-only, so an agent can't be accidentally repointed at an unmanaged endpoint by editing its configuration.
+- **[Externally-Hosted agents](./internal-and-external-agent.mdx)** are handed the same endpoint URL and key to configure themselves. The governance is identical and the traffic still goes through the gateway but the wiring is yours.
+
+Because the binding is per environment, the same agent can use a cheap model in development and a production-grade one in production without any change to its code.
+
+## Guardrails
+
+Guardrails are content safety policies attached to a provider and enforced by the gateway on the request path. They're the reason a provider is a governance object and not just a connection string: a rule you attach here applies to every call through this provider, whatever the agent's code does.
+
+They apply at three levels, which stack:
+
+1. **Global guardrails** on the provider which applied to every API resource under it.
+2. **Resource-wise guardrails** on the provider are scoped to individual operations, so you can constrain `POST /chat/completions` differently from the rest of the API.
+3. **Agent-level guardrails** on the agent-to-provider binding are attached when a provider is [configured on an agent](../guides/configure-agent-llm-configuration.mdx), and applied **in addition to** the provider's own, so one agent's stricter requirement doesn't have to become everyone's.
+
+Which policies you can attach isn't fixed by Agent Manager: the available policy definitions are **reported by the active gateways in the organization**, each carrying its own parameter schema. The gateway is what enforces them, so the gateway is what determines the menu.
+
+The practical consequence is the one worth remembering, a guardrail can be added, tightened, or removed **without rebuilding or redeploying the agent**. Security tightening what the model may return is a provider-side configuration change, not a code change.
+
+For the console walkthrough of setting one up, see [Register an LLM Service Provider](../guides/register-llm-service-provider.mdx) and its [Guardrails](../guides/register-llm-service-provider.mdx#guardrails-tab) section.
+
+## Relationship to Other Concepts
+
+- Providers belong to an [Organization](./organization.mdx), not a project, so any agent in any project can use one.
+- Each provider is exposed through the [Gateway](./gateway.mdx) active in each [environment](./environment.mdx) it's deployed to.
+- Registering and changing providers is governed by RBAC — the **AI Lead** and **Admin** roles own them, while **Developers** can connect to a provider and configure guardrails without being able to register or delete one. See [Access Control](./organization.mdx#access-control).

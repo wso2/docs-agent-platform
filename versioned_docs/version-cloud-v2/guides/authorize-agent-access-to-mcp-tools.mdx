@@ -1,0 +1,233 @@
+---
+sidebar_position: 11
+---
+
+# Authorize Agent Access to MCP Tools
+
+When you front an MCP server through the platform as an identity-secured MCP proxy, you decide which agents may invoke which tools. This guide walks through the full authorization workflow: you register the resource, define permissions over its tools, bundle those permissions into roles, and grant the roles to agents (or groups). The result is that two agents can hit the *same* proxy endpoint and get *different* capabilities.
+
+## The model
+
+Agent authorization is built from four pieces:
+
+| Piece | What it is |
+| --- | --- |
+| **Resource** | The thing being accessed. Today this is an **MCP proxy**. Its handle becomes the prefix for every scope you define on it. |
+| **Permission (scope)** | An action on the resource, mapped to a set of the resource's tools. A scope is named `<proxy>:<action>` — e.g. `github:read`. |
+| **Role** | A named bundle of scopes, defined in an environment. |
+| **Assignment** | A role granted to an **agent** or a **group**. |
+
+An agent presents an access token, and the platform filters that token's scopes down to exactly the scopes of the agent's assigned roles **at mint time**. When the agent calls a tool through the gateway, per-tool authorization checks the token's scopes against the scope that covers the tool.
+
+The example below secures **GitHub's hosted MCP server** with two scopes and two roles, so you can follow along against a real upstream rather than a placeholder. The story is an IT helpdesk: one agent only reads the team's issue tracker to spot known problems, while a triage agent may also file and update issues.
+
+| | `github:read` | `github:write` |
+| --- | --- | --- |
+| **Tools** | `search_issues`, `list_issues`, `issue_read` | `issue_write`, `add_issue_comment` |
+| **`github-reader`** role | ✅ | — |
+| **`github-triager`** role | ✅ | ✅ |
+
+An agent assigned `github-reader` can search and read issues but not create them; an agent assigned `github-triager` can do both — through the same endpoint.
+
+:::info Platform-deployed vs. external agents
+The authorization mechanism is identical for every agent. The only difference is how an agent obtains its identity: an agent **deployed on the platform** has its identity credentials injected automatically at deploy time, while an **external agent** is handed a client ID and secret that it presents itself. Either way, the token it ends up with carries only the scopes of its assigned roles.
+:::
+
+## Prerequisites
+
+- `amctl` installed and logged in against your control plane if you follow the `amctl` path (see [CLI Installation](./cli-installation.mdx) and [`amctl login`](../reference/cli/login.mdx)).
+- An AI Gateway registered and active for the environment you are configuring.
+- A **GitHub Personal Access Token**. Read access is enough for `github:read`; add issue write access only if you want to exercise `github:write`. Create one at [github.com/settings/tokens](https://github.com/settings/tokens).
+
+This guide uses the [`amctl api`](../reference/cli/api.mdx) command to call the control plane directly, which makes every step precise and copy-pasteable. The examples use the `default` organization, `default` project, and `default` environment — substitute your own.
+
+---
+
+## Step 1: Register the resource
+
+Register the upstream MCP server as an identity-secured MCP proxy. The proxy's `id` becomes the scope prefix and a resource server in the environment's Thunder identity provider, and — with a `context` — the gateway path.
+
+### In the Console
+
+1. Switch to the organization view and go to **MCP Servers** under **Resources**.
+2. Click **Register MCP Server** and give it the name `GitHub` and the context path `/github`.
+3. Add an endpoint with the **MCP Server Endpoint URL** `https://api.githubcopilot.com/mcp/`, then open **Advanced Configuration** and add the header `Authorization` with the value `Bearer <your-github-pat>`. Agent Manager discovers the server's tools as you add the endpoint. Now save the MCP proxy.
+4. Open the proxy's **Security** tab and set **Authentication** to **OAuth**. This is what turns on per-tool authorization — without it there are no scopes to define in Step 2.
+
+Full field reference: [Register an MCP Proxy](./register-mcp-proxy.mdx).
+
+### With amctl
+
+First discover the upstream server's tools:
+
+```bash
+echo '{"url": "https://api.githubcopilot.com/mcp/",
+       "auth": {"type": "api-key", "header": "Authorization", "value": "Bearer <your-github-pat>"}}' \
+  | amctl api /orgs/default/mcp-proxies/fetch-server-info -X POST --input -
+```
+
+Then create the proxy with identity security enabled. List only the tools this guide goes on to gate, rather than everything discovery returned — a tool present in `capabilities` but absent from every scope in Step 2 stays callable by any authenticated caller:
+
+```bash
+amctl api /orgs/default/mcp-proxies -X POST --input - <<'JSON'
+{
+  "id": "github",
+  "name": "GitHub MCP",
+  "description": "Proxy for GitHub's hosted MCP server",
+  "version": "v1.0",
+  "context": "/github",
+  "mcpSpecVersion": "2025-06-18",
+  "endpoints": [{
+    "id": "primary",
+    "name": "primary",
+    "upstream": {"main": {
+      "url": "https://api.githubcopilot.com/mcp/",
+      "auth": {"type": "api-key", "header": "Authorization", "value": "Bearer <your-github-pat>"}
+    }},
+    "capabilities": {"tools": [
+      "search_issues", "list_issues", "issue_read",
+      "issue_write", "add_issue_comment"
+    ]},
+    "security": {"enabled": true, "identity": {"enabled": true}},
+    "environments": [{"environmentUuid": "<environment-uuid>"}]
+  }]
+}
+JSON
+```
+---
+
+## Step 2: Define permissions over the tools
+
+A **scope** on the proxy names an action and lists the tools it covers. Create one scope per capability level you want to grant. The scope string is `<proxy>:<action>`, so the steps below produce `github:read` and `github:write`.
+
+### In the Console
+
+On the proxy's **Security** tab, with **Authentication** set to **OAuth**, an **Authorization** section appears:
+
+1. Click **Create Scope**.
+2. Enter the action name — `read` — which becomes `github:read`.
+3. Select the tools it covers: `search_issues`, `list_issues` and `issue_read`.
+4. Optionally attach the scope to existing roles right here, which saves revisiting Step 3.
+5. Repeat for `write`, covering `issue_write` and `add_issue_comment`.
+
+The **Tools** sub-tab shows a tool-to-scope table for the whole server, and the **Scopes** sub-tab lists what you've defined.
+
+### With amctl
+
+```bash
+# github:read — covers the read-only tools
+echo '{"action": "read", "description": "Search and read GitHub issues",
+       "tools": ["search_issues", "list_issues", "issue_read"]}' \
+  | amctl api /orgs/default/mcp-proxies/github/scopes -X POST --input -
+
+# github:write — covers the mutating tools
+echo '{"action": "write", "description": "File and update GitHub issues",
+       "tools": ["issue_write", "add_issue_comment"]}' \
+  | amctl api /orgs/default/mcp-proxies/github/scopes -X POST --input -
+```
+
+:::caution Cover every tool you want to gate
+A tool that is **not** covered by any scope has no authorization rule and is allowed for any *authenticated* caller (default-permit). Denial only happens for a tool whose covering scope the caller was not granted. Make sure every tool you intend to restrict is listed under some scope.
+:::
+
+List the scopes to confirm — the Console shows the same set on the **Scopes** sub-tab:
+
+```bash
+amctl api /orgs/default/mcp-proxies/github/scopes
+```
+
+---
+
+## Step 3: Bundle scopes into a role
+
+Roles are defined per environment. Create a role with the set of scopes it should grant — the scopes must already exist (Step 2).
+
+### In the Console
+
+1. At the organization level, go to **Agent Identities → Roles**.
+2. Pick the environment you are configuring. Agent identity roles are per environment, so the same role name in development and production are different objects.
+3. Click **Create Role**, name it `github-reader`, and select the `github:read` scope.
+4. Repeat for `github-triager`, selecting both `github:read` and `github:write`.
+
+### With amctl
+
+```bash
+# github-reader — read only
+echo '{"name": "github-reader", "description": "Read-only GitHub issues role",
+       "scopes": ["github:read"]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles -X POST --input -
+
+# github-triager — read and write
+echo '{"name": "github-triager", "description": "Read plus file/update issues",
+       "scopes": ["github:read", "github:write"]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles -X POST --input -
+```
+
+Fetch the roles back to get each role's ID, which you'll need to assign it (the Console does this lookup for you):
+
+```bash
+amctl api /orgs/default/environments/default/agent-identities/roles
+```
+
+---
+
+## Step 4: Assign the role to an agent or group
+
+Assignments grant a role to a principal — `agent` for a single agent identity, or `group` to grant every member of a group at once.
+
+### In the Console
+
+1. Go to **Roles** in the **Agent Identities** section and open `github-reader`.
+2. Use the **agent** tabs to pick the agents, or the groups, that should hold the role, then save.
+
+**Agent ID → Agents** lists the agent identities available in the selected environment if you need to confirm a name first, and **Agent ID → Groups** is where you manage group membership.
+
+### With amctl
+
+First resolve the agent's identity ID (`thunderAgentId`):
+
+```bash
+amctl api /orgs/default/environments/default/agent-identities/agents
+```
+
+Then add the assignment, using the role ID from Step 3:
+
+```bash
+# Grant github-reader to an agent
+echo '{"assignments": [{"id": "<thunder-agent-id>", "type": "agent"}]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles/<role-id>/assignments/add -X POST --input -
+```
+
+To grant a role to a whole group instead, set `"type": "group"` and pass the group's ID:
+
+```bash
+echo '{"assignments": [{"id": "<group-id>", "type": "group"}]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles/<role-id>/assignments/add -X POST --input -
+```
+
+Verify the assignments on a role:
+
+```bash
+amctl api /orgs/default/environments/default/agent-identities/roles/<role-id>/assignments
+```
+
+---
+
+## Step 5: See it in effect
+
+Once a role is assigned, the platform enforces it automatically:
+
+1. The agent obtains an access token. Its scopes are **filtered to the scopes of its assigned roles at mint time**. A `github-reader` agent that requests `github:read github:write` receives a token carrying only `github:read`.
+2. The agent calls a tool through the gateway endpoint (`/github/mcp`).
+3. The gateway authenticates the token, then authorizes the specific tool against the token's scopes:
+   - `github-reader` calling `search_issues` → **allowed** (`github:read` covers it).
+   - `github-reader` calling `issue_write` → **denied** (`github:write` required, not granted).
+   - `github-triager` calling either → **allowed**.
+
+Changing who can do what is now a matter of editing scopes and role assignments — the agents themselves do not change.
+
+## Next steps
+
+- [Authorization](../reference/authorization.mdx) — the platform-wide scope and role model these agent scopes plug into.
+- [Register an MCP Proxy](./register-mcp-proxy.mdx) — the full proxy registration reference, including the Console flow.
+- [Configure Agent MCP Proxies](./configure-agent-mcp-proxies.mdx) — attach a proxy to an agent so it can call the tools.

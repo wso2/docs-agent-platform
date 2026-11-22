@@ -1,0 +1,241 @@
+---
+sidebar_position: 32
+description: Obtain provider credentials and construct notification destination URLs for every service supported by Agent Manager.
+---
+
+# Set Up Notification Service URLs
+
+Prepare a destination URL for each notification service supported by WSO2 Agent Manager. Paste the resulting URL into the service's URL field when [registering a destination](./configure-event-alerts.mdx#step-2-register-a-destination).
+
+## Prerequisites
+
+- Access to create a webhook, bot, integration, or sending credential in the selected service.
+- Permission to register an Agent Manager destination, or an organization administrator who can register it for you.
+
+Agent Manager uses Shoutrrr `v0.18.0` to interpret these URLs. Shoutrrr is included in the service; you do not need to install its command-line tool. Only the services listed below are offered by Agent Manager.
+
+## URL Encoding and Credentials
+
+Replace each angle-bracket placeholder with your own value. Percent-encode reserved characters within credential components and query parameter values, rather than encoding the entire final URL. For example, `@` becomes `%40`, `#` becomes `%23`, and a space becomes `%20`.
+
+For a nested URL, such as a Teams workflow URL, encode the complete nested value. This keeps its `&` and `?` characters inside the `host` parameter.
+
+Treat the completed service URL as a secret. Agent Manager stores it encrypted and does not return it. Keep your original credential in your secret manager. Leave the URL empty when editing a destination to retain its current value.
+
+## Chat Services
+
+### Slack
+
+For an incoming webhook, create a Slack app with incoming webhooks enabled, add a webhook to the target channel, and copy its webhook URL. A URL shaped like this:
+
+```text
+https://hooks.slack.com/services/T00000000/B00000000/WEBHOOK_SECRET
+```
+
+becomes the following service URL. Join the three webhook path components with hyphens:
+
+```text
+slack://hook:T00000000-B00000000-WEBHOOK_SECRET@webhook
+```
+
+For a bot, install the app in the workspace and obtain its Bot User OAuth Token and target channel ID. Give the bot permission to post in that channel. Remove the token's `xoxb-` prefix and put the remaining token after `xoxb:`:
+
+```text
+slack://xoxb:<bot-token-without-xoxb-prefix>@<channel-id>
+```
+
+### Microsoft Teams
+
+1. Create a Power Automate workflow with the **When a Teams webhook request is received** trigger.
+2. Configure the workflow to post to the target chat or channel and copy the generated incoming webhook URL.
+3. Percent-encode that URL and use it as the `host` query value:
+
+```text
+teams://?host=<percent-encoded-workflow-url>
+```
+
+For example, `https://example.com/invoke?sig=SECRET&sv=1` becomes:
+
+```text
+teams://?host=https%3A%2F%2Fexample.com%2Finvoke%3Fsig%3DSECRET%26sv%3D1
+```
+
+Use a Power Automate workflow URL for this integration, rather than an older Office 365 connector URL.
+
+### Google Chat
+
+Create an incoming webhook for the target Google Chat space and copy the generated URL. Replace only the `https` scheme with `googlechat`; preserve the path, `key`, and `token` values:
+
+```text
+https://chat.googleapis.com/v1/spaces/SPACE/messages?key=KEY&token=TOKEN
+googlechat://chat.googleapis.com/v1/spaces/SPACE/messages?key=KEY&token=TOKEN
+```
+
+### Discord
+
+1. Open the target channel's integration settings and create a webhook.
+2. Copy its URL, which contains a webhook ID followed by a token.
+3. Put the token before `@` and the webhook ID after it:
+
+```text
+https://discord.com/api/webhooks/WEBHOOK_ID/WEBHOOK_TOKEN
+discord://WEBHOOK_TOKEN@WEBHOOK_ID
+```
+
+For a thread, append `?thread_id=<thread-id>`.
+
+### Telegram
+
+Create a bot with BotFather and obtain its token. Give the bot access to the target chat or channel. Use a public channel name prefixed with `@`, or a numeric chat ID for a private channel or group:
+
+```text
+telegram://<bot-token>@telegram?chats=@<public-channel>
+telegram://<bot-token>@telegram?chats=<numeric-chat-id>
+```
+
+For several destinations, separate entries in `chats` with commas. Obtain private chat IDs through Telegram's bot API; an invite link is not a chat ID.
+
+### Mattermost
+
+Create an incoming webhook under the server's integration settings. Copy the token from the path after `/hooks/` and retain the server hostname:
+
+```text
+https://mattermost.example.com/hooks/WEBHOOK_TOKEN
+mattermost://mattermost.example.com/WEBHOOK_TOKEN
+```
+
+An optional username precedes the hostname; an optional channel follows the token:
+
+```text
+mattermost://<username>@mattermost.example.com/<webhook-token>/<channel>
+```
+
+### Rocket.Chat
+
+Create and enable an incoming webhook integration in the server's administration settings. Retain the complete credential path after `/hooks/`, including both the integration identifier and token:
+
+```text
+https://rocketchat.example.com/hooks/INTEGRATION_ID/WEBHOOK_TOKEN
+rocketchat://rocketchat.example.com/INTEGRATION_ID/WEBHOOK_TOKEN
+```
+
+If required, append a channel or `@recipient` after the credential path. A sender username can be placed before `@rocketchat.example.com`.
+
+### Zulip
+
+Create a generic bot in your Zulip organization's bot settings. Copy the bot email and API key, then select the stream and topic for notifications. Encode the email's `@` as `%40`:
+
+```text
+zulip://alert-bot%40example.com:<bot-api-key>@zulip.example.com/?stream=alerts&topic=Agent%20Manager
+```
+
+The bot must have access to the selected stream. Encode spaces or other reserved characters in the stream and topic values.
+
+## Email
+
+### SMTP
+
+Obtain the SMTP server hostname, port, authentication credentials, permitted sender address, and recipient addresses from your email provider. Use a dedicated sending credential or provider-issued app password where required.
+
+```text
+smtp://<username>:<password>@smtp.example.com:587/?fromaddress=alerts@example.com&toaddresses=oncall@example.com&useStartTLS=yes&requirestarttls=yes
+```
+
+This example uses STARTTLS on port `587`. Match the encryption mode and port to your provider. For several recipients, separate `toaddresses` values with commas. Percent-encode reserved characters in the username and password.
+
+Keep certificate verification enabled. Agent Manager validates the SMTP destination address before dialing; private relays are blocked by default, like other private destinations.
+
+## Incident Services
+
+### PagerDuty
+
+Create an Events API integration on the PagerDuty service that should receive alerts. Copy its integration or routing key and put it in the URL path:
+
+```text
+pagerduty://events.pagerduty.com/<integration-key>
+```
+
+An optional severity can be set with `?severity=error`. Agent Manager sends notifications through the integration; a score recovery notification is not itself a guarantee that an existing PagerDuty incident is resolved.
+
+### Opsgenie
+
+Create an enabled API integration with permission to create alerts, then copy its API key. Select the API hostname for your account's region:
+
+```text
+opsgenie://api.opsgenie.com/<api-key>
+opsgenie://api.eu.opsgenie.com/<api-key>
+```
+
+Use an existing integration available in your account. Optional routing settings belong in URL query parameters; verify them with your integration owner before testing.
+
+## Push Services
+
+### ntfy
+
+Select a topic on `ntfy.sh` or your publicly reachable ntfy server and subscribe your receiving client to that topic:
+
+```text
+ntfy://ntfy.sh/<topic>
+```
+
+For a server that requires username/password authentication:
+
+```text
+ntfy://<username>:<password>@ntfy.example.com/<topic>
+```
+
+Use a topic and access controls appropriate for the information in the alerts. Anyone allowed to read the topic can receive its messages.
+
+### Gotify
+
+Create an application in Gotify and copy its application token. Use the application token, rather than a client token:
+
+```text
+gotify://gotify.example.com/<application-token>
+```
+
+Connect a Gotify receiving client to the same server. The hostname must be publicly resolvable and reachable from Agent Manager unless local private destinations are explicitly enabled.
+
+### Pushover
+
+Copy the user key from your Pushover account, create or select an application, and copy its API token. Place the API token in the password position and the user key in the host position:
+
+```text
+pushover://shoutrrr:<application-api-token>@<user-key>/
+```
+
+To target specific registered devices, append `?devices=<device-name>` or a comma-separated device list.
+
+## SMS
+
+### Twilio SMS
+
+Obtain the Account SID and Auth Token from your Twilio account. Select a sending phone number and an allowed recipient number in E.164 format:
+
+```text
+twilio://<account-sid>:<auth-token>@+15551234567/+15557654321
+```
+
+A Messaging Service SID can replace the sender number:
+
+```text
+twilio://<account-sid>:<auth-token>@<messaging-service-sid>/+15557654321
+```
+
+The account's sender and recipient restrictions still apply. A destination test sends a real SMS and can incur provider charges.
+
+## Verify the Destination
+
+1. Select the matching service when registering the destination in Agent Manager.
+2. Enter the constructed URL in that service's URL field and save the destination.
+3. Use the destination's test action.
+4. Confirm receipt at the selected channel, address, or device and inspect the delivery result.
+
+An accepted URL confirms its syntax, not that the provider credential can deliver a message. If delivery fails, verify the credential, recipient permissions, and network reachability.
+
+These instructions cover Agent Manager's offered integrations. Advanced URL parameters are defined by [Shoutrrr v0.18.0](https://shoutrrr.nickfedor.com/v0.18.0/services/).
+
+## Next Steps
+
+- [Configure Event Alerts](./configure-event-alerts.mdx)
+- [Configure Monitor Alerts](./configure-monitor-alerts.mdx)

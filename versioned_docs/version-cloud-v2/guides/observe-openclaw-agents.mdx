@@ -1,0 +1,137 @@
+---
+sidebar_position: 17
+---
+
+# Observe OpenClaw Agents
+
+[OpenClaw](https://docs.openclaw.ai) agents can send traces to WSO2 Agent Manager through OpenClaw's `diagnostics-otel` plugin. Register OpenClaw as an externally-hosted agent, then point the plugin at your agent's OpenTelemetry (OTel) endpoint.
+
+:::warning Partially supported
+Tested with OpenClaw 2026.10.4.
+
+What works:
+
+- Agent runs, LLM calls, and tool calls appear as agent, LLM, and tool spans.
+- The trace list shows input and token usage for each agent run, and output when the run produces a final model response.
+
+Known limitations:
+
+- OpenClaw also exports gateway and diagnostic spans, such as `openclaw.gateway.rpc.handler`. Each one appears as a separate single-span trace in the trace list.
+- OpenClaw has no setting to filter spans before export.
+- OpenClaw does not log failed exports, so a wrong endpoint or API key fails silently.
+- OpenLLMetry (Traceloop) auto-instrumentation and `amp-instrumentation` do not work with OpenClaw. Use the `diagnostics-otel` plugin.
+:::
+
+## Prerequisites
+
+- OpenClaw installed, with the gateway running as a service (`openclaw gateway install`).
+- A project in Agent Manager where you can create agents.
+
+## Step 1: Register an Externally-Hosted Agent
+
+1. In the Console, open your project and click **+ Add Agent**.
+2. Select **Externally-Hosted Agent**, enter a name, and click **Register**. The **Setup Agent** panel opens.
+3. In **Language**, select **Other**.
+4. In the **Configure Your OTLP Exporter** step, copy two values:
+   - The `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` value, without the trailing `/v1/traces`. This is your OTel endpoint.
+   - The key after `x-amp-api-key=` in `OTEL_EXPORTER_OTLP_TRACES_HEADERS`. This is your API key.
+
+The panel generates an API key automatically the first time it opens after registration, and shows it only once. If the key shows as `ey***`, select a **Token Duration** and click **Generate** to create a new one.
+
+For more on registration and API keys, see [Externally-Hosted Agents](../concepts/observability.mdx#externally-hosted-agents).
+
+## Step 2: Install the Diagnostics Plugin
+
+Install and enable the OpenTelemetry plugin:
+
+```bash
+openclaw plugins install @openclaw/diagnostics-otel
+openclaw plugins enable diagnostics-otel
+```
+
+## Step 3: Configure OpenTelemetry Export
+
+Add the following to your OpenClaw config file (`~/.openclaw/openclaw.json` by default). Merge the keys into your existing config rather than replacing it.
+
+```json
+{
+  "env": {
+    "vars": {
+      "OTEL_SEMCONV_STABILITY_OPT_IN": "gen_ai_latest_experimental"
+    }
+  },
+  "diagnostics": {
+    "enabled": true,
+    "otel": {
+      "enabled": true,
+      "endpoint": "<otel-endpoint>",
+      "protocol": "http/protobuf",
+      "serviceName": "<service-name>",
+      "headers": {
+        "x-amp-api-key": "<agent-api-key>"
+      },
+      "traces": true,
+      "captureContent": true
+    }
+  }
+}
+```
+
+Replace the placeholders:
+
+| Placeholder | Value |
+|---|---|
+| `<otel-endpoint>` | The OTel endpoint from Step 1 |
+| `<agent-api-key>` | The API key from Step 1 |
+| `<service-name>` | Any name that identifies this OpenClaw installation |
+
+The settings that matter for Agent Manager:
+
+- `env.vars.OTEL_SEMCONV_STABILITY_OPT_IN` makes the plugin name LLM spans with the OpenTelemetry GenAI semantic conventions (for example, `chat <model>`). Without it, the plugin uses its own span names and attributes.
+- `captureContent` adds prompts, completions, tool arguments, tool results, and tool definitions to spans. The Console needs this content to show input and output.
+
+:::warning Content capture
+With `captureContent` set to `true`, OpenClaw sends conversation and tool content to Agent Manager. Enable it only when your organization approves storing that content in Agent Manager and its retention policy. OpenClaw 2026.10.4 has no narrower capture setting, so set it to `false` to export spans without content.
+:::
+
+:::note Gateway environment
+The OpenClaw gateway runs as a background service (launchd on macOS, systemd on Linux). It does not inherit variables you `export` in a shell. Set variables in `env.vars` as shown, and do not reference shell variables such as `${AMP_AGENT_API_KEY}` in `headers` unless they are set in the gateway's environment.
+:::
+
+Validate the config:
+
+```bash
+openclaw config validate
+```
+
+## Step 4: Restart the Gateway
+
+```bash
+openclaw gateway restart
+```
+
+## Step 5: Verify Traces in the Console
+
+1. Run an agent:
+
+   ```bash
+   openclaw agent --agent <agent-id> --message "Hello"
+   ```
+
+   Replace `<agent-id>` with the ID of an agent in your OpenClaw installation.
+2. In the Console, open the agent you registered in Step 1 and go to **Traces**.
+3. Open the `openclaw.harness.run` trace. It contains an `openclaw.run` agent span with a `chat <model>` LLM span beneath it.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| No traces appear | Check that `endpoint` and `x-amp-api-key` are correct. A request to `<otel-endpoint>/v1/traces` without a valid key returns `401`. Restart the gateway after any config change. |
+| LLM spans are named `openclaw.model.call` | `OTEL_SEMCONV_STABILITY_OPT_IN` is not set in the gateway's environment. Add it to `env.vars` and restart the gateway. |
+| The **Input** and **Output** columns are empty | Set `captureContent` to `true` and restart the gateway. **Output** stays empty for runs that end without a final model response, such as tool-only runs. |
+| The trace list is full of `openclaw.gateway.rpc.*` traces | The OpenClaw Control UI generates these. Close the Control UI while testing, or route traces through an OpenTelemetry Collector that drops these spans before they reach Agent Manager. |
+
+## Related
+
+- [Observability](../concepts/observability.mdx)
+- [AMP Instrumentation](./amp-instrumentation.mdx)

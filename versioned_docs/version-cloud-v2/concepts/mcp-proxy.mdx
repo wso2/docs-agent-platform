@@ -1,0 +1,23 @@
+---
+sidebar_position: 6
+---
+
+# MCP Proxy
+
+An **MCP Proxy** is an organization-level resource that fronts one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, the proxy connects to a backend MCP server, discovers the tools, resources, and prompts it exposes, and publishes a governed endpoint through that environment's platform Gateway. Once registered, an MCP proxy can be secured, access-controlled, and rewritten independently per environment, and attached to agents across any project in the organization.
+
+## How the proxy is deployed
+
+An MCP proxy is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. The proxy deploys one gateway artifact per configured environment, onto an egress capable [Gateway](./gateway.mdx) in that environment. When the environment has exactly one egress gateway the platform infers it and you pick nothing; when it has more than one, the target gateway must be specified as the endpoint is deployed — see [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
+
+- Environments with an endpoint get a deployed artifact on their gateway.
+- Environments without an endpoint are simply left unconfigured (no artifact, and agents referencing the proxy there receive empty connection values).
+- If an environment has no egress gateway mapped to it yet, that environment is skipped and deployed on the next proxy update once one is available.
+
+### Where configuration lives
+
+The endpoint is the unit of configuration. Its upstream connection, capabilities, access control, rewrite, security are all stored on the endpoint, not on the environment. An environment is deployed with the configuration of the endpoint it is bound to, so several environments can share one endpoint's config, and editing that endpoint changes all of them. To vary settings across environments, put them on separate endpoints. The one exception is **scopes** (used for [agent authorization](../guides/authorize-agent-access-to-mcp-tools.mdx)): they are defined once for the whole proxy and apply across every endpoint and environment.
+
+Each agent resolves the proxy's per-environment endpoint at its own deploy time, so changing a proxy does not automatically redeploy the agents that use it; they pick up the change on their next deployment.
+
+For the console walkthrough of registering a proxy, see [Register an MCP Proxy](../guides/register-mcp-proxy.mdx).

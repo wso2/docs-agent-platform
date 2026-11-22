@@ -1,51 +1,66 @@
 ---
-title: LLM Service Providers
+title: Manage LLM Service Providers
 ---
 
-# LLM Service Providers
+# Manage LLM Service Providers
 
-An LLM service provider gives agents access to models. Adding one starts routing AI traffic through the gateway. LLM service providers belong to the organization, and agents use them through their [LLM configurations](../develop/llm-configurations.mdx) or the **LLM Providers** section when you create the agent.
+An LLM service provider connects your organization to a model provider, such as OpenAI, Gemini, or Mistral. You register the provider and its credential once, and your agents call the models through the gateway instead of calling the model provider directly. For information on how LLM service providers work, see [LLM Service Provider](../../concepts/llm-service-provider.mdx).
 
-For information on how LLM service providers work, see [LLM Service Provider](../../concepts/llm-service-provider.mdx).
+Registering a provider instead of giving each agent its own API key has the following benefits:
+
+- **The model provider's credential stays in one place.** Agents never receive it. When you rotate the credential, every agent that uses the provider picks up the change without being redeployed.
+- **You can see who uses the models.** Each agent calls the gateway with its own key, so usage can be attributed to the agent.
+- **You can apply guardrails to every call.** Guardrails on the provider apply to all the agents that use it, without any change to the agents' code.
+
+LLM service providers belong to the organization, so the agents in any project can use them.
 
 ## Add an LLM service provider
 
 1. At the organization level, in the left navigation, under **Resources**, click **LLM service providers**.
 2. Click **Add service provider**.
-3. Select the provider, for example **Gemini**, **Mistral**, or **OpenAI**.
+3. Select the model provider, for example **Gemini**, **Mistral**, or **OpenAI**.
 4. Under **Runtime Configuration**, enter the following:
 
    | Field | Description | Example |
    |---|---|---|
-   | **Endpoint URL** | The URL of the provider's API. | `https://api.openai.com/v1` |
-   | **API key / Credential** | The credential that the gateway uses to call the provider. The value is hidden; click the eye icon to show it. | |
+   | **Endpoint URL** | The URL of the model provider's API. | `https://api.openai.com/v1` |
+   | **API key / Credential** | The credential that the gateway uses to call the model provider. Agents never see this value. | |
 
-5. Optionally, expand **Resilience** and set the timeouts:
+5. To control how long the gateway waits for the model provider, expand **Resilience** and set the timeouts:
 
    | Field | Description | Example |
    |---|---|---|
-   | **Request Timeout** | How long to wait for a response from the provider. | `60s` |
-   | **Idle Timeout** | How long an idle connection to the provider is kept open. | `300s` |
+   | **Request Timeout** | How long to wait for a response from the model provider. Increase it for models that take long to respond. | `60s` |
+   | **Idle Timeout** | How long an idle connection to the model provider is kept open. | `300s` |
 
-6. Optionally, add guardrails. See [Add a guardrail](#add-a-guardrail).
+6. To apply guardrails to every call through the provider, add them. For more information, see [Add a guardrail](#add-a-guardrail).
 7. Click **Add provider**.
 
 ## Add a guardrail
 
-Guardrails are safety policies that enforce consistent protections on the traffic to the provider.
+A guardrail is a policy that the gateway applies to the calls through the provider, for example to limit the size of requests and responses, or to check them against a schema. A guardrail on the provider applies to every agent that uses the provider. You can add, change, or remove a guardrail without rebuilding or redeploying the agents.
 
 1. Under **Guardrails**, click **Add guardrail**. The **Add Guardrail** panel opens.
-2. Select a guardrail. Use **Search guardrails** to find a guardrail by name. Each guardrail shows its version and what it does, for example:
+2. Select a guardrail. To find a guardrail, enter its name in **Search guardrails**. The guardrails that are available include the following:
 
-   | Guardrail | Description |
+   | Guardrail | Use it to |
    |---|---|
-   | **AWS Authentication** | Signs outbound requests to AWS-hosted backends using AWS Signature Version 4 (SigV4) before they are forwarded upstream. |
-   | **Azure LLM Cost** | Calculates the cost of Azure OpenAI and Azure AI Foundry calls from the token usage in the response. |
-   | **Content Length Guardrail** | Validates content byte lengths in request or response payloads using minimum and maximum limits. |
-   | **interceptor-service** | Calls a user-defined HTTP interceptor service for the request phase, the response phase, or both. The interceptor can change headers, the body, or the path, route to a dynamic endpoint, or return a direct response. |
-   | **JSON Schema Guardrail** | Validates request or response content against a JSON Schema. |
+   | **Content Length Guardrail** | Reject requests or responses that are shorter or longer than the limits that you set. |
+   | **JSON Schema Guardrail** | Check that requests or responses match a JSON Schema. |
+   | **interceptor-service** | Send the request, the response, or both to your own HTTP service, which can change them or return a response directly. |
+   | **AWS Authentication** | Sign the requests to AWS-hosted model providers with AWS Signature Version 4 (SigV4). |
+   | **Azure LLM Cost** | Calculate the cost of Azure OpenAI and Azure AI Foundry calls from the token usage. |
 
-3. Under **Parameters**, configure the guardrail. For example, **Content Length Guardrail** has the optional **request** and **response** parameters.
+3. Under **Parameters**, configure the guardrail. For example, for **Content Length Guardrail**, set the limits for the **request**, the **response**, or both.
 4. Click **Add**.
 
 The guardrail is listed under **Guardrails**. To remove it, click the delete icon.
+
+To apply a guardrail to one agent only, add it to the agent's LLM configuration instead. For more information, see [LLM Configurations](../develop/llm-configurations.mdx).
+
+## Next steps
+
+- To let an agent use the provider, add an LLM configuration to the agent. For more information, see [LLM Configurations](../develop/llm-configurations.mdx).
+- To use a provider for LLM judge evaluators, select it when you create a monitor. For more information, see [Create a Monitor](../evaluation/monitors/create-a-monitor.mdx#select-the-llm-provider).
+- For a walkthrough of registering a provider, including its access control, security, rate limiting, and guardrail settings, see [Register an LLM Service Provider](../../guides/register-llm-service-provider.mdx).
+- For how agents connect to a provider and use it in their code, see [Configure LLM Providers for an Agent](../../guides/configure-agent-llm-configuration.mdx).

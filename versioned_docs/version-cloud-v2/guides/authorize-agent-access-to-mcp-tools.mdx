@@ -1,0 +1,186 @@
+---
+sidebar_position: 11
+---
+
+# Authorize Agent Access to MCP Tools
+
+When you front an MCP server through the platform as an **identity-secured MCP proxy**, you decide which agents may invoke which tools. This guide walks through the full authorization workflow: you register the resource, define permissions over its tools, bundle those permissions into roles, and grant the roles to agents (or groups). The result is that two agents can hit the *same* proxy endpoint and get *different* capabilities.
+
+## The model
+
+Agent authorization is built from four pieces:
+
+| Piece | What it is |
+| --- | --- |
+| **Resource** | The thing being accessed. Today this is an **MCP proxy**. Its handle becomes the prefix for every scope you define on it. |
+| **Permission (scope)** | An action on the resource, mapped to a set of the resource's tools. A scope is named `<proxy>:<action>` — e.g. `booking:read`. |
+| **Role** | A named bundle of scopes, defined in an environment. |
+| **Assignment** | A role granted to an **agent** or a **group**. |
+
+An agent presents an access token, and the platform filters that token's scopes down to exactly the scopes of the agent's assigned roles **at mint time**. When the agent calls a tool through the gateway, per-tool authorization checks the token's scopes against the scope that covers the tool.
+
+The example below secures a booking MCP server with two scopes and two roles:
+
+| | `booking:read` | `booking:write` |
+| --- | --- | --- |
+| **Tools** | `list_bookings`, `get_booking` | `create_booking`, `edit_booking`, `remove_booking` |
+| **`booking-reader`** role | ✅ | — |
+| **`booking-admin`** role | ✅ | ✅ |
+
+An agent assigned `booking-reader` can list bookings but not create them; an agent assigned `booking-admin` can do both — through the same endpoint.
+
+:::info Platform-deployed vs. external agents
+The authorization mechanism is identical for every agent. The only difference is how an agent obtains its identity: an agent **deployed on the platform** has its identity credentials injected automatically at deploy time, while an **external agent** is handed a client ID and secret that it presents itself. Either way, the token it ends up with carries only the scopes of its assigned roles.
+:::
+
+## Prerequisites
+
+- `amctl` installed and logged in against your organization.
+- An active AI Gateway for the environment you are configuring. On Agent Manager Cloud this is provisioned for you.
+- A reachable upstream MCP server URL.
+
+This guide uses the `amctl api` command to call the control plane directly, which makes every step precise and copy-pasteable. The examples use the `default` organization, `default` project, and `default` environment — substitute your own.
+
+---
+
+## Step 1: Register the resource
+
+Register the upstream MCP server as an identity-secured MCP proxy. The proxy's `id` becomes the scope prefix and a resource server in the environment's Thunder identity provider, and — with a `context` — the gateway path.
+
+First discover the upstream server's tools:
+
+```bash
+echo '{"url": "https://upstream.example.com/mcp"}' \
+  | amctl api /orgs/default/mcp-proxies/fetch-server-info -X POST --input -
+```
+
+Then create the proxy with identity security enabled, passing the discovered tools as the endpoint's capabilities:
+
+```bash
+amctl api /orgs/default/mcp-proxies -X POST --input - <<'JSON'
+{
+  "id": "booking",
+  "name": "Booking MCP",
+  "description": "Proxy for the upstream bookings MCP server",
+  "version": "v1.0",
+  "context": "/booking",
+  "mcpSpecVersion": "2025-06-18",
+  "endpoints": [{
+    "id": "primary",
+    "name": "primary",
+    "upstream": {"main": {"url": "https://upstream.example.com/mcp"}},
+    "capabilities": {"tools": [ /* tools from fetch-server-info */ ]},
+    "security": {"enabled": true, "identity": {"enabled": true}},
+    "environments": [{"environmentUuid": "<environment-uuid>"}]
+  }]
+}
+JSON
+```
+
+You can also register a proxy through the Console — see [Register an MCP Proxy](./register-mcp-proxy.mdx) — but the rest of this guide uses the API for the parts that define authorization.
+
+---
+
+## Step 2: Define permissions over the tools
+
+A **scope** on the proxy names an action and lists the tools it covers. Create one scope per capability level you want to grant. The scope string is `<proxy>:<action>`, so the calls below produce `booking:read` and `booking:write`.
+
+```bash
+# booking:read — covers the read-only tools
+echo '{"action": "read", "description": "Read-only booking access",
+       "tools": ["list_bookings", "get_booking"]}' \
+  | amctl api /orgs/default/mcp-proxies/booking/scopes -X POST --input -
+
+# booking:write — covers the mutating tools
+echo '{"action": "write", "description": "Create, edit and remove bookings",
+       "tools": ["create_booking", "edit_booking", "remove_booking"]}' \
+  | amctl api /orgs/default/mcp-proxies/booking/scopes -X POST --input -
+```
+
+:::caution Cover every tool you want to gate
+A tool that is **not** covered by any scope has no authorization rule and is allowed for any *authenticated* caller (default-permit). Denial only happens for a tool whose covering scope the caller was not granted. Make sure every tool you intend to restrict is listed under some scope.
+:::
+
+List the scopes to confirm:
+
+```bash
+amctl api /orgs/default/mcp-proxies/booking/scopes
+```
+
+---
+
+## Step 3: Bundle scopes into a role
+
+Roles are defined per environment. Create a role with the set of scopes it should grant — the scopes must already exist (Step 2).
+
+```bash
+# booking-reader — read only
+echo '{"name": "booking-reader", "description": "Read-only booking role",
+       "scopes": ["booking:read"]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles -X POST --input -
+
+# booking-admin — read and write
+echo '{"name": "booking-admin", "description": "Full booking access role",
+       "scopes": ["booking:read", "booking:write"]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles -X POST --input -
+```
+
+Fetch the roles back to get each role's ID, which you'll need to assign it:
+
+```bash
+amctl api /orgs/default/environments/default/agent-identities/roles
+```
+
+---
+
+## Step 4: Assign the role to an agent or group
+
+Assignments grant a role to a principal. Each assignment names the principal's ID and its `type` — `agent` to grant a single agent identity, or `group` to grant every member of a group at once.
+
+First resolve the agent's identity ID (`thunderAgentId`):
+
+```bash
+amctl api /orgs/default/environments/default/agent-identities/agents
+```
+
+Then add the assignment, using the role ID from Step 3:
+
+```bash
+# Grant booking-reader to an agent
+echo '{"assignments": [{"id": "<thunder-agent-id>", "type": "agent"}]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles/<role-id>/assignments/add -X POST --input -
+```
+
+To grant a role to a whole group instead, set `"type": "group"` and pass the group's ID:
+
+```bash
+echo '{"assignments": [{"id": "<group-id>", "type": "group"}]}' \
+  | amctl api /orgs/default/environments/default/agent-identities/roles/<role-id>/assignments/add -X POST --input -
+```
+
+Verify the assignments on a role:
+
+```bash
+amctl api /orgs/default/environments/default/agent-identities/roles/<role-id>/assignments
+```
+
+---
+
+## Step 5: See it in effect
+
+Once a role is assigned, the platform enforces it automatically:
+
+1. The agent obtains an access token. Its scopes are **filtered to the scopes of its assigned roles at mint time** — a `booking-reader` agent that requests `booking:read booking:write` receives a token carrying only `booking:read`.
+2. The agent calls a tool through the gateway endpoint (`/booking/mcp`).
+3. The gateway authenticates the token, then authorizes the specific tool against the token's scopes:
+   - `booking-reader` calling `list_bookings` → **allowed** (`booking:read` covers it).
+   - `booking-reader` calling `create_booking` → **denied** (`booking:write` required, not granted).
+   - `booking-admin` calling either → **allowed**.
+
+Changing who can do what is now a matter of editing scopes and role assignments — the agents themselves do not change.
+
+## Next steps
+
+- [AgentID](../concepts/agentid.mdx) — the identity each agent is issued, and how these scopes attach to it.
+- [Register an MCP Proxy](./register-mcp-proxy.mdx) — the full proxy registration reference, including the Console flow.
+- [Configure Agent MCP Proxies](./configure-agent-mcp-proxies.mdx) — attach a proxy to an agent so it can call the tools.

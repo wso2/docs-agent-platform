@@ -1,0 +1,75 @@
+---
+title: Create a Monitor
+---
+
+# Create a Monitor
+
+A monitor runs evaluators over an agent's traces. You select the traces to evaluate and the evaluators to run.
+
+## Enter the basic details
+
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Evaluation**, click **Monitors**.
+3. Click **Add monitor**. The **Create Monitor** page opens.
+4. Under **Basic Details**, enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Monitor Title** | The label shown in the monitors list. | `Event-monitor` |
+   | **Description** *(optional)* | What the monitor is for. | |
+
+## Select the traces to evaluate
+
+Under **Data Collection**, select one of the following, and set its fields:
+
+- **Past Traces**: Evaluate the traces in a time range that has already passed.
+
+  | Field | Description |
+  |---|---|
+  | **Start Time** | The start of the time range. |
+  | **End Time** | The end of the time range. |
+  | **Sampling Rate (%)** | The percentage of matching traces to evaluate. The default is 100%. |
+
+  The time range is set to the last 24 hours by default.
+
+- **Future Traces**: Evaluate new traces at a regular interval.
+
+  | Field | Description | Example |
+  |---|---|---|
+  | **Run Every (minutes)** | How often the monitor runs. | `10` |
+  | **Sampling Rate (%)** | The percentage of matching traces to evaluate. The default is 100%. | |
+
+Click **Next**.
+
+## Select the evaluators
+
+Under **Evaluators**, the built-in and custom evaluators of the organization are listed with their evaluation level and tags. To find an evaluator, enter its name in **Search evaluators**.
+
+1. Click an evaluator. A panel opens with the evaluator's description, tags, and **Configuration Parameters**.
+2. Set the configuration parameters as required. For example, **Iteration Efficiency** has **Max iterations**, the maximum allowed iterations, and **Use context constraint**.
+3. Click **Add evaluator**.
+
+The evaluator is listed under **Selected Evaluators**. To change its configuration parameters, click the edit icon on the evaluator. To remove it, click its close icon.
+
+To create an evaluator that is not listed, click **Create custom evaluator**. For more information, see [Create a Custom Code Evaluator](../evaluators/create-a-code-evaluator.mdx) or [Create a Custom LLM Judge Evaluator](../evaluators/create-an-llm-judge-evaluator.mdx).
+
+## Select the LLM provider
+
+If you select an LLM judge evaluator, select the LLM service provider that the LLM judge evaluators of the monitor use:
+
+1. Click **Configure LLM**. The **Select LLM Provider** panel opens.
+
+   Only the providers that are deployed to a managed gateway in the Development environment are listed. Each provider is shown with its type, when it was deployed, its **Rate Limiting**, and its **Guardrails**.
+
+2. Select a provider. To find a provider, enter its name in **Search providers**. To add a provider, click **Add LLM provider**. For more information, see [LLM Service Providers](../../administer/llm-service-providers.mdx).
+
+## Create the monitor
+
+Click **Create monitor**.
+
+The monitor is listed on the **Eval Monitors** page.
+
+## Next steps
+
+- To view the scores, see [View Monitor Results](./view-monitor-results.mdx).
+- For a walkthrough of creating a monitor and reading its results, see [Evaluation Monitors](../../../guides/evaluation-monitors.mdx).

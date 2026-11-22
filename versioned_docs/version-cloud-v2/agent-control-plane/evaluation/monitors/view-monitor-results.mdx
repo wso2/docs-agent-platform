@@ -1,0 +1,83 @@
+---
+title: View Monitor Results
+---
+
+# View Monitor Results
+
+A monitor's page shows the scores of its evaluations and the history of its runs.
+
+## Open the monitor
+
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Evaluation**, click **Monitors**.
+3. Click the monitor. The monitor's page opens with its type, **Continuous** or **Historical**.
+
+The period of the results depends on the type of the monitor:
+
+| Type | Period of the results |
+|---|---|
+| **Continuous** | Select the period in the time range list, for example **Last 7 days**. |
+| **Historical** | The results are based on the latest run. The page shows the time range of the traces that the monitor evaluates, and it cannot be changed. |
+
+To reload the results, click the refresh icon.
+
+## View the scores
+
+The monitor's page has the following:
+
+| Section | Description |
+|---|---|
+| **Agent Performance** | The score of each evaluator. |
+| **Evaluation Summary** | A summary of the evaluation scores. |
+| **Run Summary** | The monitor's runs, with the status, **Window Start**, and **Run Score** of each run. |
+| **Performance by Evaluator** | The scores of each evaluator over time. |
+
+The scores appear after the evaluations complete. Until then, the sections show messages such as **No performance data** and **No evaluation data**.
+
+To view the agent's traces, under **Performance by Evaluator**, click **View all traces**. The **Traces** page opens. For more information, see [Traces](../../observability/traces.mdx).
+
+## Compare monitors
+
+You can compare a monitor with another monitor of the same environment.
+
+1. On the monitor's page, click **Compare**, and select the monitor to compare with. If there are no other monitors, the list shows **No other monitors in this environment**.
+
+   The **Compare Monitors** page opens with the two monitors, for example `Past-monitor` vs `Event-monitor`. Each monitor is shown with its period: the time range of a historical monitor, or the time range list of a continuous monitor.
+
+2. To compare different monitors, select them in the monitor lists. To change the period of a continuous monitor, select it in its time range list, for example **Last 7 days**.
+
+The page has the following:
+
+| Section | Description |
+|---|---|
+| **Agent Performance Comparison** | The scores of each evaluator for the two monitors. |
+| **_monitor_ — Summary** | A summary of the evaluation scores of each monitor. |
+
+To go back to the monitor's page, click **Back to _monitor_**.
+
+## View the run history
+
+Under **Run Summary**, click **View all runs**. The **Run History** page lists the monitor's runs with the following:
+
+| Column | Description |
+|---|---|
+| **Status** | The status of the run. |
+| **Trace Window** | The time range of the traces that the run evaluated. |
+| **Evaluators** | The evaluators that the run used. |
+| **Score** | The score of the run. |
+| **Started** | When the run started. |
+| **Duration** | How long the run took. |
+| **Actions** | Click **Re-run** to run the evaluation again. |
+
+To reload the list, click the refresh icon.
+
+## View the details of a run
+
+On the **Run History** page, click a run. The **Run Details** panel opens with the run's trace window, status, for example **RUNNING**, **Duration**, and number of **Evaluators**. It has the following tabs:
+
+| Tab | Description |
+|---|---|
+| **Logs** | The logs of the run, with their **Timestamp**, **LogLevel**, and **Log**. |
+| **Evaluator Configs** | The configuration of the evaluators that the run used. |
+
+To expand the panel, click the expand icon.

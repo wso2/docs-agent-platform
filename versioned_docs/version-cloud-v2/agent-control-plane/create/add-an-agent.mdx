@@ -1,0 +1,23 @@
+---
+title: Add an Agent
+---
+
+# Add an Agent
+
+Agents are added to a project. An agent is either a platform-hosted agent, which the platform deploys and manages, or an externally-hosted agent, which runs on infrastructure outside the platform and is registered with it.
+
+## Open the Add a New Agent page
+
+1. Log in to the [Choreo Agent Management Console](#).
+2. Select your project from the breadcrumb at the top of the page.
+3. In the left navigation, click **Agents**, and then click **New agent**. Alternatively, click **New agent** on the project's **Overview** page.
+
+The **Add a New Agent** page opens.
+
+## Select how to add the agent
+
+| Option | When to use it | Action |
+|---|---|---|
+| **Externally-Hosted Agent** | The agent already runs outside the platform. Registering the agent connects it to the platform and enables observability and governance. | [Register an Externally-Hosted Agent](./register-an-externally-hosted-agent.mdx) |
+| **Platform-Hosted Agent** | The platform deploys and manages the agent, with full lifecycle support that includes built-in CI/CD, scaling, observability, and governance. | Create an Agent<ul><li>[From Source Code](./create-from-source-code.mdx)</li><li>[From Agent Catalog](./create-from-the-agent-catalog.mdx)</li></ul> |
+| **Start Quickly with a Sample** | You want to evaluate the platform with a preconfigured agent. The sample is configured and deployed as a platform-hosted agent. | [Create an Agent from a Sample](./create-from-a-sample.mdx) |

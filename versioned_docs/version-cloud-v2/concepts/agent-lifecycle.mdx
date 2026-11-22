@@ -1,0 +1,48 @@
+---
+title: Agent and Agent Life Cycle
+---
+
+# Agent and Agent Life Cycle
+
+An Agent is the core workload in WSO2 Agent Manager. A registered AI agent that belongs to a [project](./project.mdx), optionally builds and deploys through the platform, and is governed and observed once it's running.
+
+## What Makes Up an Agent
+
+An agent's definition combines several pieces, each independently configurable:
+
+- **Type** — whether the agent is [Platform-Hosted or Externally-Hosted](./internal-and-external-agent.mdx), and its language/runtime.
+- **Provisioning** — for platform-hosted agents, the source repository, branch, and path the platform builds from.
+- **Build** — the build strategy: `buildpack` (language + start command, e.g. Python) or `docker` (a `Dockerfile` in the repository).
+- **Configurations** — runtime settings: auto-instrumentation, environment variables, API key / OAuth security, CORS, and resilience timeouts.
+- **Kind** — optionally, an agent can be created from a published [Agent Kind](./agent-kind-and-catalog.mdx) rather than a raw repository.
+
+## Life Cycle Actions
+
+Moving an agent from registered to running in production is a sequence of distinct, separately-permissioned actions rather than one deploy step:
+
+| Action | Permission | What it does |
+|---|---|---|
+| Create | `amp:agent:create` | Registers the agent in a project. |
+| Build | `amp:agent:build` | Builds a deployable artifact from the agent's source (platform-hosted only). |
+| Deploy (non-production) | `amp:agent:deploy-non-production` | Deploys a built artifact to a non-production [environment](./environment.mdx). |
+| Deploy (production) | `amp:agent:deploy-production` | Deploys to a production environment — a separate permission from non-production deploys. |
+| Promote | `amp:agent:promote` | Moves a deployed version to the next environment in the project's [deployment pipeline](./deployment-pipeline.mdx). |
+| Rollback | `amp:agent:rollback` | Reverts an environment to a previously deployed version. |
+| Suspend | `amp:agent:suspend` | Stops a deployed agent without deleting it. |
+
+Splitting production deploys from non-production ones means someone can be trusted to push to staging without being trusted to push straight to production — the same separation the [deployment pipeline](./deployment-pipeline.mdx) enforces at the environment level.
+
+## Deployment Status Per Environment
+
+An agent's deployment status is tracked independently for each environment it targets, not as one global state for the agent. Each environment reports one of five states:
+
+| Status | Meaning |
+|---|---|
+| `active` | Deployed and able to serve traffic. |
+| `in-progress` | A deployment is under way — either still rolling out, or applied but with pods that haven't passed their readiness probe yet. |
+| `failed` | The deployment did not come up successfully. |
+| `not-deployed` | The agent has never been deployed to this environment. |
+| `suspended` | Previously deployed, then stopped by the suspend action. |
+
+The distinction between `in-progress` and `active` matters in practice, an agent whose configuration has been applied but whose container is still booting is reported as `in-progress` rather than `active`, so callers don't invoke it and receive a `503`.
+

@@ -1,0 +1,50 @@
+---
+title: Manage Identity Providers
+---
+
+# Manage Identity Providers
+
+When an agent's endpoint is secured with OAuth, callers must send a token, and the gateway checks the token before it forwards the call to the agent. An identity provider is a token issuer that the gateway trusts. Adding an identity provider lets the callers of your agents use tokens from your own identity provider, for example the one your organization's applications already sign in with.
+
+Identity providers are set for each environment. A token that the gateway accepts in one environment is not automatically accepted in another, so you can trust a test identity provider in development without trusting it in production.
+
+:::note
+These identity providers secure the calls that come into your agents. They are separate from:
+
+- The sign-in to the Console, which is managed for your organization.
+- [Agent ID](../develop/security/agent-id.mdx), the identity that an agent uses when it calls out through the gateway.
+:::
+
+## Decide whether you need an identity provider
+
+The managed gateway already trusts the built-in **DefaultKeyManager**. Add an identity provider when:
+
+- The applications or users that call your agents already get tokens from another identity provider, and you want the gateway to accept those tokens.
+- You want different environments to trust different token issuers.
+
+## Add an identity provider
+
+An identity provider is added to a gateway, for one of the environments that the gateway serves.
+
+1. At the organization level, in the left navigation, under **Infrastructure**, click **Gateways**, and then click the gateway.
+2. Under **Token Issuers**, click **Add identity provider**. The **Add Identity Provider** panel opens for the gateway.
+3. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Environment** | The environment in which the gateway trusts the identity provider. | `Development` |
+   | **Name** | A name that identifies the identity provider. | `AcmeIdP` |
+   | **Discover from URL** *(optional)* | The URL of the identity provider, or its `.well-known` URL. Click **Fetch** to fill in **Issuer** and **JWKS URI** from the provider's OpenID configuration. | `https://idp.example.com` |
+   | **Issuer** | The issuer URL. The gateway accepts tokens whose issuer matches this value. | `https://idp.example.com` |
+   | **JWKS URI** | The URL from which the gateway gets the keys to check the signature of the tokens. | `https://idp.example.com/oauth2/jwks` |
+
+   If your identity provider publishes an OpenID configuration, use **Discover from URL** instead of entering **Issuer** and **JWKS URI** yourself. This avoids mistakes in the URLs.
+
+4. Select **Skip TLS verification when fetching JWKS (trusted internal only)** only if the identity provider is an internal one that you trust and its certificate cannot be verified.
+5. Click **Add**.
+
+The identity provider is listed under **Token Issuers** on the gateway's details page, with its environment. For more information on gateways, see [Manage Gateways](./gateways.mdx).
+
+## Next steps
+
+- To secure an agent's endpoint with tokens from the identity provider, see [Secure Agents with JWT Authentication](../../guides/secure-agents-with-jwt-authentication.mdx).

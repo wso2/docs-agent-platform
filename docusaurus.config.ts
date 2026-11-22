@@ -201,7 +201,7 @@ const config: Config = {
             from: `/latest/${from}`,
             to: `/${latestVersion}/${to}`,
           })),
-          ...['next', 'cloud', latestVersion, ...stsVersions, 'latest'].map((alias) => ({
+          ...['next', 'cloud', 'cloud-v2', latestVersion, ...stsVersions, 'latest'].map((alias) => ({
             from: `/${alias}`,
             to: `/${alias === 'latest' ? latestVersion : alias}/get-started/what-is-amp`,
           })),
@@ -236,6 +236,11 @@ const config: Config = {
               label: 'Cloud',
               banner: 'none',
               path: 'cloud',
+            },
+            'cloud-v2': {
+              label: 'Cloud v2',
+              banner: 'none',
+              path: 'cloud-v2',
             },
             [latestVersion]: {
               label: latestVersion,
@@ -333,8 +338,8 @@ const config: Config = {
           // Custom option, see src/theme/NavbarItem/DocsVersionDropdownNavbarItem.tsx.
           // Next, then every release in versions.json order; a divider sets Cloud apart.
           versionGroups: [
-            {versions: ['current', ...versions.filter(v => v !== 'cloud' && !unreleasedVersions.includes(v))]},
-            {versions: ['cloud']},
+            {versions: ['current', ...versions.filter(v => !v.startsWith('cloud') && !unreleasedVersions.includes(v))]},
+            {versions: ['cloud', 'cloud-v2']},
           ],
         },
         {

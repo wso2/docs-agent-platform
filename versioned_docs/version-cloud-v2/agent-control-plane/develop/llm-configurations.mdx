@@ -1,0 +1,58 @@
+---
+title: LLM Configurations
+---
+
+# LLM Configurations
+
+An LLM configuration connects an agent to an LLM service provider. The platform injects the provider's URL and API key into the agent as environment variables at runtime, with the values for each environment, so the agent code never contains them.
+
+The LLM service providers that you can connect to are the ones added at the organization level. For instructions on adding one, see [LLM Service Providers](../administer/llm-service-providers.mdx).
+
+## Open the LLM Configurations tab
+
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Agent lifecycle**, click **Configure**.
+3. On the **Configure Agent** page, click the **LLM Configurations** tab.
+
+The tab lists the agent's LLM configurations with their **Name** and when they were **Created**. Use **Search LLM configurations** to find a configuration by name.
+
+## Add an LLM configuration
+
+1. On the **LLM Configurations** tab, click **Add LLM configuration**.
+2. Select the LLM service provider. Each provider shows the guardrails that are configured on it.
+3. Optionally, under **Guardrails**, click **Add guardrail** to add safety policies for this configuration. These apply in addition to the guardrails configured on the provider. For information on selecting and configuring a guardrail, see [Add a guardrail](../administer/llm-service-providers.mdx#add-a-guardrail).
+4. Under **Configuration Name**, enter a **Name** for the configuration, for example `staging-openai-provider`.
+5. Under **Environment Variable Names**, review the names of the environment variables that the platform injects into the agent. For example, for an OpenAI provider:
+
+   | Variable Name | Description |
+   |---|---|
+   | `OPENAI_URL` | Base URL of the LLM provider |
+   | `OPENAI_API_KEY` | API key for authenticating with the LLM provider |
+
+   These names are shared across all environments, and the platform injects the actual URL and API key values at runtime for each environment. Change a name, up to 128 characters, only if your agent code uses a different one.
+
+6. Click **Save**.
+
+The configuration is listed on the **LLM Configurations** tab.
+
+## LLM configuration details
+
+On the **LLM Configurations** tab, click a configuration to open its details page. The page shows:
+
+- **The provider**: its name and type (for example, **OpenAI**), when it was deployed, its rate limiting, and its guardrails. Click the edit icon to change the configuration.
+- **Guardrails**: the guardrails added to this configuration. Click **Add guardrail** to add another.
+- **Provider Guardrails**: the guardrails configured on the LLM service provider itself, which apply in addition to the guardrails of this configuration.
+- **Resilience**: the timeouts of the connection to the provider.
+
+## Use the LLM configuration in agent code
+
+On the configuration's details page, click **Environment Variables & Integration Guide**. The panel shows:
+
+- **Environment Variables References**: the environment variable names, which you can rename if your code already uses different names. Save the configuration after you rename them.
+- **Integration Guide**: a snippet to copy into your agent code, on the **Python** tab, or a prompt for a coding assistant, on the **Copilot prompt** tab.
+
+Requests to the provider must carry the API key in the `API-Key` header. The snippet sets this header for you. Read the values from the environment variables, and do not hardcode them.
+
+## Delete an LLM configuration
+
+On the **LLM Configurations** tab, click the delete icon of the configuration.

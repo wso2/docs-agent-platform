@@ -1,0 +1,48 @@
+---
+title: Monitors
+---
+
+# Monitors
+
+A monitor runs [evaluators](./evaluators.mdx) over an agent's traces and tracks the scores. A monitor belongs to an agent. For information on how evaluation works, see [Evaluation](../../concepts/evaluation.mdx).
+
+## Monitor types
+
+The traces that a monitor evaluates depend on the data collection that you select when you create it:
+
+| Data collection | Description |
+|---|---|
+| **Past Traces** | Evaluates the traces in a time range that has already passed. The monitor is shown as **Historical**. |
+| **Future Traces** | Evaluates new traces at a regular interval. The monitor is shown as **Continuous**. |
+
+To create a monitor, see [Create a Monitor](./monitors/create-a-monitor.mdx).
+
+## View monitors
+
+1. Open the agent from the breadcrumb at the top of the Console.
+2. In the left navigation, under **Evaluation**, click **Monitors**. The **Eval Monitors** page opens.
+
+If the agent has no monitors, the page shows **No monitors yet**. To find a monitor, enter its name in **Search monitors**.
+
+The page lists the monitors with the following:
+
+| Column | Description |
+|---|---|
+| **Name** | The title of the monitor. |
+| **Status** | The status of the monitor, for example **Active**. |
+| **Data Source** | The type of the monitor: **Historical** or **Continuous**. |
+| **Evaluators** | The evaluators that the monitor runs. |
+| **Actions** | The actions that you can take on the monitor. |
+
+To view the results of a monitor, click it. For more information, see [View Monitor Results](./monitors/view-monitor-results.mdx).
+
+## Manage monitors
+
+Use the icons in the **Actions** column:
+
+| Action | Description |
+|---|---|
+| **Stop monitor** | Stops an active continuous monitor. This action is not available for historical monitors, because past monitors cannot be started. |
+| **Edit** | Opens the monitor to change its settings. |
+| **Duplicate** | Creates a copy of the monitor. |
+| **Delete** | Deletes the monitor. Click **Delete** to confirm. A deleted monitor cannot be restored. |

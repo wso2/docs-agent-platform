@@ -1,0 +1,50 @@
+---
+title: Manage Projects
+---
+
+# Manage Projects
+
+A project is the container for agents that work together, such as the agents of one application or business capability. Every agent belongs to one project, and the project decides which environments its agents are deployed to and in what order. For information on how projects work, see [Project](../../concepts/project.mdx).
+
+Your organization starts with a **Default Project**. You can create agents in it right away, and create more projects as you add applications or teams.
+
+## Plan your projects
+
+Use projects to separate agents that should not affect each other. Agents in one project are isolated from the agents in another project.
+
+| Put agents in the same project when | Put agents in separate projects when |
+|---|---|
+| They work together as one application, for example a booking agent and the agents it calls. | They belong to different applications or teams. |
+| They are deployed and promoted together. | They need a different promotion path, for example one application goes straight from development to production and another needs a staging environment first. |
+
+You do not need a project per agent. Resources that agents share, such as [LLM service providers](./llm-service-providers.mdx), [MCP servers](../create/mcp-servers.mdx), and [gateways](./gateways.mdx), are registered for the whole organization, so agents in any project can use them.
+
+## Create a project
+
+1. At the organization level, in the left navigation, click **Projects**. The **All Projects** page lists the projects of the organization.
+2. Click **Add project**, enter the project's details, and create the project.
+
+You can also click **Create project** on the organization's **Overview** page.
+
+## Add agents to a project
+
+1. Select the project from the breadcrumb at the top of the Console.
+2. On the project's **Overview** page, click **New agent**.
+
+For the ways to add an agent, see [Add an Agent](../create/add-an-agent.mdx).
+
+The **Overview** page lists the project's agents with their **Type**, for example **Platform · Chat**, and when they were **Created**. **Agent Deployments** shows how many of the agents are platform-hosted and how many are externally hosted.
+
+## Choose how agents are promoted
+
+A project uses one deployment pipeline. The pipeline defines the environments that the project's agents are deployed to, and the order in which an agent is promoted from one environment to the next. For information on how pipelines govern promotion, see [Deployment Pipeline](../../concepts/deployment-pipeline.mdx).
+
+A new project uses the **Default Pipeline**, which promotes agents through development, staging, and production. To use a different pipeline, on the project's **Overview** page, under **Project Environments**, click **Change**.
+
+:::tip
+Deploying to production is a separate permission from deploying to other environments. With a pipeline that includes staging, developers can deploy and test agents freely, while promotion to production stays with the people who are allowed to deploy to production.
+:::
+
+## Manage a project
+
+To change a project's settings, on the project's **Overview** page, click **Manage project**.

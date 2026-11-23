@@ -1,0 +1,78 @@
+---
+title: Manage Gateways
+---
+
+# Manage Gateways
+
+A gateway carries the traffic of your agents. Calls to your agents come in through a gateway, and your agents' calls to LLM service providers and MCP servers go out through a gateway. Because all of this traffic passes through one place, the gateway can authenticate callers, control which operations and tools an agent can reach, apply rate limits, and enforce guardrails. For information on how gateways work, see [Gateway](../../concepts/gateway.mdx).
+
+Every environment comes with a managed gateway, for example **Default Gateway - Development**. Choreo Labs runs, scales, and upgrades it, so you can deploy agents and register LLM service providers and MCP servers without setting up a gateway yourself.
+
+## Decide whether you need another gateway
+
+| Use the managed gateway when | Add a self-hosted gateway when |
+|---|---|
+| You want to get started quickly. | Calls to LLM service providers and MCP servers must stay in your own network, for example for data residency or compliance. |
+| You do not want to run gateway infrastructure. | You want to run and scale the outbound gateway on your own infrastructure, such as Docker or Kubernetes. |
+
+The two gateways handle different traffic:
+
+| Gateway | Type | Traffic it handles |
+|---|---|---|
+| **Managed** | **Ingress + Egress** | Calls to your agents, and your agents' calls to LLM service providers and MCP servers. |
+| **Self-hosted** | **Egress** | Your agents' calls to LLM service providers and MCP servers. Calls to your agents still go through the managed gateway. |
+
+## Add a self-hosted gateway
+
+Adding a gateway is done in two parts: you register it in Agent Control Plane, and then you run it on your infrastructure.
+
+1. At the organization level, in the left navigation, under **Infrastructure**, click **Gateways**.
+2. Click **Add gateway**. The **Add Gateway** panel opens.
+3. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Display Name** | The name shown for the gateway in the Console. You can change it later. | `Production Gateway` |
+   | **Name** | The unique name of the gateway in the organization. It is filled in from the display name and cannot be changed later. | `production-gateway` |
+   | **Environment** | The environment whose agents use the gateway. | |
+   | **Public URL** | The address that clients use to reach the gateway. It cannot be changed later. | `https://gateway.example.com` |
+   | **Description** *(optional)* | What the gateway is for. | |
+
+4. Click **Create**. A setup panel opens with the commands to run the gateway.
+5. Run the commands on the host where the gateway runs.
+
+   :::warning
+   The registration token that connects the gateway to Agent Control Plane is shown only once. Use the **Copy** button to copy the command that contains it.
+   :::
+
+When the gateway connects, its status changes from **Inactive** to **Active**. For the full setup, see the [Quick Start Guide](../../ai-gateway/self-hosted-gateways/quickstart-guide.mdx). For Kubernetes or production installations, see [Setting Up a Self-Hosted Gateway](../../ai-gateway/self-hosted-gateways/setting-up.mdx).
+
+## Route traffic through a gateway
+
+You do not connect LLM service providers and MCP servers to a gateway yourself. When you deploy a provider or a server to an environment, it is placed on an egress gateway of that environment:
+
+- If the environment has one egress gateway, that gateway is used.
+- If the environment has more than one, for example the managed gateway and a self-hosted gateway, you choose the gateway when you deploy.
+
+After a provider or server is deployed through a gateway, it stays on that gateway. For the steps, see [Route LLM Traffic](../../ai-gateway/self-hosted-gateways/route-llm-traffic.mdx) and [Route MCP Traffic](../../ai-gateway/self-hosted-gateways/route-mcp-traffic.mdx).
+
+## Check a gateway
+
+On the **Gateways** page, the gateways are grouped by environment. Click a gateway to see:
+
+- Its **Status**. A gateway must be **Active** to carry traffic.
+- Its **Virtual Host**, the URL through which traffic reaches it.
+- The **Environments** that it serves.
+- Its **Token Issuers**, which decide whose tokens the gateway accepts when it secures agent endpoints with OAuth. The managed gateway trusts the built-in **DefaultKeyManager**. To accept tokens from your own identity provider, click **Add identity provider**. For more information, see [Manage Identity Providers](./identity-providers.mdx).
+
+## Rename a gateway
+
+1. On the gateway's details page, click **Edit gateway**.
+2. Update the **Display Name**, and click **Save**.
+
+Only the display name can be changed. To use a different name, environment, or public URL, add a new gateway.
+
+## Delete a gateway
+
+1. On the **Gateways** page, move the pointer over the gateway. The **Delete** button appears on the row.
+2. Click **Delete**, and then click **Delete** to confirm.

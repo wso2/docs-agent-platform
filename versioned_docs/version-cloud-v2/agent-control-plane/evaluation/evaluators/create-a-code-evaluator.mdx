@@ -1,0 +1,77 @@
+---
+title: Create a Custom Code Evaluator
+---
+
+# Create a Custom Code Evaluator
+
+A code evaluator is a type of custom evaluator. It is a Python function that evaluates traces programmatically. Code evaluators are shown as **Rule-based** on the **Evaluators** page. For a guide on writing custom evaluators, see [Custom Evaluators](../../../guides/custom-evaluators.mdx).
+
+## Enter the basic details
+
+1. At the organization level, in the left navigation, under **Evaluation**, click **Evaluators**.
+2. Click **Create evaluator**. The **Create Evaluator** page opens.
+3. Under **Basic Details**, enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | A human-readable name for the evaluator. | `Staging Evaluator` |
+   | **Description** *(optional)* | What the evaluator checks. | |
+
+4. Under **Evaluator Type**, select **Code**.
+5. Click **Next**.
+
+## Write the evaluator function
+
+1. Under **Evaluator Function**, select the **Evaluation Level**:
+
+   | Level | Description | Object that the function receives |
+   |---|---|---|
+   | **Trace** | Evaluates the full end-to-end trace. | `Trace` |
+   | **Agent** | Evaluates each agent individually within a trace. | `AgentTrace` |
+   | **LLM** | Evaluates individual LLM calls within a trace. | `LLMSpan` |
+
+2. In the editor, write a Python function that receives the object for the selected level and returns an `EvalResult`. The editor starts with a template for the selected level.
+
+   The `EvalResult` has a `score`, whether the evaluation `passed`, and an `explanation`. To skip a trace that cannot be evaluated, return `EvalResult.skip()` with a reason.
+
+   The following packages are available: `amp-evaluation`, `requests`, `any-llm-sdk`, `numpy`, and `pandas`.
+
+To have an AI assistant write the function, see [Use AI to write the function](#use-ai-to-write-the-function).
+
+## Add configuration parameters
+
+To add a configuration parameter, under **Config Params**, click **Add param**, and enter the following:
+
+| Field | Description |
+|---|---|
+| **Key** | The name of the parameter. |
+| **Type** | The type of the parameter, for example `string`. |
+| **Default** | The default value of the parameter. |
+| **Description** | What the parameter is for. |
+| **Required** | Select if the parameter must have a value. |
+
+The parameters are passed to the function as keyword arguments, for example `threshold: float = 0.5`. To remove a parameter, click its close icon.
+
+## Add tags and create the evaluator
+
+1. Under **Tags**, enter a tag and press **Enter**. The tag `code` is added by default.
+2. Click **Create evaluator**.
+
+The evaluator is listed on the **Evaluators** page as a **Custom** evaluator.
+
+:::note
+To edit the evaluator later, on the **Evaluators** page, click the edit icon on the evaluator. You can also click the evaluator, and then click **Edit evaluator**. You can update its **Name**, **Description**, **Source Code**, **Tags**, and **Configuration Parameters**. Click **Save** to apply the changes. The evaluation level and the type cannot be changed.
+
+To delete the evaluator, on the **Evaluators** page, click the delete icon on the evaluator, and then click **Delete** to confirm. A deleted evaluator cannot be restored.
+:::
+
+## Use AI to write the function
+
+1. Under **Evaluator Function**, click **Use AI to write**. The **AI Copilot Prompt** panel opens with a prompt that includes the evaluator's name, description, and evaluation level.
+2. Click the copy icon to copy the prompt.
+3. Paste the prompt into your AI assistant, and replace `[Describe scenario]` with what you want to evaluate.
+4. Paste the generated code into the editor.
+
+## Next steps
+
+- To run the evaluator on an agent's traces, see [Monitors](../monitors.mdx).

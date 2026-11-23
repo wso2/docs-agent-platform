@@ -1,0 +1,46 @@
+---
+title: MCP Servers
+---
+
+# MCP Servers
+
+An MCP server provides tools, resources, and prompts for agents. You can register an MCP server for the whole organization or for a project, and agents call its tools through their [tool configurations](../develop/tool-configurations.mdx) or the **MCP Servers** section when you create the agent.
+
+## View MCP servers
+
+- **Organization level**: In the left navigation, under **Resources**, click **MCP servers**.
+- **Project level**: In the left navigation, click **MCP servers**. The list shows the MCP servers registered for the organization or the project, and those published from the project's components.
+
+The **MCP Servers** page lists the servers with their **Name**, **Version**, and when they were **Last Updated**. Use **Search MCP servers** to find a server by name.
+
+## Register an MCP server
+
+1. On the **MCP Servers** page, click **Register MCP server**. The **Register MCP Server** page opens.
+2. Enter the server's details:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | The name of the server. | `GitHub MCP Server` |
+   | **Handle** | Generated from the name. It must be unique and cannot be changed once the server is registered. To change it before you register the server, click the edit icon. | `github-mcp-server` |
+   | **Version** | The version of the server. Defaults to `1.0.0`. | `1.0.0` |
+   | **Context** *(optional)* | The path that the server is served under. Generated from the handle. | `/default/github-mcp-server` |
+   | **Description** *(optional)* | What tools the server provides. | |
+
+3. Under **Endpoints**, add a backend endpoint for the server:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Endpoint Name** *(optional)* | A name for the endpoint. When it is left blank, a handle is derived from the name or URL. | `Primary` |
+   | **MCP Server Endpoint URL** | The public URL of the MCP server. | `https://mcp.example.com/mcp` |
+
+   Optionally, set the following:
+
+   - **Advanced Configurations** > **Headers**: HTTP headers to send to the MCP server, each with a **Key** and a hidden **Value**. Select the checkbox of a header to use it.
+   - **Resilience**: The **Request Timeout** and the **Idle Timeout** of the connection to the MCP server.
+
+   The endpoint card shows the environment that the endpoint is deployed to and its gateway, for example **Development** on **Default Gateway - Development**. It also shows what the console discovered from the MCP server: its name and version, and the number of **Tools**, **Resources**, and **Prompts** that it provides.
+
+4. Save the endpoint. The endpoint is listed under **Endpoints** with its environment, its URL, and the number of tools, resources, and prompts. To change or remove the endpoint, click its edit or delete icon. To add another endpoint, click **Add endpoint**.
+5. Click **Create**.
+
+The server is listed on the **MCP Servers** page.

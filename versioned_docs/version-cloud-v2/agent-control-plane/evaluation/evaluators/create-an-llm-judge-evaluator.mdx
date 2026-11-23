@@ -1,0 +1,74 @@
+---
+title: Create a Custom LLM Judge Evaluator
+---
+
+# Create a Custom LLM Judge Evaluator
+
+An LLM judge evaluator is a type of custom evaluator. It uses an LLM to assess traces with a natural language prompt. For a guide on writing custom evaluators, see [Custom Evaluators](../../../guides/custom-evaluators.mdx).
+
+## Enter the basic details
+
+1. At the organization level, in the left navigation, under **Evaluation**, click **Evaluators**.
+2. Click **Create evaluator**. The **Create Evaluator** page opens.
+3. Under **Basic Details**, enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | A human-readable name for the evaluator. | `LLM evaluator` |
+   | **Description** *(optional)* | What the evaluator checks. | |
+
+4. Under **Evaluator Type**, select **LLM Judge**.
+5. Click **Next**.
+
+## Write the evaluation prompt
+
+1. Under **Evaluation Prompt**, select the **Evaluation Level**:
+
+   | Level | Description | Expression |
+   |---|---|---|
+   | **Trace** | Evaluates the full end-to-end trace. | `{trace.*}`, to access `Trace` fields |
+   | **Agent** | Evaluates each agent individually within a trace. | `{agent_trace.*}`, to access `AgentTrace` fields |
+   | **LLM** | Evaluates individual LLM calls within a trace. | `{llm_span.*}`, to access `LLMSpan` fields |
+
+2. In the editor, write a prompt template using Python f-string syntax. The editor starts with a template for the selected level, with evaluation steps and a scoring rubric from `0.0` to `1.0`.
+
+   Use the expression for the selected level to include trace data in the prompt, for example `{trace.input}` and `{trace.output}`. Python expressions such as loops and joins are supported inside `{ }`.
+
+To have an AI assistant write the prompt, see [Use AI to write the prompt](#use-ai-to-write-the-prompt).
+
+## Set the configuration parameters
+
+Under **Config Params**, set the parameters of the LLM. The following parameters are added by default:
+
+| Parameter | Type | Description | Default | Required |
+|---|---|---|---|---|
+| `model` | string | The name of the LLM model, for example `gpt-4o-mini`. | | Yes |
+| `temperature` | float | The LLM temperature. | `0` | No |
+| `max_tokens` | integer | The maximum number of tokens for the LLM response. | `1024` | No |
+| `max_retries` | integer | The maximum number of retries when the LLM output is invalid. | `2` | No |
+
+To add a parameter, click **Add param**. Parameters are available as `{key}` placeholders in the prompt template.
+
+## Add tags and create the evaluator
+
+1. Under **Tags**, enter a tag and press **Enter**. The tag `llm-judge` is added by default.
+2. Click **Create evaluator**.
+
+The evaluator is listed on the **Evaluators** page as a **Custom** evaluator.
+
+:::note
+To edit the evaluator later, on the **Evaluators** page, click the edit icon on the evaluator. You can also click the evaluator, and then click **Edit evaluator**. You can update its **Name**, **Description**, **Prompt Template**, **Tags**, and **Configuration Parameters**. Click **Save** to apply the changes. The evaluation level and the type cannot be changed.
+
+To delete the evaluator, on the **Evaluators** page, click the delete icon on the evaluator, and then click **Delete** to confirm. A deleted evaluator cannot be restored.
+:::
+
+## Use AI to write the prompt
+
+1. Under **Evaluation Prompt**, click **Use AI to write**. The **AI Copilot Prompt** panel opens with a prompt that includes the evaluator's name, description, and evaluation level.
+2. Click the copy icon to copy the prompt.
+3. Paste the prompt into your AI assistant, and replace `[Describe scenario]` with what you want to evaluate.
+4. Paste the generated prompt template into the editor.
+
+## Next steps
+
+- To run the evaluator on an agent's traces, see [Monitors](../monitors.mdx).

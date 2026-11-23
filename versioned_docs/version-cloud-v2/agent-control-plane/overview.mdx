@@ -1,0 +1,32 @@
+---
+title: Agent Control Plane
+---
+
+# Agent Control Plane
+
+The Agent Control Plane is the part of Choreo Agent Management that manages the full lifecycle of agents: creating, configuring, building, deploying, securing, observing, and evaluating them. It also manages the shared resources that agents use, such as MCP servers, LLM service providers, gateways, and agent identities.
+
+The Agent Control Plane is available in the [Choreo Agent Management Console](#).
+
+## Capabilities
+
+| Capability | Description |
+|---|---|
+| [Create](./create/add-an-agent.mdx) | Add platform-hosted agents from source code, a sample, or the agent catalog, register externally-hosted agents, and register [MCP servers](./create/mcp-servers.mdx) that provide tools for agents. |
+| [Develop](./develop/llm-configurations.mdx) | Connect an agent to LLM service providers and tools, build it from its source repository, configure how it is built and health-checked, update its details, and secure it with an agent identity and API keys. |
+| [Deploy](./deploy/deploy-an-agent.mdx) | Deploy a successful build to the environments of the project. |
+| [Test](./test/try-your-agent.mdx) | Chat with a deployed agent or call its API from the Console. |
+| [Publish](./publish/publish-to-the-agent-catalog.mdx) | Publish versions of an agent to the agent catalog as an agent kind, so that others in the organization can create agents from it. |
+| [Observability](./observability/traces.mdx) | Inspect the traces, runtime logs, and CPU and memory usage of a running agent. |
+| [Evaluation](./evaluation/evaluators.mdx) | Score an agent's traces with built-in or custom evaluators, using monitors. |
+| [Administer](./administer/projects.mdx) | Manage projects, gateways, [LLM service providers](./administer/llm-service-providers.mdx), and agent identity groups and roles. |
+
+## Agent lifecycle
+
+Each stage of the agent lifecycle depends on the stage before it:
+
+1. [Create the agent](./create/add-an-agent.mdx) from source code, a sample, or the agent catalog.
+2. [Build the agent](./develop/build-an-agent.mdx). A successful build is required before the agent can be deployed or published.
+3. [Deploy the agent](./deploy/deploy-an-agent.mdx) to an environment.
+4. [Try the agent](./test/try-your-agent.mdx) and [create API keys](./develop/security/api-keys.mdx) for it. Both require a deployed agent.
+5. Optionally, [publish the agent](./publish/publish-to-the-agent-catalog.mdx) to the agent catalog.

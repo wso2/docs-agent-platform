@@ -1,0 +1,85 @@
+---
+title: Manage Agent Identity Groups and Roles
+---
+
+# Manage Agent Identity Groups and Roles
+
+Every agent has its own identity in each environment that it runs in, its [Agent ID](../develop/security/agent-id.mdx). Groups and roles decide what that identity is allowed to do, for example which tools of an MCP server an agent can call. Two agents can call the same MCP server and get different capabilities, depending on the roles that they have. For information on how agent identities work, see [AgentID](../../concepts/agentid.mdx).
+
+Access is built from the following:
+
+| Item | What it is |
+|---|---|
+| **Scope** | A permission, for example to call the read-only tools of an MCP server. |
+| **Role** | A named set of scopes. |
+| **Group** | A set of agents that need the same access. |
+| **Assignment** | A role granted to an agent, to a group, or to both. |
+
+When an agent gets an access token, the token carries only the scopes of the roles assigned to the agent, directly or through its groups. The gateway checks those scopes when the agent calls a tool.
+
+Groups and roles are set for each environment, so an agent can have broader access in development than in production.
+
+## Plan your roles and groups
+
+- **Create roles around what agents need to do, not around individual agents.** For example, create a `booking-reader` role that can only read bookings, and a `booking-admin` role that can also create and change them.
+- **Use groups when several agents need the same access.** Assign the role to the group once, and add agents to the group, instead of assigning the role to each agent.
+- **Grant only the scopes that an agent needs.** An agent that only answers questions does not need the scopes that change data.
+
+## Create a role
+
+1. At the organization level, in the left navigation, under **Agent identities**, click **Roles**.
+2. Click **Create role**. The **Create Role** page opens.
+3. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | A name that describes the access that the role grants. | `booking-reader` |
+   | **Description** *(optional)* | What the role allows, so that others know when to assign it. | |
+   | **Scopes** *(optional)* | The scopes that the role grants. Search for and select the scopes. You can also add them later on the role's **Permissions** tab. | |
+
+4. Click **Create role**.
+
+## Create a group
+
+1. At the organization level, in the left navigation, under **Agent identities**, click **Groups**.
+2. Click **Create group**. The **Create Group** page opens.
+3. Enter the following:
+
+   | Field | Description | Example |
+   |---|---|---|
+   | **Name** | A name that describes the agents in the group. | `on-call-agents` |
+   | **Description** *(optional)* | What the agents in the group have in common. | |
+
+4. Click **Create group**. The group's details page opens.
+
+## Give agents access
+
+You can assign roles from the role's page or from the group's page.
+
+**From the role's page:**
+
+1. On the **Roles** page, click the role.
+2. Use the tabs of the role's details page:
+
+   | Tab | Use it to |
+   |---|---|
+   | **Permissions** | Select the scopes that the role grants. If no scopes are available, the tab shows **No scopes in the catalog**. |
+   | **Agents** | Under **Add Agent**, search for and select the agents that get the role directly. |
+   | **Groups** | Under **Add Group**, search for and select the groups whose agents get the role. |
+
+3. Click **Save changes**.
+
+**From the group's page:**
+
+1. On the **Groups** page, click the group. To find a group, enter its name in **Search groups**.
+2. On the **Agents** tab, under **Add Agent**, search for and select the agents to add. Each agent is shown with its project, and is listed with its **Agent ID** after you add it.
+3. On the **Roles** tab, select the roles to assign to the group. Roles that are assigned to the group from a role's **Groups** tab are also listed here.
+4. Click **Save changes**.
+
+To remove an agent, a group, or a role, click its delete icon, and then click **Save changes**.
+
+## Check an agent's access
+
+An agent's groups and roles in each environment are listed on its **Agent ID** page, in the **Groups** and **Roles** tabs. For more information, see [Agent ID](../develop/security/agent-id.mdx).
+
+Roles and groups can be changed for an agent only when the agent has an active identity binding in the environment.

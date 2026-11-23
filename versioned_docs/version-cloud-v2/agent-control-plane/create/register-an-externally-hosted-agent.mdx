@@ -1,0 +1,42 @@
+---
+title: Register an Externally-Hosted Agent
+---
+
+# Register an Externally-Hosted Agent
+
+An externally-hosted agent runs on infrastructure outside the platform. Registering the agent connects it to the platform and enables observability and governance, while the agent continues to run where it is. For information on how externally-hosted agents differ from platform-hosted agents, see [Internal and External Agent](../../concepts/internal-and-external-agent.mdx).
+
+## Open the form
+
+1. On the **Add a New Agent** page, click **Register an agent** under **Externally-Hosted Agent**. For instructions on opening the page, see [Add an Agent](./add-an-agent.mdx).
+
+The **Register an Externally-Hosted Agent** form opens.
+
+## Step 1: Enter the agent details
+
+Under **Agent Details**, enter the following:
+
+| Field | Description | Example |
+|---|---|---|
+| **Name** | A name for the agent. | `Customer Support` |
+| **Agent handle** | Generated from the name. Click the edit icon to change it. | `customer-support-agent` |
+| **Description** *(optional)* | A short description of what the agent does, up to 2000 characters. Markdown is supported; use **Preview** to check it. | |
+
+## Step 2: Add labels (optional)
+
+Labels are key/value pairs that organize and filter agents.
+
+1. Under **Labels**, click **Add label**.
+2. Enter a **Key** (up to 128 characters) and a **Value** (up to 4096 characters). For example, the key `env` and the value `production`.
+3. Click **Add**. To discard the label, click the close icon.
+
+Repeat these steps for each label.
+
+## Step 3: Register the agent
+
+Click **Register**. The button is available once the required fields are filled in.
+
+## Next steps
+
+- To send traces from the agent to the platform, instrument the agent. See [AMP Instrumentation](../../guides/amp-instrumentation.mdx).
+- To get the agent's identity credentials, see [Retrieve AgentID Credentials for an Externally-Hosted Agent](../../guides/retrieve-agentid-for-externally-hosted-agents.mdx).

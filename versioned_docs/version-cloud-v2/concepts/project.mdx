@@ -1,0 +1,32 @@
+---
+title: Project
+---
+
+# Project
+
+A Project is the primary container for your agents in WSO2 Agent Manager. You create agents inside a project, and a project is where a **[Deployment Pipeline](./deployment-pipeline.mdx)** is attached to govern how those agents promote across environments.
+
+## Built on OpenChoreo's Project Abstraction
+
+An Agent Manager Project is an [OpenChoreo Project](https://openchoreo.dev/docs/concepts/developer-abstractions/#project). A project groups everything that makes up one application or business capability. So you'd put the agents that work together in the same project, rather than putting every agent in your organization into one.
+
+The grouping is more than a label. Each project gets its own namespace, network boundary, and security policies, so agents in one project are genuinely isolated from agents in another.
+
+### How Agents Map to OpenChoreo Components
+
+OpenChoreo itself does not have a native concept of an "agent." In OpenChoreo's domain model, the fundamental deployable unit is a [Component](https://openchoreo.dev/docs/concepts/developer-abstractions/#component) which is a software workload that can be built, provisioned, and executed.
+
+Because of this model, whether an agent becomes an OpenChoreo Component at all depends on where it runs.
+
+When you create a [Platform-Hosted Agent](./internal-and-external-agent.mdx), it initially exists only as a record inside the Agent Manager database. It is transformed into an OpenChoreo Component (specifically of type `agent-api`) inside the project's namespace only when you trigger its first build and deployment.
+
+Since Agent Manager neither builds nor deploys the workload of an [Externally-Hosted Agent](./internal-and-external-agent.mdx), it never becomes an OpenChoreo Component. Registering an external agent creates only an Agent Manager record for governance, tracking, and observability.
+
+## What a Project Holds
+
+- Every **agent** you create or register belongs to one project.
+- A project is bound to exactly one **[Deployment Pipeline](./deployment-pipeline.mdx)**, which determines which environments agents in this project can promote through, and in what order.
+
+## Relationship to Organization
+
+A Project belongs to exactly one **[Organization](./organization.mdx)**. Resources shared across every project in an organization (**[LLM Service Providers](./llm-service-provider.mdx)**, **[MCP Proxies](./mcp-proxy.mdx)**, **[Gateways](./gateway.mdx)**) are registered at the organization level, not the project level, so any project in that organization can reference them.

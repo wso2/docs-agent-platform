@@ -1,0 +1,21 @@
+---
+title: Agent Kind & Agent Catalog
+description: Agent Kinds are reusable, versioned agent templates; the Agent Catalog makes them and other organization-level resources discoverable for reuse.
+---
+
+# Agent Kind & Agent Catalog
+
+## Agent Kind
+
+An **Agent Kind** is a reusable, versioned agent template. A way to publish a built agent so it can be created again (by you or others in the organization) without starting from a source repository each time. The **Catalog** is where published kinds, along with other shareable org-level resources, become discoverable.
+
+A kind is versioned and each version pins a specific build (a `buildName` and `imageId`) plus a **config schema**. The list of parameters a consumer must (or may) provide when creating an agent from that version, each marked as secret or not, mandatory or not, with an optional default value.
+
+
+## Agent Catalog
+
+The catalog isn't specific to agent kinds, it's a general discoverability flag shared across several resource types: agents, agent kinds, LLM Service Providers, MCP proxies, and MCP proxy mappings all use the same underlying mechanism. A resource is "in the catalog" or not. Being in the catalog doesn't change how the resource behaves, only whether it shows up when someone in the organization browses for something to reuse.
+
+## Relationship to Agents
+
+Creating an agent from a published kind is an alternative to pointing at source code directly (see [Create the Agent](../tutorials/create-your-first-agent.mdx#step-1-create-the-agent) in Create Your First Agent). Either path produces the same kind of running [agent](./agent-lifecycle.mdx); a kind just captures "build once, deploy many times" so a proven agent doesn't need to be rebuilt from scratch for every reuse.

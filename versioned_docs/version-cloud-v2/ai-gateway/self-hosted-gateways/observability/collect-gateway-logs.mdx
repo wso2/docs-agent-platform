@@ -83,12 +83,12 @@ docker compose --profile logging stop fluent-bit opensearch-dashboards opensearc
 6. Open the menu, then **OpenSearch Dashboards** → **Discover**.
 7. Select the `gateway-logs-*` index pattern. Change the time range if you need more than the last 15 minutes.
 
-Fluent Bit sets the `component` field to the name of the container, which includes the Compose project name. To filter by component, enter a query with wildcards in the search bar:
+Fluent Bit collects the logs of every container on the Docker host and sets the `component` field to the name of the container, which includes the Compose project name. To show only the gateway, enter a query in the search bar. Use the `component.keyword` field for wildcards:
 
 | Component | Query |
 |---|---|
-| Gateway Controller | `component:*gateway-controller*` |
-| Gateway Runtime (router and policy engine) | `component:*gateway-runtime*` |
+| Gateway Controller | `component.keyword:*gateway-controller*` |
+| Gateway Runtime (router and policy engine) | `component.keyword:*gateway-runtime*` |
 
 To filter by level, click **Add filter**, set **Field** to `level`, **Operator** to `is`, and **Value** to `error`, `info`, `warn`, or `debug`.
 
@@ -99,11 +99,13 @@ error
 ```
 
 ```
-component:*gateway-runtime* AND level:error
+component.keyword:*gateway-runtime* AND level:error
 ```
 
+The log text is in the `msg` field. To search it, use a query such as:
+
 ```
-component:*gateway-controller* AND message:*openai*
+component.keyword:*gateway-controller* AND msg:*openai*
 ```
 
 In **Discover**, use the gear icon to choose columns, click a column header to sort, and click **>** on a row to see the JSON. Click **Save** to keep a search.
@@ -253,6 +255,7 @@ Turn TLS verification on for production.
 |---|---|
 | Fluent Bit exits with `Too many open files` | The Docker host limits file watchers. Raise `fs.inotify.max_user_instances` on the Docker host, or run the stack on a host with higher limits. |
 | The `gateway-logs-*` index does not exist | Fluent Bit is not running, or no requests reached the gateway. Check `docker compose ps` and send a request. |
+| Logs appear in Discover but the `level` and `msg` fields are missing | The log format is still `text`. Set `format = "json"` in the three tables, as described in [Set the Log Level and Format](#set-the-log-level-and-format), and recreate the containers. |
 | A port is already in use | OpenSearch uses `9200`, OpenSearch Dashboards uses `5601`, and the Grafana example uses `3000`. Change the host side of the port mapping. |
 
 ## Additional Resources

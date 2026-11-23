@@ -4,18 +4,22 @@ title: Publish to the Agent Catalog
 
 # Publish to the Agent Catalog
 
-Publishing turns an agent into an **agent kind**: a reusable, versioned template for a built agent. A published agent kind shows up in the organization's **Agent catalog** for everyone in the organization, and anyone can [create an agent from it](../create/create-from-the-agent-catalog.mdx).
+Publishing turns a built agent into an agent kind: a versioned template that appears in your organization's **Agent catalog**. Anyone in the organization can [create an agent from it](../create/create-from-the-agent-catalog.mdx).
+
+Publishing is available for agents you build from source.
 
 ## Publish a version
 
-1. Open the agent, and in the left navigation, under **Agent lifecycle**, click **Publish**.
+1. Build the agent. See [Build an Agent](../develop/build-an-agent.mdx).
+2. Under **Agent lifecycle**, click **Publish**, and then click **Create version**.
+3. Enter a **Version Name**, such as `1.0.0`, and select the build. The first time, also review the kind's display name and description.
+4. Under **Runtime Configuration**, add the environment variables that agents created from this version need. Mark a variable **Mandatory** to require a value, or **Secret** to hide it.
+5. Click **Create version**.
 
-   The **Publish** page is where you manage and publish versions of this agent kind to the catalog.
+![The Create New Version panel with the Version Name and Build fields and the Runtime Configuration section](../../img/agent-control-plane/create-version-panel.png)
 
-2. Publish a version. A version is published from a successful build. If the agent has no successful build yet, the page shows **Build your agent first**; click **Go to Build** and [build the agent](../develop/build-an-agent.mdx) first.
+A build can be published only once. To publish another version, run a new build and select it.
 
-The steps are **Build**, **Publish**, and **Catalog**.
+## Remove a kind
 
-## Browse the catalog
-
-At the organization level, click **Agent catalog** in the left navigation to see the agent kinds published in your organization.
+To remove a kind and all its versions from the catalog, click **Unpublish kind** at the bottom of the **Publish** page. This can't be undone.

@@ -4,14 +4,30 @@ title: Deploy an Agent
 
 # Deploy an Agent
 
-You deploy an agent's successful build to an environment. Open the agent, and in the left navigation, under **Agent lifecycle**, click **Deploy**.
+Deploying runs a successful build of your agent in an environment. Each environment has its own deployment, with its own environment variables, resources, and URL.
 
-If the agent has no successful build yet, the page shows **Build your agent first**. Click **Go to Build** and [build the agent](../develop/build-an-agent.mdx) first.
+To deploy, build the agent first. See [Build an Agent](../develop/build-an-agent.mdx). Agents created with **Create and deploy** deploy their first build automatically.
 
-## Environments
+![The Deploy page with the Setup card showing the latest build and the Default Environment card showing a Deployed status, URL, resource usage, and configuration summary](../../img/agent-control-plane/deploy-page.png)
 
-An agent is deployed to the environments of its project. A project's environments come from its deployment pipeline, which you can see and change on the project's **Overview** page. The **Default Pipeline** is a standard deployment pipeline with development, staging, and production environments. See [Projects](../administer/projects.mdx).
+## Deploy a build
 
-The agent's **Overview** page shows its deployment in each environment, for example **Development**.
+1. On the agent's **Deploy** page, click **Configure & Deploy**. The deployment uses the latest build. To use another build, click it under **BUILD ID**.
+2. Review the environment variables. Add the values your agent needs, such as an LLM API key, and select **Mark as Secret** to hide a value.
+3. Click **Apply & Deploy**.
 
-Once the agent is deployed, you can [try it](../test/try-your-agent.mdx) and [create API keys](../develop/security/api-keys.mdx) for it.
+The environment card shows **Deploying** and then **Deployed**. If the agent doesn't reach **Deployed**, check [Runtime Logs](../observability/runtime-logs.mdx). A missing environment variable is the most common cause.
+
+## Manage a deployment
+
+The environment card shows the agent's URL, build image, and status. From the card you can:
+
+- **Change resources.** Click **Configure** next to **Resource Usage** to set replicas, CPU, memory, and autoscaling.
+- **Change settings.** Click **Configure** next to **Configurations and Secrets** to set CORS, health checks, authentication, and tracing. For authentication, see [API Keys](../develop/security/api-keys.mdx).
+- **Promote.** If the project has a later environment, click **Promote** to deploy the build there. You can copy the environment variables or enter new ones.
+- **Suspend.** Click **Suspend** to remove the deployment without deleting the agent. Click **Re-deploy** to bring it back.
+
+## Next steps
+
+- [Try your agent](../test/try-your-agent.mdx)
+- [Publish to the Agent Catalog](../publish/publish-to-the-agent-catalog.mdx)

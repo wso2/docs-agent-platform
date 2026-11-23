@@ -4,8 +4,14 @@ title: Try Your Agent
 
 # Try Your Agent
 
-The **Try your agent** page lets you chat with a deployed agent or call its API from the Console.
+Chat with a deployed agent or call its API from the Console, without writing a client. The agent must be [deployed](../deploy/deploy-an-agent.mdx) first.
 
-Open the agent, and in the left navigation, under **Agent lifecycle**, click **Try it**.
+To open it, click **Try it** under **Agent lifecycle**.
 
-The agent must be deployed in the environment first. Until it is, the page shows **Deploy your agent to try it**, with the steps **Build**, **Deploy**, and **Try it**. Click **Go to Deploy** to deploy it. See [Deploy an Agent](../deploy/deploy-an-agent.mdx).
+![The Try your agent page showing the Start a conversation prompt with a message box and a Send button](../../img/agent-control-plane/try-your-agent-chat.png)
+
+- **Chat agents:** type a message and click **Send**.
+- **Other agents:** use the interactive API explorer, which is pre-authorized with a test API key.
+- **A2A agents:** testing isn't available in the Console. Use an A2A-compatible client.
+
+If a request fails, for example with a `500` error, a missing environment variable such as an LLM API key is a common cause. Check [Runtime Logs](../observability/runtime-logs.mdx) and [Traces](../observability/traces.mdx), fix the variable on the **Deploy** page, and try again.

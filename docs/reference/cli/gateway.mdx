@@ -11,7 +11,7 @@ List and inspect the gateways registered in an organization.
 amctl gateway [command]
 ```
 
-Gateways are **organization-level** resources. Each one carries a placement role that decides what it can host, and is mapped to one or more environments. LLM providers and MCP proxies are deployed onto gateways, so this command group is how you find the UUID that [`amctl llm-provider create --gateways`](./llm-provider.mdx#amctl-llm-provider-create) expects. The group is also available under the `gateways` alias.
+Gateways are **organization-level** resources. Each one carries a placement role that decides what it can host, and serves exactly one environment. LLM providers and MCP proxies are deployed onto gateways, so this command group is how you find the UUID that [`amctl llm-provider create --gateways`](./llm-provider.mdx#amctl-llm-provider-create) expects. The group is also available under the `gateways` alias.
 
 Gateways are registered by a platform engineer, not by this CLI — `amctl gateway` is read-only.
 

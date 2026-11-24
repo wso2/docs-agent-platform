@@ -8,7 +8,7 @@ An **MCP Proxy** is an organization-level resource that fronts one or more upstr
 
 ## How the proxy is deployed
 
-An MCP proxy is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. The proxy deploys one gateway artifact per configured environment, onto an egress capable [Gateway](./gateway.mdx) in that environment. When the environment has exactly one egress gateway the platform infers it and you pick nothing; when it has more than one, the target gateway must be specified as the endpoint is deployed — see [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
+An MCP proxy is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. The proxy deploys one gateway artifact per configured environment, onto an egress capable [Gateway](./gateway.mdx) in that environment. When the environment has exactly one managed egress gateway the platform infers it and you pick nothing; when it has more than one, or only self-hosted ones, the target gateway must be specified as the endpoint is deployed — see [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
 
 - Environments with an endpoint get a deployed artifact on their gateway.
 - Environments without an endpoint are simply left unconfigured (no artifact, and agents referencing the proxy there receive empty connection values).

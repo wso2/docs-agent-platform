@@ -18,23 +18,27 @@ LLM service providers belong to the organization, so the agents in any project c
 
 1. At the organization level, in the left navigation, under **Resources**, click **LLM service providers**.
 2. Click **Add service provider**.
-3. Select the model provider, for example **Gemini**, **Mistral**, or **OpenAI**.
-4. Under **Runtime Configuration**, enter the following:
+3. Under **Basic Details**, enter a **Name** and **Version**. You can also enter a **Description (optional)** and a **Context path (optional)**.
+
+   The context path must start with `/`, have no trailing slash, and be unique in the organization. If you leave it empty, the Console derives it from the name.
+4. Under **Provider Template**, select **Anthropic**, **AWS Bedrock**, **Azure AI Foundry**, **Azure OpenAI**, **Gemini**, **Mistral**, or **OpenAI**. The template populates the upstream URL, authentication type, and API specification.
+5. Under **Runtime Configuration**, enter the following:
 
    | Field | Description | Example |
    |---|---|---|
    | **Endpoint URL** | The URL of the model provider's API. | `https://api.openai.com/v1` |
    | **API key / Credential** | The credential that the gateway uses to call the model provider. Agents never see this value. | |
 
-5. To control how long the gateway waits for the model provider, expand **Resilience** and set the timeouts:
+6. To control how long the gateway waits for the model provider, expand **Resilience** and set the timeouts:
 
    | Field | Description | Example |
    |---|---|---|
    | **Request Timeout** | How long to wait for a response from the model provider. Increase it for models that take long to respond. | `60s` |
    | **Idle Timeout** | How long an idle connection to the model provider is kept open. | `300s` |
 
-6. To apply guardrails to every call through the provider, add them. For more information, see [Add a guardrail](#add-a-guardrail).
-7. Click **Add provider**.
+7. To apply guardrails to every call through the provider, add them. For more information, see [Add a guardrail](#add-a-guardrail).
+8. If **Deployment Configuration** appears, select the gateways that should expose the provider.
+9. Click **Add provider**.
 
 ## Add a guardrail
 
@@ -56,11 +60,15 @@ A guardrail is a policy that the gateway applies to the calls through the provid
 
 The guardrail is listed under **Guardrails**. To remove it, click the delete icon.
 
+:::note
+Azure Content Safety (content moderation), Granite Guardian (prompt injection), NVIDIA NeMo Guard (content safety), Semantic Prompt Guard, and Semantic Cache are unavailable in Choreo Agent Management Cloud.
+:::
+
 To apply a guardrail to one agent only, add it to the agent's LLM configuration instead. For more information, see [LLM Configurations](../develop/llm-configurations.mdx).
 
 ## Next steps
 
 - To let an agent use the provider, add an LLM configuration to the agent. For more information, see [LLM Configurations](../develop/llm-configurations.mdx).
 - To use a provider for LLM judge evaluators, select it when you create a monitor. For more information, see [Create a Monitor](../evaluation/monitors/create-a-monitor.mdx#select-the-llm-provider).
-- For a walkthrough of registering a provider, including its access control, security, rate limiting, and guardrail settings, see [Register an LLM Service Provider](../../guides/register-llm-service-provider.mdx).
+- To review the provider's access control, security, and rate limiting options, see [Configure provider settings](../../guides/register-llm-service-provider.mdx#configure-provider-settings).
 - For how agents connect to a provider and use it in their code, see [Configure LLM Providers for an Agent](../../guides/configure-agent-llm-configuration.mdx).

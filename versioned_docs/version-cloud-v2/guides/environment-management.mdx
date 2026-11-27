@@ -10,34 +10,40 @@ Environments and deployment pipelines are organization-level constructs that con
 - A **deployment pipeline** defines an ordered promotion path across those environments.
 - Each **project** is assigned one deployment pipeline, and agents in that project are **promoted** along its path.
 
-Both environments and deployment pipelines live under the **Infrastructure** section of the organization-level navigation.
+Environments and deployment pipelines are managed in WSO2 Cloud, not inside Agent Manager. They are shared by every product in your organization, so the environments you create there are the ones Agent Manager deploys agents to.
 
 ## Prerequisites
 
-- access to the WSO2 Agent Manager Cloud Console with the relvant permission to create new enviroments.
+- Access to the WSO2 Cloud Console with a role that can manage environments and deployment pipelines, such as **Admin** or **Platform Engineer**. See [Access Control](../concepts/organization.mdx#access-control).
+
+---
+
+## Open the Organization Settings
+
+1. Sign in to the WSO2 Cloud Console.
+2. Click the app launcher (the grid of dots at the top left), then click **Settings**.
+
+Environments and deployment pipelines are under **INFRASTRUCTURE** in the settings sidebar.
 
 ---
 
 ## Managing Environments
 
-### Navigate to Environments
+### View Environments
 
-1. Log in to the WSO2 Agent Manager Console.
-2. Go to the organization level by closing the projects section in the top navigation.
-3. In the left sidebar, click **Environments** under the **INFRASTRUCTURE** section.
+In the settings sidebar, click **Environments**. The page lists every environment with its name, description, type (**Critical** or **Non-critical**), status, and creation time. The organization's default environment is marked **Default**.
 
-   > The Environments page lists every environment with its display name, associated gateway, and whether it is a production environment.
+### Create an Environment
 
-### Create an environment
-
-1. Click **Create Environment**.
+1. On the Environments page, click **Create Environment**.
 2. Fill in the environment details.
 
    | Field | Description | Example |
    |---|---|---|
-   | **Display Name** *(required)* | Human-readable name shown throughout the Console. | `Production` |
-   | **Name** | The resource name used by the API. Generated automatically from the display name and guaranteed unique. | `production` |
-   | **Production environment** | Mark this environment as production. Production environments are typically the last stage of a pipeline, and deploying to one requires a [separate permission](../concepts/organization.mdx). | — |
+   | **Name** *(required)* | The environment's identifier. It can't be changed after the environment is created. | `staging` |
+   | **Display name** *(required)* | The name shown throughout the Console. | `Staging` |
+   | **Description** | An optional description. | `Pre-production testing` |
+   | **Critical environment** | Turn this on for an environment that runs production-grade deployments. Deploying an agent to a critical environment requires a [separate permission](../concepts/organization.mdx#production-is-a-separate-permission). | — |
 
 3. Click **Create**.
 
@@ -47,21 +53,14 @@ you. Once created, the new environment appears in the list.
 :::note
 The environment also gets its own identity service, which issues
 [AgentID](../concepts/agentid.mdx) credentials to every agent deployed there. It is
-provisioned and operated by WSO2 — there is nothing to install or configure.
+provisioned and operated by WSO2. There is nothing to install or configure.
 :::
 
-### Delete an environment
+### Edit an Environment
 
-1. On the Environments page, open the **Delete** action for the environment you want to remove.
-2. Confirm in the dialog.
-
-   Agent Manager removes the environment and the API Platform Gateway it provisioned for it.
-
-   > **Warning:** Deleting an environment is permanent and cannot be undone. Any agent deployed to the environment will no longer be reachable, and the deployment will be permanently deleted.
-
-:::note
-An environment cannot be deleted while it is still referenced by a deployment pipeline. Remove it from any pipeline first.
-:::
+1. On the Environments page, click the edit icon on the environment's row.
+2. Change the **Display name**, **Description**, or **Critical environment** setting. The **Name** can't be changed.
+3. Click **Save**.
 
 ### Access the Environment ThunderID Console
 
@@ -85,47 +84,48 @@ credential — is done through Agent Manager instead, as described in
 
 A deployment pipeline defines the promotion path agents follow across environments. 
 
-### Navigate to Deployment Pipelines
+### View Deployment Pipelines
 
-1. At the organization level, open the left sidebar.
-2. Click **Deployment Pipelines** under the **INFRASTRUCTURE** section.
+In the settings sidebar, click **Deployment Pipelines**. Each pipeline shows its promotion flow, the number of projects that use it, and whether it is the organization's **Default** pipeline.
 
-   > The page lists each pipeline with its promotion chain rendered.
+### Create a Deployment Pipeline
 
-### Create a deployment pipeline
-
-1. Click **Create Pipeline**.
-2. Under **Pipeline Details**, enter:
-
-   | Field | Description | Example |
-   |---|---|---|
-   | **Display Name** | Human-readable name for the pipeline (required). | `Production Pipeline` |
-   | **Description** | Optional description. | `Dev to Prod promotion path` |
-
-3. In the pipeline chain editor, add environments in the order agents should be promoted through them. The chain must contain at least one environment and must form a single linear path.
+1. On the Deployment Pipelines page, click **Create Pipeline**.
+2. Enter a **Name**. Use lowercase letters, numbers, and hyphens. The name can't be changed later.
+3. Under **Promotion flow**, click **Add Environment** and add environments in the order agents should be promoted through them. Add at least one.
 4. Click **Create**.
 
-### Delete a deployment pipeline
+### View a Pipeline's Details
 
-1. On the Deployment Pipelines page, hover over the pipeline row and click the **Delete**  icon.
+On the Deployment Pipelines page, click a pipeline. Its details page shows the number of environments, the projects that use it, its creation time, and its **Promotion flow**. Under **Projects**, click **Show projects** to list the projects that use the pipeline.
+
+### Edit a Deployment Pipeline
+
+1. On the Deployment Pipelines page, click the edit icon on the pipeline, or click **Edit** on its details page.
+2. Under **Promotion flow**, add environments or remove one with its **×**. The pipeline's name can't be changed.
+3. Click **Save Changes**.
+
+Changing the promotion flow changes the path available to every agent in every project that uses the pipeline.
+
+### Delete a Deployment Pipeline
+
+1. On the Deployment Pipelines page, click the delete icon on the pipeline, or click **Delete** on its details page.
 2. Confirm in the dialog.
 
-   > **Warning:** Deleting a pipeline cannot be undone. Reassign any project that uses the pipeline to a different one first.
-
 :::note
-A deployment pipeline cannot be deleted while it is still referenced by a project. Reassign any project that uses it to a different pipeline first (see [updating a project's deployment pipeline](#update-a-projects-deployment-pipeline)).
+You can't delete the organization's **Default** pipeline. Before deleting any other pipeline, check **Projects** on its details page and move those projects to a different pipeline (see [updating a project's deployment pipeline](#update-a-projects-deployment-pipeline)).
 :::
 
 ---
 
 ## Update a project's deployment pipeline
 
-Every project is assigned a deployment pipeline, which determines the environments its agents can be promoted through.
+Every project is assigned a deployment pipeline, which determines the environments its agents can be promoted through. You change it in the project's settings, not in the organization settings.
 
-1. At the organization level, open the **Projects** list.
-2. Open the **Edit** action for the project you want to change.
-3. In the **Edit Project** drawer, open the **Deployment Pipeline** dropdown. Each option shows the pipeline name and its promotion chain.
-4. Select the pipeline you want and click **Update Project**.
+1. In the WSO2 Cloud Console, open the project. Its **Overview** page shows the current pipeline under **Deployment pipeline**.
+2. Click **Settings**.
+3. Open the **Deployment pipeline** dropdown. Each option shows the pipeline name and its promotion flow, and the organization's default pipeline is marked **Default**.
+4. Select the pipeline you want and click **Save changes**.
 
    > A deployment pipeline is required for a project. Changing it changes the promotion path available to all agents in the project.
 

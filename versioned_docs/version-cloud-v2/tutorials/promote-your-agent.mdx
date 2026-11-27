@@ -36,9 +36,9 @@ development, then staging, then production.
 
 ```mermaid
 flowchart LR
-  B["Build<br/>one image"] -->|"deploy-non-production"| D["Development"]
-  D -->|"promote<br/>deploy-non-production"| S["Staging"]
-  S -->|"promote<br/>deploy-production"| P["Production"]
+  B["Build<br/>one image"] -->|"env-non-production"| D["Development"]
+  D -->|"promote<br/>env-non-production"| S["Staging"]
+  S -->|"promote<br/>env-production"| P["Production"]
 ```
 
 One image is built once and moves rightward. Each hop is a promotion, and the
@@ -52,13 +52,16 @@ environments and update the pipeline later too, exactly like you're doing in
 this chapter.
 :::
 
-If your installation only has a development environment, add staging and
-production now. You need at least two to see a promotion happen.
+If your organization only has a development environment, add staging and
+production now, in WSO2 Cloud: open **Settings** from the app launcher, click
+**Environments**, and click **Create Environment**. Turn on **Critical
+environment** for production. You need at least two environments to see a
+promotion happen. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
 
-After creating the environments, go to the **Deployment Pipelines** view on
-the organization page. If the two new environments aren't visible in the
-promotion chain yet, click **Edit Pipeline** and add them: **Default**,
-**Staging**, and **Production**, in that order. Then click **Save**.
+After creating the environments, click **Deployment Pipelines** in the same
+settings sidebar. If the new environments aren't in your project's pipeline
+yet, click the edit icon on the pipeline and add them to its promotion flow:
+development, then staging, then production. Then click **Save Changes**.
 
 ## Step 2: Configure the LLM and MCP for Your New Environments
 
@@ -186,9 +189,9 @@ promotion won't block on those. In the promotion dialog, set production's own
 file mounts it needs. Same pattern as Step 3, just for production this time.
 
 You may find you *can't* do this. That's the system working as intended.
-Promoting into production requires `amp:agent:deploy-production`,
+Promoting into production requires `amp:agent:env-production`,
 [a separate permission](../concepts/organization.mdx#production-is-a-separate-permission)
-from the `amp:agent:deploy-non-production` you've been using all series. A
+from the `amp:agent:env-non-production` you've been using all series. A
 **Developer** typically has the non-production scope but not the production
 one. A **Platform Engineer** has both.
 

@@ -1,0 +1,170 @@
+---
+sidebar_position: 1
+description: Connect Claude Code, Codex, or another MCP client to the WSO2 Agent Manager MCP server and see which tools and scopes it offers.
+---
+
+# MCP Server
+
+WSO2 Agent Manager runs a MCP server that MCP-capable AI assistants, such as Claude Code and Codex, connect to. Through it, an assistant can list and create projects, create agents, start builds, deploy agents, and attach LLM Service Providers and MCP Proxies to agents.
+
+The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to WSO2 Cloud in the browser, so the assistant acts with your own permissions in your own organization.
+
+## Endpoints
+
+Use the endpoint for the region your organization is in.
+
+| Region | MCP server URL | Sign-in host |
+|--------|----------------|--------------|
+| US | `https://prod-v2-wso2cloud.gateway.cloud.choreolabs.com/agent-manager-service-agent-manager-api/mcp` | `accounts.cloud.choreolabs.com` |
+| EU | `https://prod-v2-eu-wso2cloud.gateway.eu.cloud.choreolabs.com/agent-manager-service-agent-manager-api/mcp` | `accounts.eu.cloud.choreolabs.com` |
+
+:::warning Use the gateway host
+Connect to the `gateway` host shown in the table, not the shorter `api.cloud.choreolabs.com` or `api.eu.cloud.choreolabs.com` alias. The server names the gateway URL as its OAuth resource, and an MCP client that connects through the alias can refuse to sign in because the two do not match.
+:::
+
+## Authentication
+
+| Setting | Value |
+|---------|-------|
+| OAuth client ID | `am-mcp` |
+| Client type | Public client, no client secret |
+| Flow | Authorization Code with PKCE (`S256`) |
+| Redirect URIs | `http://127.0.0.1:33418/callback`, `http://localhost:33418/callback` |
+| Access token lifetime | 1 hour, renewed with a refresh token |
+
+
+## Available Tools
+
+The server provides 23 tools. A tool runs only when your token carries the scope listed for it; otherwise the call returns a permission error. See [Access Control](../concepts/organization.mdx#access-control) for how roles grant scopes.
+
+### Projects
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_projects` | List the projects in your organization, with `limit` and `offset` paging. | `amp:project:read` |
+| `create_project` | Create a project. | `amp:project:create` |
+
+### Agents
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_agents` | List the agents in a project, with each agent's provisioning type (platform-hosted or externally-hosted). | `amp:agent:read` |
+| `list_project_agent_pairs` | List project and agent name pairs across the organization, with optional name filters. Use it to find an agent when you do not know its project. | `amp:agent:read`, `amp:project:read` |
+| `create_external_agent` | Register an externally-hosted agent. Returns the agent identity, an API token, and instrumentation instructions. | `amp:agent:create`, `amp:agent:token-manage` |
+| `create_internal_agent_python` | Create a platform-hosted Python agent from a GitHub repository. Creating the agent starts its first build. | `amp:agent:create` |
+
+### Builds
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_builds` | List an agent's builds with status, image, and timestamps. | `amp:agent:read` |
+| `get_build_details` | Show one build's status, steps, duration, commit, and build parameters. | `amp:agent:read` |
+| `build_agent` | Start a build of an agent from a commit. A successful build deploys automatically. | `amp:agent:build` |
+
+### Deployments
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_deployments` | List an agent's deployments in each environment, with state (`active`, `in-progress`, `failed`, `not-deployed`, or `suspended`). | `amp:agent:read` |
+| `deploy_agent` | Deploy a built image to the first environment of the deployment pipeline, with optional environment variables. | `amp:agent:env-non-production` |
+| `update_deployment_state` | `redeploy` or `undeploy` an agent in an environment. | `amp:agent:suspend`, `amp:agent:env-non-production` |
+
+### Environments
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_environments` | List the organization's environments. Use it to find the environment names other tools take. | `amp:environment:read` |
+
+### LLM Service Providers
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_llm_providers` | List the organization's LLM Service Providers. | `amp:llm-provider:read` |
+| `get_llm_provider` | Show one provider's upstream URL, guardrails, and gateway deployments. Credentials are never returned. | `amp:llm-provider:read` |
+| `list_llm_guardrails` | List the guardrails the organization's gateways can enforce, or one guardrail's parameter schema. | `amp:llm-provider:read` |
+| `add_llm_provider_guardrails` | Add guardrails to all routes of a provider. They apply to every agent that uses it. | `amp:llm-provider:update` |
+| `remove_llm_provider_guardrail` | Remove a guardrail from a provider's routes, by name. | `amp:llm-provider:update` |
+| `add_llm_provider_to_catalog` | Put a provider back in the catalog so agents can be attached to it. | `amp:llm-provider:update` |
+
+### MCP Proxies
+
+An MCP Proxy belongs either to the organization or to a project. A project's proxies include the MCP servers registered for that project and those published from its components. See [MCP Servers](../agent-control-plane/create/mcp-servers.mdx).
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_mcp_proxies` | List the organization's MCP Proxies, with `limit` and `offset` paging. Pass `project_name` to also list that project's own proxies; each project proxy names its owning project. | `amp:mcp-server:read` |
+| `get_mcp_proxy` | Show one proxy's details. For an organization proxy: its upstream URL, tools, guardrails, and environment deployments. For a project proxy: each environment's deployment status, URL, and tools, and whether tool discovery is still pending or has failed. Credentials are never returned. | `amp:mcp-server:read` |
+
+### Agent Configuration
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `attach_llm_provider_to_agent` | Give an agent access to an LLM Service Provider through the AI Gateway, optionally with guardrails for that agent only. | `amp:agent:update` |
+| `attach_mcp_proxy_to_agent` | Give an agent access to an MCP Proxy's tools through the AI Gateway. The proxy must be an organization proxy in the catalog or a proxy of the agent's own project; a proxy from another project is reported as not found. | `amp:agent:update` |
+
+## Connect an AI Assistant
+
+The examples use the US endpoint. For an EU organization, replace the URL with the EU endpoint from [Endpoints](#endpoints).
+
+### Claude Code
+
+1. Add the server:
+
+    ```bash
+    claude mcp add --transport http agent-manager \
+      https://prod-v2-wso2cloud.gateway.cloud.choreolabs.com/agent-manager-service-agent-manager-api/mcp \
+      --client-id am-mcp \
+      --callback-port 33418
+    ```
+
+    - `--transport http` selects the Streamable HTTP transport.
+    - `--client-id am-mcp` uses the registered OAuth client instead of registering a new one.
+    - `--callback-port 33418` makes Claude Code listen on the port the client's redirect URIs name.
+
+2. Start Claude Code and run `/mcp`.
+3. Select **agent-manager**, then select **Authenticate**. A browser opens on the WSO2 Cloud sign-in page.
+4. Sign in to the organization you want the assistant to act on.
+
+After you sign in, `/mcp` shows the server as connected. Claude Code stores the token and refreshes it when it expires.
+
+### Codex
+
+Codex reaches the server through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), which runs the browser sign-in and passes Codex's stdio transport on to the HTTP endpoint. `mcp-remote` needs Node.js and `npx` on your `PATH`.
+
+1. Add this block to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.agent-manager]
+    command = "npx"
+    args = [
+      "-y",
+      "mcp-remote@latest",
+      "https://prod-v2-wso2cloud.gateway.cloud.choreolabs.com/agent-manager-service-agent-manager-api/mcp",
+      "33418",
+      "--callback-path", "/callback",
+      "--static-oauth-client-info", '{"client_id":"am-mcp"}',
+    ]
+    ```
+
+    - `33418` is the callback port the `am-mcp` client registers.
+    - `--callback-path /callback` matches the registered redirect URI; `mcp-remote` uses `/oauth/callback` by default.
+    - `--static-oauth-client-info` uses the registered `am-mcp` client instead of registering a new one.
+
+2. Start a new Codex session and ask for something that calls a tool, for example *List the projects in my organization*. A browser opens on the WSO2 Cloud sign-in page.
+3. Sign in to the organization you want the assistant to act on.
+
+`mcp-remote` caches the token under `~/.mcp-auth/` and reuses it until it expires.
+
+### Other MCP Clients
+
+Any MCP client that supports Streamable HTTP and OAuth 2.0 Authorization Code with PKCE can connect. Configure it with:
+
+- The MCP server URL for your region, from [Endpoints](#endpoints).
+- Client ID `am-mcp`, with no client secret.
+- A callback listener on port `33418` at the path `/callback`.
+
+## Next Steps
+
+- Try a few prompts, for example *List the agents in project X*, *Create a Python agent from this repository*, *Attach the MCP servers of project X to agent Y*, or *Deploy the latest build of agent Y*.
+- See [Create an Agent from Source Code](../agent-control-plane/create/create-from-source-code.mdx) for the same flow in the Console.
+- See [Observer MCP Server](./observer-mcp-server.mdx) to let the same assistant read the traces, logs, and metrics of the agents it deploys.

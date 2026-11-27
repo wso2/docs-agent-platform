@@ -375,6 +375,24 @@
         "tutorials/deploy-the-a2a-notes-agent-sample"
       ],
       "className": "sidebar-section-icon-tutorials"
+    },
+    {
+      "type": "category",
+      "label": "References",
+      "className": "sidebar-section-icon-references",
+      "collapsed": true,
+      "items": [
+        {
+          "type": "doc",
+          "id": "reference/mcp-server",
+          "label": "MCP Server"
+        },
+        {
+          "type": "doc",
+          "id": "reference/observer-mcp-server",
+          "label": "Observer MCP Server"
+        }
+      ]
     }
   ]
 }

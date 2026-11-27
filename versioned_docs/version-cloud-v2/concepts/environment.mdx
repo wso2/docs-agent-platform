@@ -18,6 +18,10 @@ Because agents, gateways, and proxies are all deployed per environment, most of 
 - **Gateway artifacts** — an [LLM Service Provider](./llm-service-provider.mdx) or [MCP Proxy](./mcp-proxy.mdx) deploys one gateway artifact per environment it's configured for, to that environment's active **[Gateway](./gateway.mdx)**.
 - **Identity providers** — the token issuers each environment's gateway trusts. A token accepted in development is not automatically accepted in production. 
 
+## Where You Manage Environments
+
+Environments are managed in WSO2 Cloud and shared by every product in your organization. To create or edit one, open the organization **Settings** from the app launcher and click **Environments**. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
+
 ## Relationship to Deployment Pipelines
 
 Environments don't stand alone — a **[Deployment Pipeline](./deployment-pipeline.mdx)** defines the order agents are allowed to move through a set of environments (for example, requiring a dev deployment before staging, and staging before production).

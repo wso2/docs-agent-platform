@@ -6,63 +6,18 @@ sidebar_position: 5
 
 LLM Service Providers are organization-level resources that represent connections to upstream LLM APIs (e.g., OpenAI, Anthropic, AWS Bedrock). Once registered, they are exposed through an AI Gateway and can be attached to agents across any project in the organization.
 
-:::tip Prefer the CLI?
-You can also create, list, and delete providers from the command line with `amctl llm-provider`.
-:::
-
 ## Prerequisites
 
-- Admin access to the WSO2 Agent Manager Console
-- An active AI Gateway. On Agent Manager Cloud this is provisioned for you — no setup required.
-- API credentials for the target LLM provider (e.g., an OpenAI API key)
+- Access to the [Choreo Agent Management Console](https://console.cloud.choreolabs.com/agent-management/) with permission to create LLM service providers in your organization.
+- API credentials for the model provider.
 
----
+## Register a provider
 
-## Step 1: Navigate to LLM Service Providers
+Follow [Add an LLM service provider](../agent-control-plane/administer/llm-service-providers.mdx#add-an-llm-service-provider) to select a template, enter the upstream credentials, and create the provider.
 
-1. Log in to the WSO2 Agent Manager Console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/).
-2. Go to the Organization level by closing the projects section from the top navigation.
-3. In the left sidebar, click **LLM Service Providers** under the **RESOURCES** section.
+## Configure provider settings
 
-   > The LLM Service Providers page lists all registered providers with their Name, Template, and Last Updated time.
-
----
-
-## Step 2: Add a New Provider
-
-1. Click the **+ Add Service Provider** button.
-2. Fill in the **Basic Details**:
-
-   | Field | Description | Example |
-   |---|---|---|
-   | **Name** *(required)* | A descriptive name for this provider configuration | `Production OpenAI Provider` |
-   | **Version** *(required)* | Version identifier for this provider configuration | `v1.0` |
-   | **Short description** | Optional description of the provider's purpose | `Primary LLM provider for production` |
-   | **Context path** | The API path prefix for this provider (must start with `/`, no trailing slash) | `/my-provider` |
-
-3. Under **Provider Template**, select one of the pre-built provider templates:
-
-   | Template | Description |
-   |---|---|
-   | **Anthropic** | Claude models via Anthropic API |
-   | **AWS Bedrock** | AWS-hosted foundation models |
-   | **Azure AI Foundry** | Azure AI model deployments |
-   | **Azure OpenAI** | OpenAI models hosted on Azure |
-   | **Gemini** | Google Gemini models |
-   | **Mistral** | Mistral AI models |
-   | **OpenAI** | OpenAI models (GPT-4, etc.) |
-
-   Selecting a template auto-populates the upstream URL, authentication type, and API specification.
-
-5. Provide the Credentials for the selected template. (Follow the official documentation of the respective providers for getting an api key/ credential)
-
-4. Click **Add provider**.
-
----
-
-## Step 3: Configure Provider Settings
-
-After creation, the provider detail page appears with six configuration tabs.
+After you create the provider, its details page opens.
 
 ### Overview Tab
 
@@ -129,7 +84,7 @@ Set backend rate limits to protect the upstream LLM API:
 - **Mode**: `Provider-wide` (single limit for all resources) or `Per Resource` (limits per endpoint).
 - **Request Counts**: Configure request-per-window thresholds.
 - **Token Count**: Configure token-per-window thresholds.
-- **Cost**: *(Coming soon)* Cost-based limits.
+- **Cost** sets a **Budget (USD)** per time window.
 
 ---
 
@@ -139,6 +94,8 @@ Attach content safety policies to this provider:
 
 - **Global Guardrails**: Apply to all API resources under this provider. Click **+ Add Guardrail** to attach one.
 - **Resource-wise Guardrails**: Per-operation guardrails for individual API endpoints (e.g., `POST /chat/completions`).
+
+See [Add a guardrail](../agent-control-plane/administer/llm-service-providers.mdx#add-a-guardrail) for configuration steps and Cloud availability.
 
 ---
 

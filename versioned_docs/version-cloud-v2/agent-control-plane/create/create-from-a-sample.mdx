@@ -6,6 +6,17 @@ title: Create an Agent from a Sample
 
 A sample is a ready-made agent that you configure and deploy as a platform-hosted agent. It's a quick way to try the platform.
 
+## Available samples
+
+Under **Start Quickly with a Sample**, you can choose from four Python agents. Each sample requires an OpenAI API key.
+
+| Sample | What it does | Environment variables |
+|---|---|---|
+| **Support Agent** | Answers customer support questions about travel services. | `OPENAI_API_KEY`, `TAVILY_API_KEY`, `DATABASE_URL` |
+| **Hotel Booking Agent** | Helps users find and book hotels. | `OPENAI_API_KEY`, `HOTEL_API_BASE_URL`, `HOTEL_API_TOKEN` |
+| **IT Helpdesk Agent** | Helps employees with technical support questions. | `OPENAI_API_KEY` |
+| **Insurance Support Agent** | Answers questions about insurance policies and claims. | `OPENAI_API_KEY`, `PORT` (prefilled with `8000`) |
+
 ## Steps
 
 1. On the **Add a New Agent** page, under **Start Quickly with a Sample**, click a sample.
@@ -36,6 +47,20 @@ A sample is a ready-made agent that you configure and deploy as a platform-hoste
 4. Click **Create and deploy**.
 
 The agent's **Overview** page opens and the first build starts. For what each field means, see [Create an Agent from Source Code](./create-from-source-code.mdx).
+
+## Deploy a sample from the Choreo Cloud Console
+
+The Choreo Cloud Console also offers a customer support agent for a demo outdoor gear store. The wizard deploys the agent in Agent Management and its Products API and Products MCP server in Integration.
+
+1. Open an empty project in the [Choreo Cloud Console](https://console.cloud.choreolabs.com/).
+2. Under **Try a sample**, click **Deploy sample**.
+3. Review the components on **Overview** and click **Next**.
+4. On **Choose LLM provider**, select an Anthropic LLM service provider from your organization.
+
+   If you need a new provider, follow the link to Agent Management and [register it](../administer/llm-service-providers.mdx#add-an-llm-service-provider) with an Anthropic API key. Ask an organization admin to register the provider if you need permission. The provider then appears in the wizard.
+5. Click **Build and deploy**. The wizard deploys the components to the **Development** environment.
+6. When all components are running, click **Next** to reach **Try it**.
+7. Click **Try the agent** and ask a question such as *What jackets do you have?*
 
 ## Next steps
 

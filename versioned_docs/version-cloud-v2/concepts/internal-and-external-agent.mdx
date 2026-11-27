@@ -10,7 +10,7 @@ Every agent in WSO2 Agent Manager is one of two types, chosen when it's created 
 
 A Platform-Hosted agent's full lifecycle is owned by Agent Manager. The platform builds it from a source repository (or a published [Agent Kind](./agent-kind-and-catalog.mdx)), deploys it to each [environment](./environment.mdx) in its project's [deployment pipeline](./deployment-pipeline.mdx), and can promote or suspend it (see [Agent and Agent Life Cycle](./agent-lifecycle.mdx)).
 
-Because the platform controls the running pod, it can inject configuration directly into it. LLM provider credentials, MCP proxy connection details, and its [AgentID](./agentid.mdx) credential all appear as environment variables the agent code reads at runtime, with no manual wiring required.
+Because the platform controls the running pod, it can inject configuration directly into it. LLM provider credentials, MCP server connection details, and its [AgentID](./agentid.mdx) credential all appear as environment variables the agent code reads at runtime, with no manual wiring required.
 
 ## Externally-Hosted Agents
 
@@ -19,12 +19,12 @@ An Externally-Hosted agent already runs somewhere outside Agent Manager. It can 
 The practical differences that follow from this:
 
 - **No deploy or promote step.** There's nothing for the platform to deploy, so [AgentID](./agentid.mdx) credential provisioning for every environment in the organization begins as soon as the agent is registered, rather than being tied to a deploy.
-- **You wire configuration in yourself.** Since there's no pod to inject into, the platform instead hands you connection details to configure — an API key and OTel endpoint for instrumentation, and endpoint URLs plus API keys for any LLM Service Provider or MCP Proxy the agent uses.
+- **You wire configuration in yourself.** Since there's no pod to inject into, the platform instead hands you connection details to configure — an API key and OTel endpoint for instrumentation, and endpoint URLs plus API keys for any LLM Service Provider or MCP Server the agent uses.
 - **Observability requires instrumenting it.** No traces appear until the agent is connected via the `amp-instrumentation` package (or the manual `init_otel()` path) — see [AMP Instrumentation](../guides/amp-instrumentation.mdx).
 
 ## Where the Distinction Shows Up
 
-Both agent types share the same [organization-level resources](./llm-service-provider.mdx) (LLM providers, MCP proxies, gateways) and the same governance model (RBAC, evaluation, [AgentID](./agentid.mdx)). What the type changes is how much of the agent's operation the platform runs for you
+Both agent types share the same [organization-level resources](./llm-service-provider.mdx) (LLM providers, MCP servers, gateways; MCP servers can also belong to a project) and the same governance model (RBAC, evaluation, [AgentID](./agentid.mdx)). What the type changes is how much of the agent's operation the platform runs for you
 
 For a Platform-Hosted agent, all of it happens inside Agent Manager: you point it at a source repository and the platform builds the image, provisions the workload into the project's namespace, deploys it to each environment in the [deployment pipeline](./deployment-pipeline.mdx), and handles promotion and suspension from the same place. There is no separate CI system, registry, or deployment tooling to operate. For an Externally-Hosted agent none of that applies, you own the build and the deployment.
 

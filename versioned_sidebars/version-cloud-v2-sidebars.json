@@ -337,7 +337,7 @@
             {
               "type": "doc",
               "id": "guides/register-mcp-proxy",
-              "label": "MCP Proxies"
+              "label": "MCP Servers"
             },
             "guides/environment-management",
             "guides/amp-instrumentation"

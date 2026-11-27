@@ -95,7 +95,7 @@ production:
   environments exist, create a new MCP server and switch the agent over to it:
 
   1. Register a new MCP server the same way as in
-     [Chapter 3](./give-the-agent-real-tools.mdx#step-1-register-github-as-an-mcp-proxy),
+     [Chapter 3](./give-the-agent-real-tools.mdx#step-1-register-github-as-an-mcp-server),
      with a new name such as `GitHub All Environments`. Use the same endpoint
      URL and `Authorization` header, and check **Development**, **Staging**,
      and **Production** under **Deployment Configuration**. Then fence the tools
@@ -109,7 +109,7 @@ production:
 
   Remove the old configuration before adding the new one, because both would
   inject the same variable names. Full detail:
-  [Configure Agent MCP Proxies](../guides/configure-agent-mcp-proxies.mdx).
+  [Configure Agent MCP Servers](../guides/configure-agent-mcp-proxies.mdx).
 
 The LLM binding can also point each environment at a different target. Because
 each environment has its own tab under **LLM Configurations**, staging might use
@@ -168,7 +168,7 @@ actual origins, not `*`.
 All three are enforced at the gateway that fronts a platform-hosted agent's
 endpoint. An externally-hosted agent's endpoint is yours, so authentication
 and CORS on it are yours to implement. What you *do* still get from the
-platform is everything on the outbound side: the LLM provider and MCP proxy
+platform is everything on the outbound side: the LLM provider and MCP server
 governance from Chapters 2 and 3, plus AgentID, traces, and evaluation.
 :::
 

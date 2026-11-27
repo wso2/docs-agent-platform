@@ -29,4 +29,4 @@ Since Agent Manager neither builds nor deploys the workload of an [Externally-Ho
 
 ## Relationship to Organization
 
-A Project belongs to exactly one **[Organization](./organization.mdx)**. Resources shared across every project in an organization (**[LLM Service Providers](./llm-service-provider.mdx)**, **[MCP Proxies](./mcp-proxy.mdx)**, **[Gateways](./gateway.mdx)**) are registered at the organization level, not the project level, so any project in that organization can reference them.
+A Project belongs to exactly one **[Organization](./organization.mdx)**. Resources shared across every project in an organization (**[LLM Service Providers](./llm-service-provider.mdx)**, **[Gateways](./gateway.mdx)**) are registered at the organization level, so any project in that organization can reference them. **[MCP Servers](./mcp-proxy.mdx)** can be registered for the organization, where every project's agents can use them, or for a single project, where only that project's agents can use them. A project's MCP servers also include those published from its components.

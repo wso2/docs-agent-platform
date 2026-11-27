@@ -5,7 +5,7 @@ description: Connect Claude Code, Codex, or another MCP client to the WSO2 Agent
 
 # MCP Server
 
-WSO2 Agent Manager runs a MCP server that MCP-capable AI assistants, such as Claude Code and Codex, connect to. Through it, an assistant can list and create projects, create agents, start builds, deploy agents, and attach LLM Service Providers and MCP Proxies to agents.
+WSO2 Agent Manager runs a MCP server that MCP-capable AI assistants, such as Claude Code and Codex, connect to. Through it, an assistant can list and create projects, create agents, start builds, deploy agents, and attach LLM Service Providers and MCP Servers to agents.
 
 The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to WSO2 Cloud in the browser, so the assistant acts with your own permissions in your own organization.
 
@@ -86,21 +86,21 @@ The server provides 23 tools. A tool runs only when your token carries the scope
 | `remove_llm_provider_guardrail` | Remove a guardrail from a provider's routes, by name. | `amp:llm-provider:update` |
 | `add_llm_provider_to_catalog` | Put a provider back in the catalog so agents can be attached to it. | `amp:llm-provider:update` |
 
-### MCP Proxies
+### MCP Servers
 
-An MCP Proxy belongs either to the organization or to a project. A project's proxies include the MCP servers registered for that project and those published from its components. See [MCP Servers](../agent-control-plane/create/mcp-servers.mdx).
+An MCP Server belongs either to the organization or to a project. A project's MCP servers include those registered for that project and those published from its components. See [MCP Servers](../agent-control-plane/create/mcp-servers.mdx).
 
 | Tool | Description | Required scope |
 |------|-------------|----------------|
-| `list_mcp_proxies` | List the organization's MCP Proxies, with `limit` and `offset` paging. Pass `project_name` to also list that project's own proxies; each project proxy names its owning project. | `amp:mcp-server:read` |
-| `get_mcp_proxy` | Show one proxy's details. For an organization proxy: its upstream URL, tools, guardrails, and environment deployments. For a project proxy: each environment's deployment status, URL, and tools, and whether tool discovery is still pending or has failed. Credentials are never returned. | `amp:mcp-server:read` |
+| `list_mcp_proxies` | List the organization's MCP Servers, with `limit` and `offset` paging. Pass `project_name` to also list that project's own MCP servers; each project MCP server names its owning project. | `amp:mcp-server:read` |
+| `get_mcp_proxy` | Show one MCP server's details. For an organization MCP server: its upstream URL, tools, guardrails, and environment deployments. For a project MCP server: each environment's deployment status, URL, and tools, and whether tool discovery is still pending or has failed. Credentials are never returned. | `amp:mcp-server:read` |
 
 ### Agent Configuration
 
 | Tool | Description | Required scope |
 |------|-------------|----------------|
 | `attach_llm_provider_to_agent` | Give an agent access to an LLM Service Provider through the AI Gateway, optionally with guardrails for that agent only. | `amp:agent:update` |
-| `attach_mcp_proxy_to_agent` | Give an agent access to an MCP Proxy's tools through the AI Gateway. The proxy must be an organization proxy in the catalog or a proxy of the agent's own project; a proxy from another project is reported as not found. | `amp:agent:update` |
+| `attach_mcp_proxy_to_agent` | Give an agent access to an MCP Server's tools through the AI Gateway. The MCP server must be an organization MCP server in the catalog or one of the agent's own project; an MCP server from another project is reported as not found. | `amp:agent:update` |
 
 ## Connect an AI Assistant
 

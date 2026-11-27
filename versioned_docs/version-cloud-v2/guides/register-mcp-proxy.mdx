@@ -2,9 +2,9 @@
 sidebar_position: 6
 ---
 
-# Register an MCP Proxy
+# Register an MCP Server
 
-An **MCP Proxy** is an organization-level resource that fronts one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, the proxy connects to a backend MCP server, discovers the tools, resources, and prompts it exposes, and publishes a governed endpoint through that environment's AI Gateway. Once registered, an MCP proxy can be secured, access-controlled, and rewritten independently per environment, and attached to agents across any project in the organization.
+An **MCP Server** is a resource, registered for the organization or for one project, that fronts one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, the proxy connects to a backend MCP server, discovers the tools, resources, and prompts it exposes, and publishes a governed endpoint through that environment's AI Gateway. Once registered, an MCP server can be secured, access-controlled, and rewritten independently per environment, and attached to agents across any project in the organization.
 
 Proxying an MCP server through the platform lets you:
 
@@ -14,9 +14,9 @@ Proxying an MCP server through the platform lets you:
 - Point each environment at a different backend and apply gateway policies per environment.
 - Apply additional gateway policies and expose governed, per-environment endpoints.
 
-## How the proxy is deployed
+## How an MCP Server Is Deployed
 
-An MCP proxy is **multi-environment**. You attach one or more **endpoints** to it, and each endpoint serves one or more environments. The proxy deploys **one gateway artifact per configured environment** to that environment's active AI Gateway — you do not pick a gateway manually.
+An MCP server is **multi-environment**. You attach one or more **endpoints** to it, and each endpoint serves one or more environments. The proxy deploys **one gateway artifact per configured environment** to that environment's active AI Gateway — you do not pick a gateway manually.
 
 - Environments **with** an endpoint get a deployed artifact on their gateway.
 - Environments **without** an endpoint are simply left unconfigured (no artifact, and agents referencing the proxy there receive empty connection values).
@@ -37,19 +37,19 @@ Agents do not embed the proxy — they **reference** it. Each agent resolves the
 
 ---
 
-## Step 1: Navigate to MCP Proxies
+## Step 1: Navigate to MCP Servers
 
 1. Log in to the WSO2 Agent Manager Console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/).
 2. Go to the Organization level by closing the projects section from the top navigation.
-3. In the left sidebar, click **MCP Proxies** under the **Resources** section.
+3. In the left sidebar, click **MCP servers** under the **Resources** section.
 
-   > The MCP Proxies page lists all registered proxies with their Name, Description, Version, and Last Updated time. Use the search bar to filter by name, version, context, or status.
+   > The MCP Servers page lists all registered proxies with their Name, Description, Version, and Last Updated time. Use the search bar to filter by name, version, context, or status.
 
 ---
 
-## Step 2: Create a Proxy
+## Step 2: Create the MCP Server
 
-1. Click the **Add MCP Proxy** button. The create form opens.
+1. Click **Register MCP server**. The **Register MCP Server** page opens.
 2. Under **Proxy Details**, fill in the proxy's identity:
 
    | Field | Description | Example |
@@ -63,7 +63,7 @@ Agents do not embed the proxy — they **reference** it. Each agent resolves the
 
    Click **Add Endpoint** and complete the dialog (see [Step 3](#step-3-add-an-endpoint)). Repeat for each backend you want to serve different environments.
 
-4. Click **Create**. The proxy is created, its per-environment artifacts are deployed to the matching gateways, and you are returned to the MCP Proxies list.
+4. Click **Create**. The proxy is created, its per-environment artifacts are deployed to the matching gateways, and you are returned to the MCP Servers list.
 
 ---
 
@@ -71,7 +71,7 @@ Agents do not embed the proxy — they **reference** it. Each agent resolves the
 
 The **Add Endpoint** dialog maps a backend MCP server to one or more environments.
 
-1. Enter the **MCP Proxy Endpoint URL** *(required)* — the upstream MCP server this endpoint connects to (e.g., `https://api.example.com/mcp`).
+1. Enter the **MCP Server Endpoint URL** *(required)* — the upstream MCP server this endpoint connects to (e.g., `https://api.example.com/mcp`).
 2. *(Optional)* If the upstream server requires authentication, expand **Advanced Configurations** and fill in the header sent to the endpoint:
 
    | Field | Description | Example |
@@ -93,13 +93,13 @@ The **Add Endpoint** dialog maps a backend MCP server to one or more environment
 
 ---
 
-## Step 4: Configure Proxy Settings
+## Step 4: Configure MCP Server Settings
 
 Click a proxy in the list to open its detail page. The header shows the proxy name, version, context, and description (click the edit icon to rename or re-version).
 
 Configuration lives on the endpoints, so the detail page has two controls above the tabs:
 
-- **Environment** selector — choose an environment to view and edit the configuration of the endpoint that serves it. Only environments that have an endpoint appear here; if none are configured, the page shows *"This MCP proxy has no environments configured."* Because one endpoint can serve several environments, a change you make with one environment selected applies to every environment sharing that endpoint.
+- **Environment** selector — choose an environment to view and edit the configuration of the endpoint that serves it. Only environments that have an endpoint appear here; if none are configured, the page shows *"This MCP server has no environments configured."* Because one endpoint can serve several environments, a change you make with one environment selected applies to every environment sharing that endpoint.
 - **Manage Endpoints** — opens the **Manage Endpoints** dialog to add, edit, or remove endpoints after creation. Editing an endpoint updates the upstream URL, authentication, and capabilities for every environment it serves; environments left without an endpoint become unconfigured.
 
 Configuration is organized into the tabs below. When you change a setting, an **unsaved changes** banner appears — click **Save** to persist or **Cancel**/**Discard** to revert. Every tab except **Overview** edits the endpoint serving the selected environment — **Manage Tools** additionally shows the endpoint's discovered capabilities alongside its editable access-control settings.
@@ -125,7 +125,7 @@ Manage the upstream connection for the selected environment:
 
 | Field | Description | Example |
 |---|---|---|
-| **MCP Proxy Endpoint URL** *(required)* | The upstream MCP server endpoint | `https://api.example.com/mcp` |
+| **MCP Server Endpoint URL** *(required)* | The upstream MCP server endpoint | `https://api.example.com/mcp` |
 | **Header** | *(under Advanced Configurations)* HTTP header sent to the upstream server | `Authorization` |
 | **Value** | The credential value for that header | `Bearer sk-...` |
 
@@ -202,9 +202,24 @@ Attach additional gateway policies for the selected environment, beyond the mana
 
 ---
 
-## Verifying the Proxy
+## Register an MCP Server for a Project
 
-The registered proxy appears in the **MCP Proxies** list with its name, description, and version. Open the detail page and, for each configured environment, confirm on the **Overview** tab that **Deployment** shows `Deployed` and check the **Manage Tools** tab for the expected tools, resources, and prompts. The endpoint agents actually use is exposed to them when they attach the proxy — see [Configure MCP Proxies for an Agent](./configure-agent-mcp-proxies.mdx).
+A project MCP server can be used only by the agents in that project. Register one the same way as an organization MCP server, from the project instead:
+
+1. Open the project. In the left navigation, click **MCP servers**.
+
+   > The page lists the MCP servers the project's agents can use: the organization's, the project's own, and those published from the project's components. Filter the list with **All**, **Project**, or **From organization**. Each server is labeled **Project** or **Organization**.
+
+2. Click **Register MCP server**. The **Register MCP Server** page opens with the same form as for an organization MCP server.
+3. Complete [Step 2](#step-2-create-the-mcp-server) and [Step 3](#step-3-add-an-endpoint).
+
+Each environment the endpoint is assigned to gets its own deployment of the project MCP server. Agent Manager discovers that deployment's tools through its gateway once it is deployed. Open the server from the list to see each environment's URL and tools.
+
+An MCP server published from a component appears in the list without being registered here. It shows up once its component is published to an environment.
+
+## Verify the MCP Server
+
+The registered proxy appears in the **MCP Servers** list with its name, description, and version. Open the detail page and, for each configured environment, confirm on the **Overview** tab that **Deployment** shows `Deployed` and check the **Manage Tools** tab for the expected tools, resources, and prompts. The endpoint agents actually use is exposed to them when they attach the proxy — see [Configure MCP Servers for an Agent](./configure-agent-mcp-proxies.mdx).
 
 ---
 
@@ -214,7 +229,7 @@ The registered proxy appears in the **MCP Proxies** list with its name, descript
 - The **context** forms part of each environment's endpoint. Keep it unique per organization.
 - Upstream credentials entered on the **Connection** tab (or the endpoint dialog) are stored securely and shown masked; they are never returned in plain text.
 - Access control (`mcp-acl-list`) and rewrite (`mcp-rewrite`) require the corresponding policy to be available on the selected environment's active gateway; otherwise saving on those tabs is disabled.
-- Client API keys are not generated on the proxy itself. They are minted and managed per agent configuration and environment when a proxy is attached to an agent — see [Configure MCP Proxies for an Agent](./configure-agent-mcp-proxies.mdx).
+- Client API keys are not generated on the proxy itself. They are minted and managed per agent configuration and environment when a proxy is attached to an agent — see [Configure MCP Servers for an Agent](./configure-agent-mcp-proxies.mdx).
 - Changing a proxy does not redeploy the agents that reference it. Each agent resolves the proxy's endpoint at its own next deployment.
 - The proxy is published using MCP specification version `2025-06-18`.
 
@@ -222,4 +237,4 @@ The registered proxy appears in the **MCP Proxies** list with its name, descript
 
 ## Next Steps
 
-Once a proxy is registered, attach it to an agent so the agent can use its tools, resources, and prompts — see [Configure MCP Proxies for an Agent](./configure-agent-mcp-proxies.mdx).
+Once a proxy is registered, attach it to an agent so the agent can use its tools, resources, and prompts — see [Configure MCP Servers for an Agent](./configure-agent-mcp-proxies.mdx).

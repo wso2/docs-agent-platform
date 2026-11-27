@@ -32,7 +32,7 @@ The **Infrastructure** section of the same menu holds organization-wide infrastr
 
 **[Projects](./project.mdx)** are the containers your agents live in. Every agent belongs to exactly one project, and a project is also what a **[Deployment Pipeline](./deployment-pipeline.mdx)** attaches to, so the promotion path an agent follows is decided at the project level rather than per agent. An organization typically holds several projects, one per application or team.
 
-**[LLM Service Providers](./llm-service-provider.mdx)** are defined at the organization level, so any agent in any project can reference them. **[MCP Proxies](./mcp-proxy.mdx)** can be defined for the organization, where any project's agents can use them, or for a single project, where only that project's agents can use them.
+**[LLM Service Providers](./llm-service-provider.mdx)** are defined at the organization level, so any agent in any project can reference them. **[MCP Servers](./mcp-proxy.mdx)** can be defined for the organization, where any project's agents can use them, or for a single project, where only that project's agents can use them.
 
 **[Environments](./environment.mdx)** and **[Gateways](./gateway.mdx)** are organization-level. An environment has at most one ingress gateway for inbound calls to its agents, and may have several egress gateways hosting outbound LLM and MCP traffic. Identity providers are attached to those gateways, and determine which token issuers each environment trusts.
 
@@ -60,7 +60,7 @@ WSO2 Cloud ships these roles, each with a group of the same name:
 |------|----------------|
 | **Admin** | Full access to every WSO2 Cloud product, including members, billing, and settings. |
 | **Platform Engineer** | Shared infrastructure: environments, gateways, deployment pipelines, the LLM and MCP catalog, evaluators, and sign-in setup. Also deploys agents to production. |
-| **Developer** | Builds, tests, and deploys agents. Full control over projects and agents, and connects agents to LLM Service Providers and MCP Proxies without being able to register them. |
+| **Developer** | Builds, tests, and deploys agents. Full control over projects and agents, and connects agents to LLM Service Providers and MCP Servers without being able to register them. |
 | **Viewer** | Read-only access. |
 | **API Publisher** | API Platform only: designs, publishes, and manages APIs. It grants no Agent Manager permissions. |
 

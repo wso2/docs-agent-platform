@@ -92,7 +92,7 @@ The `client_id` is stored in Agent Manager's own database for both agent types. 
 
 - **Platform-Hosted agents** need their secret available again on every deploy, promote, and pod
   restart, so it is stored in Agent Manager's secret store, the same pluggable backend used for
-  other runtime secrets like MCP proxy credentials, and never written to Agent Manager's
+  other runtime secrets like MCP server credentials, and never written to Agent Manager's
   database or logs in plain text.
 - **Externally-Hosted agents** have no running workload for Agent Manager to keep a secret in
   sync with, so nothing is stored at all. Each time you generate a secret from the console,

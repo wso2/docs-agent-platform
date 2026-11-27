@@ -2,20 +2,39 @@
 sidebar_position: 6
 ---
 
-# MCP Proxy
+# MCP Server
 
-An **MCP Proxy** is an organization-level resource that fronts one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, the proxy connects to a backend MCP server, discovers the tools, resources, and prompts it exposes, and publishes a governed endpoint through that environment's platform Gateway. Once registered, an MCP proxy can be secured, access-controlled, and rewritten independently per environment, and attached to agents across any project in the organization.
+An **MCP Server** in Agent Manager is a governed entry point to one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, Agent Manager connects to the upstream server, discovers the tools, resources, and prompts it exposes, and publishes an endpoint through that environment's platform [Gateway](./gateway.mdx). Agents call the tools through that gateway endpoint with a platform-issued key, never with the upstream server's own credentials, so access can be secured, controlled, and rewritten per environment.
 
-## How the proxy is deployed
+Earlier versions of Agent Manager called this resource an **MCP Proxy**. The API and the platform MCP server tools still use that name, for example the `/mcp-proxies` paths and the `list_mcp_proxies` tool.
 
-An MCP proxy is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. The proxy deploys one gateway artifact per configured environment, onto an egress capable [Gateway](./gateway.mdx) in that environment. When the environment has exactly one egress gateway the platform infers it and you pick nothing; when it has more than one, the target gateway must be specified as the endpoint is deployed — see [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
+## Organization and Project MCP Servers
+
+An MCP server belongs either to the organization or to one [project](./project.mdx):
+
+| | Organization MCP server | Project MCP server |
+|---|---|---|
+| **Registered** | In the organization's **MCP servers** page, under **Resources** | In the project's **MCP servers** page, or published from one of the project's components |
+| **Usable by** | Agents in any project, once it is in the catalog | Agents in that project only |
+
+A project's **MCP servers** page lists both kinds. Filter it with **All**, **Project**, or **From organization**; each server is labeled **Project** or **Organization**.
+
+An agent can use an organization MCP server, or an MCP server of its own project. A project MCP server is not visible to other projects: attaching one to an agent in a different project fails as if the server did not exist.
+
+For a project MCP server, each environment it is deployed to has its own binding, with its own URL and tools. Agent Manager discovers the tools of each binding through its gateway once it is deployed, unless the component that published the server supplied them.
+
+## How an MCP Server Is Deployed
+
+An MCP server is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. Agent Manager deploys one gateway artifact per configured environment, onto an egress-capable [Gateway](./gateway.mdx) in that environment. When the environment has exactly one egress gateway the platform infers it and you pick nothing; when it has more than one, the target gateway must be specified as the endpoint is deployed. See [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
 
 - Environments with an endpoint get a deployed artifact on their gateway.
-- Environments without an endpoint are simply left unconfigured (no artifact, and agents referencing the proxy there receive empty connection values).
-- If an environment has no egress gateway mapped to it yet, that environment is skipped and deployed on the next proxy update once one is available.
+- Environments without an endpoint are left unconfigured: there is no artifact, and agents that reference the MCP server there receive empty connection values.
+- If an environment has no egress gateway mapped to it yet, that environment is skipped and deployed on the next update once one is available.
 
-### Where configuration lives
+### Where Configuration Lives
 
-The endpoint is the unit of configuration. Its upstream connection, capabilities, access control, rewrite, security are all stored on the endpoint, not on the environment. An environment is deployed with the configuration of the endpoint it is bound to, so several environments can share one endpoint's config, and editing that endpoint changes all of them. To vary settings across environments, put them on separate endpoints. The one exception is **scopes** (used for agent authorization): they are defined once for the whole proxy and apply across every endpoint and environment.
+The endpoint is the unit of configuration. Its upstream connection, capabilities, access control, rewrite, and security are all stored on the endpoint, not on the environment. An environment is deployed with the configuration of the endpoint it is bound to, so several environments can share one endpoint's configuration, and editing that endpoint changes all of them. To vary settings across environments, put them on separate endpoints. The one exception is **scopes** (used for agent authorization): they are defined once for the whole MCP server and apply across every endpoint and environment.
 
-Each agent resolves the proxy's per-environment endpoint at its own deploy time, so changing a proxy does not automatically redeploy the agents that use it; they pick up the change on their next deployment.
+Each agent resolves the MCP server's per-environment endpoint at its own deploy time, so changing an MCP server does not automatically redeploy the agents that use it; they pick up the change on their next deployment.
+
+To register and manage MCP servers in the Console, see [MCP Servers](../agent-control-plane/create/mcp-servers.mdx).

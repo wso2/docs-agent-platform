@@ -29,12 +29,12 @@ it's the IT team's tracker; in practice, any repository you can read works.
 Note its `owner/repo` name; you'll hand it to the agent in Step 4 so it knows
 where to look. Grant the token read access; nothing here needs write scope.
 
-## Step 1: Register GitHub as an MCP Proxy
+## Step 1: Register GitHub as an MCP Server
 
-MCP proxies are organization-level resources, like LLM providers. First, go to
+MCP servers can be registered for the whole organization, like LLM providers, or for a single project. This tutorial registers one for the organization. First, go to
 the organization view in the Agent Manager console by clicking the organization
 icon next to the Agent Manager logo. Go to
-**MCP Servers** under **Resources** and click **Register MCP Server**.
+**MCP servers** under **Resources** and click **Register MCP server**.
 
 | Field | Value |
 |---|---|
@@ -65,7 +65,7 @@ you check.
 Click **Add Endpoint**. Agent Manager will discover the server's tools automatically.
 
 Your PAT is now stored on the proxy, centrally, and the agent will never see it.
-Full field reference is at [Register an MCP Proxy](../guides/register-mcp-proxy.mdx).
+Full field reference is at [Register an MCP Server](../guides/register-mcp-proxy.mdx).
 
 :::note Environments you add later
 This MCP server covers only the environments that exist when you create it.
@@ -97,7 +97,7 @@ allow only what the helpdesk agent needs:
 | `issue_read` | Read it for status and any documented workaround |
 
 Three tools. Everything else is now unreachable. Not discouraged by a
-prompt. Unreachable, because the proxy does not expose the other tools via the [MCP proxy](../concepts/mcp-proxy.mdx).
+prompt. Unreachable, because the proxy does not expose the other tools via the [MCP server](../concepts/mcp-proxy.mdx).
 
 That control matters most for the tools an agent could plausibly be tricked
 into using: actions that sound reasonable on the surface but exceed the
@@ -110,7 +110,7 @@ flowchart LR
 
   subgraph C["1 · A tool call"]
     direction LR
-    A2["Agent<br/>holds GITHUB_MCP_API_KEY"] -->|"X-API-Key"| G2["MCP Proxy"]
+    A2["Agent<br/>holds GITHUB_MCP_API_KEY"] -->|"X-API-Key"| G2["MCP Server"]
     G2 -->|"Authorization: Bearer PAT"| U2["GitHub MCP server"] --> H["GitHub"]
   end
 ```
@@ -235,7 +235,7 @@ applies to every agent attached to the proxy. That makes the proxy the only
 control over tool access: every agent that uses it gets the same tools.
 
 Now suppose a second agent needs more than the helpdesk agent does. With AgentID,
-tool access moves from the proxy to each agent. You keep one `GitHub` MCP Proxy
+tool access moves from the proxy to each agent. You keep one `GitHub` MCP Server
 and attach it to as many agents as you need. Each tool is guarded by a scope, and
 an agent can call only the tools whose scopes its roles grant. The helpdesk agent
 holds a read-only scope, while an L2 triage agent attached to the same proxy
@@ -306,7 +306,7 @@ export AMP_AGENTID_SCOPES="<available scopes>"
 amp-instrument python main.py
 ```
 
-[OAuth (AgentID)-Secured Proxies](../guides/configure-agent-mcp-proxies.mdx#configuring-an-mcp-proxy-for-an-external-agent)
+[OAuth (AgentID)-Secured Proxies](../guides/configure-agent-mcp-proxies.mdx#configuring-an-mcp-server-for-an-external-agent)
 shows where each value appears.
 
 </TabItem>
@@ -328,7 +328,7 @@ Five things changed, and none of them touched the agent's code:
 - **A real external system, reachable.** The agent can now search AcmeCorp's
   actual GitHub issue tracker instead of guessing from mock data.
 - **A credential the agent never sees.** The GitHub personal access token lives
-  on the MCP proxy. The agent authenticates with a platform-issued key instead,
+  on the MCP server. The agent authenticates with a platform-issued key instead,
   and the proxy swaps in the real PAT on the way out.
 - **A fixed, small toolset.** Denied tools aren't just discouraged by a prompt.
   They're never exposed to the agent at all. It can search and read issues.

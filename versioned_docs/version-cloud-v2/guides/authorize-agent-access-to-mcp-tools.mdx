@@ -4,7 +4,7 @@ sidebar_position: 11
 
 # Authorize Agent Access to MCP Tools
 
-When you front an MCP server through the platform as an **identity-secured MCP proxy**, you decide which agents may invoke which tools. This guide walks through the full authorization workflow: you register the resource, define permissions over its tools, bundle those permissions into roles, and grant the roles to agents (or groups). The result is that two agents can hit the *same* proxy endpoint and get *different* capabilities.
+When you front an MCP server through the platform as an **identity-secured MCP server**, you decide which agents may invoke which tools. This guide walks through the full authorization workflow: you register the resource, define permissions over its tools, bundle those permissions into roles, and grant the roles to agents (or groups). The result is that two agents can hit the *same* proxy endpoint and get *different* capabilities.
 
 ## The model
 
@@ -12,7 +12,7 @@ Agent authorization is built from four pieces:
 
 | Piece | What it is |
 | --- | --- |
-| **Resource** | The thing being accessed. Today this is an **MCP proxy**. Its handle becomes the prefix for every scope you define on it. |
+| **Resource** | The thing being accessed. Today this is an **MCP server**. Its handle becomes the prefix for every scope you define on it. |
 | **Permission (scope)** | An action on the resource, mapped to a set of the resource's tools. A scope is named `<proxy>:<action>` — e.g. `booking:read`. |
 | **Role** | A named bundle of scopes, defined in an environment. |
 | **Assignment** | A role granted to an **agent** or a **group**. |
@@ -45,7 +45,7 @@ This guide uses the `amctl api` command to call the control plane directly, whic
 
 ## Step 1: Register the resource
 
-Register the upstream MCP server as an identity-secured MCP proxy. The proxy's `id` becomes the scope prefix and a resource server in the environment's Thunder identity provider, and — with a `context` — the gateway path.
+Register the upstream MCP server as an identity-secured MCP server. The proxy's `id` becomes the scope prefix and a resource server in the environment's Thunder identity provider, and — with a `context` — the gateway path.
 
 First discover the upstream server's tools:
 
@@ -77,7 +77,7 @@ amctl api /orgs/default/mcp-proxies -X POST --input - <<'JSON'
 JSON
 ```
 
-You can also register a proxy through the Console — see [Register an MCP Proxy](./register-mcp-proxy.mdx) — but the rest of this guide uses the API for the parts that define authorization.
+You can also register a proxy through the Console — see [Register an MCP Server](./register-mcp-proxy.mdx) — but the rest of this guide uses the API for the parts that define authorization.
 
 ---
 
@@ -182,5 +182,5 @@ Changing who can do what is now a matter of editing scopes and role assignments 
 ## Next steps
 
 - [AgentID](../concepts/agentid.mdx) — the identity each agent is issued, and how these scopes attach to it.
-- [Register an MCP Proxy](./register-mcp-proxy.mdx) — the full proxy registration reference, including the Console flow.
-- [Configure Agent MCP Proxies](./configure-agent-mcp-proxies.mdx) — attach a proxy to an agent so it can call the tools.
+- [Register an MCP Server](./register-mcp-proxy.mdx) — the full proxy registration reference, including the Console flow.
+- [Configure Agent MCP Servers](./configure-agent-mcp-proxies.mdx) — attach a proxy to an agent so it can call the tools.

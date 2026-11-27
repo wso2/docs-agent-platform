@@ -1,0 +1,305 @@
+---
+sidebar_position: 1
+description: "Learn what MCP tool poisoning is, what it can lead to, and how the MCP Access Control rule on an MCP server in Agent Control Plane reduces your exposure."
+---
+
+# Reduce MCP Tool Poisoning Risk with the MCP Access Control Policy
+
+## Overview
+
+MCP tool poisoning is a prompt-injection technique. A malicious or compromised MCP server embeds malicious instructions in tool metadata, such as a tool's `description` field. An MCP client may pass that metadata to an LLM. A person reviewing a tool list in a UI can miss wording that a model still reads.
+
+This guide explains what tool poisoning is and why it is a real risk for any agent connected to an MCP server that you do not fully control. It also explains how setting the **MCP Access Control** rule on an MCP server in Agent Control Plane reduces your exposure to it.
+
+The MCP Access Control policy is one layer of defense, not a complete solution. This guide describes it in that context throughout.
+
+The walkthrough uses a clean public reference server, so you can follow the configuration and filtering flow without interacting with intentionally malicious tool definitions. In the walkthrough, you allowlist the trusted tool to show how the gateway evaluates and permits approved tools.
+
+To see the same controls applied to an intentionally poisoned tool, use the [companion sample](#try-the-sample). The sample runs locally and includes a poisoned tool definition, so you can observe the gateway detecting and filtering it out.
+
+## What Is MCP Tool Poisoning?
+
+The Model Context Protocol (MCP) lets a client discover the tools of a server by calling `tools/list`. Each tool definition in the response includes a `name`. It can also include a human-readable `description` and other metadata such as `annotations`, all supplied by the server. The `description` tells a person or a model what the tool does and when to use it.
+
+MCP itself does not specify whether, when, or how often a client passes that description to the underlying model. That is a client or host implementation choice, not a protocol requirement. The MCP specification explicitly requires clients to treat tool annotations as untrusted unless they come from trusted servers. More generally, do not automatically treat server-supplied tool metadata as trusted instructions.
+
+If a client incorporates a malicious tool description into the context of the model, that text can become a prompt-injection vector. Tool poisoning is what happens when server-supplied tool metadata is weaponized. A malicious or compromised server embeds directives in it, such as instructions to read a local file, ignore a previous rule, or send data somewhere. These directives are worded to survive a quick skim of tool names in a UI. A client that forwards the full text gives the model something to act on.
+
+The tool still looks completely ordinary: the same name, a plausible-sounding purpose, and a normal input schema. Only the full metadata text gives it away, and that is exactly the part a busy reviewer is least likely to read in full.
+
+## Why It Matters
+
+Tool poisoning is dangerous less because of any one technique it uses and more because of where it sits. It sits inside server-supplied metadata that a client may pass to a model, and that a person rarely audits closely. A poisoned description is a prompt-injection attempt. On its own, it has no way to reach outside the conversation. What it can lead to depends entirely on what the agent already has:
+
+- **It can attempt to trigger data exfiltration if the agent has the means.** A poisoned description can try to persuade the model to use another tool the agent already has access to, such as one that reads local files or environment variables. It can then try to disclose that content through some other capability that the agent is already permitted to use. The description itself cannot read anything. It can only try to talk the model into using capabilities and permissions the agent already has.
+- **It can lead to unintended use of other tools.** An agent that already has several tools available can be steered by one poisoned description into invoking another tool. That tool serves a purpose the person operating the agent never asked for, though still within the existing permissions of the agent. The exact behavior depends on the client or host implementation. This is not a case of the injection bypassing an authorization boundary. It is the model being manipulated into using a capability it was already authorized to use.
+- **It is not a one-time check.** MCP servers can change their tools between sessions. A compromised upstream, a malicious update, or a rogue maintainer can all result in the description of a tool changing after you last reviewed it. The next `tools/list` call of a client reflects whatever the server currently returns, so a server that was clean when you first reviewed it is not guaranteed to stay that way.
+- **It does not scale to manual review.** Reading the full metadata of every tool, for every server an agent connects to, is not something a person can keep doing as the number of connected servers grows. A client that forwards this metadata to a model does not skip that step just because a human did not read it.
+
+## Why Gateway-Level Enforcement Helps, as Part of Defense in Depth
+
+Tool poisoning has no single point of defense. A client or host should already treat server-supplied tool metadata as untrusted, per the guidance in the MCP specification. An operator should review the tools of a server before connecting to it at all.
+
+On top of both of those, an API gateway has long been the place where organizations enforce access control for REST and GraphQL APIs, rather than relying solely on every backend to behave and every client to check. MCP benefits from the same governance point. Putting an MCP server in front of an upstream MCP server lets a gateway enforce an organization-wide capability allowlist on every request, independent of what any individual client does.
+
+This adds a layer where the capabilities exposed through the gateway can be restricted according to centrally configured access-control policies, rather than relying solely on whatever the upstream MCP server makes available. This works **on top of**, not instead of, client-side caution and MCP authentication and authorization controls.
+
+The policy does not attempt to detect or remove prompt-injection content from tool descriptions, since reliably identifying adversarial text can be difficult and attack wording can vary. Instead, it limits which MCP capabilities are available to the client. When you configure it in deny mode with an explicit exception list, the policy implements an allowlist. Capabilities that are not explicitly permitted are denied and filtered from capability-list responses.
+
+## How the MCP Access Control Policy Reduces This Risk
+
+The **MCP Access Control** rule, which the Console shows on the **Manage Tools** tab of an MCP server, allows or denies MCP capabilities (tools, resources, and prompts) by name. It uses a mode (`allow` or `deny`) plus a list of exceptions per capability type. Configured as `deny` with a short exception list, it filters `tools/list` responses and rejects direct calls to anything not on the list, regardless of what the metadata of that capability says.
+
+At the policy configuration level, a capability type left out of the configuration entirely is unrestricted. Configure `tools`, `resources`, and `prompts` independently, for whichever types your upstream server actually exposes. Step 3 shows how this plays out in the Console, where the exceptions list is the **Allowed Resources** column.
+
+:::warning What This Policy Does Not Do
+The MCP Access Control policy has no visibility into the `description` or `annotations` text of a tool. It does not scan for prompt-injection phrasing or otherwise evaluate content. It only checks whether the *name* of a capability is on the exception list.
+
+That is precisely why it is effective here: you do not need to detect that a tool is poisoned. You only need to *not* have added it to the exceptions list. But the reverse also holds: allowlisting a tool you have not actually reviewed gives it the same free pass. The policy enforces a decision, but it does not make the decision for you. It also does not validate or sanitize the metadata of a capability once that capability is allowlisted.
+:::
+
+Two related controls show up alongside it on an MCP server, and it is worth knowing where they stop:
+
+- The **Security** tab controls who can call the MCP server, with an API key.
+- The **Policies** tab adds policies such as **MCP Rate Limit** and **MCP Spec Validation**.
+
+Neither inspects the description or annotations of a tool either. No MCP control in this platform scans capability content for malicious instructions. Allowlisting by name is the primary technique it gives you against tool poisoning specifically. It works by reducing which capabilities can reach a client at all, not by identifying which ones are malicious.
+
+### Practices Beyond the Policy Itself
+
+Setting the rule reduces your exposure to unreviewed capabilities, but it does not validate or sanitize what an allowlisted capability actually does. Treat it as one part of a broader practice:
+
+- Read the full description and annotations of a tool before adding it to the exceptions list. The policy enforces your review, but it does not replace it.
+- Start every MCP server in **Deny all** mode and grow the exceptions list deliberately, rather than starting from **Allow all** and trying to keep up with a blocklist.
+- Re-review your exceptions list when an upstream server changes. A new version or redeployment can ship a different description for a tool you already approved.
+- Treat the **Security** settings of the server as a complementary control on *who* can call the MCP server, on top of *which capabilities* MCP Access Control exposes.
+
+## Set Up the MCP Access Control Policy
+
+The rest of this guide walks through setting the policy on a real MCP server in the Console of Agent Control Plane. It uses a self-hosted Choreo AI Gateway to enforce the policy. The MCP server points at a public reference MCP server, so you do not need to stand up anything of your own to follow along.
+
+### Prerequisites
+
+- An Agent Control Plane account. [Sign up for free](https://console.cloud.choreolabs.com/agent-management/).
+- Docker and Docker Compose, to run the self-hosted AI Gateway.
+- `curl`, for testing.
+
+### Architecture
+
+Without a gateway in front, the MCP client connects directly to the server. The untrusted MCP server returns `tools/list`, including whatever tools the server chooses to expose. Nothing inspects the response, so every tool reaches the client:
+
+```mermaid
+flowchart LR
+  C["MCP Client"] -->|"Connects directly to the server"| S["Untrusted MCP server"]
+  S -->|"tools/list with every tool the server exposes"| C
+```
+
+With an MCP server in front of it, the client connects to the AI Gateway. The gateway still calls the upstream server to get its capability list, then applies the rule to that result before responding to the client. Only the reviewed, allowlisted tools reach the client:
+
+```mermaid
+flowchart LR
+  C["MCP Client"] -->|"Request to the MCP server"| G["Self-hosted AI Gateway: MCP server with Manage Tools (Deny all, exceptions = your reviewed tools)"]
+  G -->|"Gets the capability list"| S["Untrusted MCP server"]
+  S -->|"Returns the same tools/list as above"| G
+  G -->|"Only the reviewed, allowlisted tools"| C
+```
+
+The upstream server continues to return its own full capability list to the gateway, unchanged. The gateway applies the MCP Access Control rule to that result before it responds to the client. A denied capability is removed from what the client sees, whatever the server itself returned.
+
+### Step 1: Create and Start an AI Gateway
+
+The AI Gateway is the runtime that hosts your MCP server and enforces the MCP Access Control rule. If you already have a self-hosted AI Gateway that shows **Active**, skip to Step 2.
+
+:::tip
+For the same gateway setup flow, see the [Quick Start Guide](../../ai-gateway/self-hosted-gateways/quickstart-guide.mdx) and [Set Up a Self-Hosted Gateway](../../ai-gateway/self-hosted-gateways/setting-up.mdx).
+:::
+
+1. In the left navigation menu, go to **Infrastructure** → **Gateways**.
+2. Click **Add gateway**.
+3. Enter the following values:
+
+    | Field | Value |
+    |---|---|
+    | **Display Name** | My AI Gateway |
+    | **Name** | `my-ai-gateway` |
+    | **Environment** | Select your environment. |
+    | **Public URL** | `https://localhost:8443` |
+
+4. Click **Create**.
+
+After you click **Create**, the Console shows a **Set up My AI Gateway** panel with four steps for the **Docker** tab. Run them on the machine that hosts the gateway:
+
+1. Download and unzip the gateway package with the command that the panel shows.
+2. Open the unzipped directory, and run `./scripts/setup.sh`. The script creates the listener certificate, the at-rest encryption key, and the `api-platform.env` file. It prints the admin password once, so copy it.
+3. Click **Copy** next to the third step, and run the command. It appends the control plane host and your gateway token to `api-platform.env`.
+4. Start the gateway with `docker compose up`.
+
+:::warning
+The Console shows the gateway token only once, when you create the gateway. Run the command in step 3 before you close the panel.
+:::
+
+:::note
+If a default gateway port is already in use on your machine, edit the port mappings in the `docker-compose.yaml` file before you start the gateway. Use the same host port in the **Public URL**.
+:::
+
+:::tip Testing over plain HTTP avoids a self-signed certificate, on a local gateway only
+The HTTPS listener of the gateway uses a self-signed certificate, so calling it directly with `curl` needs `-k`. If your gateway runs on `localhost` and is not reachable from another host, and your gateway distribution also exposes a plain HTTP listener, you can use that instead to avoid the certificate entirely.
+
+The port of the plain HTTP listener is deployment-specific. For example, use `http://localhost:8080/<mcp-server-context>/mcp` only if your own gateway configuration maps HTTP traffic to port 8080.
+
+If your gateway is reachable over a network, do not use `-k` or plain HTTP. Configure `curl` to trust the certificate of the gateway instead, since both practices send requests, and any session ID or API key, without transport encryption or certificate validation.
+:::
+
+**Expected result:** The **Gateways** page shows your gateway with the **Active** and **Self-hosted** labels.
+
+The following image shows the **Gateways** page with the active self-hosted AI Gateway:
+
+![Gateways page listing My AI Gateway as a self-hosted egress gateway with the Active status](../../img/guides/shared/gateways-list-active.png)
+
+### Step 2: Register the MCP Server
+
+For more detail on the registration form and on routing MCP traffic through your gateway, see [Route MCP Traffic Through a Self-Hosted Gateway](../../ai-gateway/self-hosted-gateways/route-mcp-traffic.mdx) and [MCP Servers](../../agent-control-plane/create/mcp-servers.mdx).
+
+1. In the left navigation menu, go to **Resources** → **MCP servers**.
+2. Click **Register MCP server**.
+3. Enter the following values:
+
+    | Field | Value |
+    |---|---|
+    | **Name** | Protected MCP Server |
+    | **Version** | Leave the prefilled value. |
+    | **Context** | `/protected-mcp` |
+
+4. Under **Endpoints**, click **Add endpoint**.
+5. In **MCP Server Endpoint URL**, enter `https://mcp.deepwiki.com/mcp`. The Console reads the name, version, and capabilities of the server, and shows them under the field. This server exposes three tools.
+6. Under **Deployment Configuration**, select the environment that your gateway belongs to. Open the gateway list that appears, and select **My AI Gateway**. The list defaults to the managed gateway, so change it.
+7. Click **Add endpoint**, and then click **Create**.
+
+**Expected result:** The MCP server page opens. The **Overview** tab shows **Development · Deployed** and **3 allowed · 0 disabled** next to **Manage Tools**.
+
+The following image shows the **Overview** tab of the server:
+
+![Overview tab of Protected MCP Server showing Development deployed and three allowed tools under Manage Tools](../../img/guides/govern-mcp-servers/reduce-mcp-tool-poisoning-risk/protected-mcp-server-overview.png)
+
+:::note The server must be reachable from the internet
+The Console reads the capabilities of the server from its own backend. **Add endpoint** stays unavailable until that request succeeds, so a server on `localhost` or on a private network does not work here. The gateway still reaches the server directly at run time.
+:::
+
+### Step 3: Allow Only the Reviewed Tools
+
+The **Manage Tools** tab lists every capability the server exposes. In **Deny all** mode, the gateway hides every capability except the ones you move to **Allowed Resources**.
+
+1. Open the **Manage Tools** tab.
+2. Select **Deny all**, and then click **Apply** to confirm the mode change.
+3. Under **Denied Resources**, select each tool that you have read in full and approved. Using the reference server, `read_wiki_structure` is a reasonable one to approve.
+4. Click the single right arrow between the lists to move the selected tools to **Allowed Resources**.
+5. Click **Save** at the bottom of the tab.
+
+Every tool is denied except the ones you moved to **Allowed Resources**. Anything you did not explicitly review and add is denied by default. On the reference server, that is `ask_wiki_question` and `read_wiki_contents`, alongside whatever a poisoned tool on a different server might be called. This happens because the tool was never approved, not because its content was scanned.
+
+**Expected result:** **Allowed Resources** lists only the tools you approved, and the Console displays **updated successfully.** The same lists apply to resources and prompts, if the server exposes any.
+
+The following image shows the **Manage Tools** tab in **Deny all** mode with one allowed tool:
+
+![Manage Tools tab in Deny all mode with ask_wiki_question and read_wiki_contents denied and read_wiki_structure allowed](../../img/guides/govern-mcp-servers/reduce-mcp-tool-poisoning-risk/protected-mcp-manage-tools.png)
+
+### Step 4: Open the Server to Unauthenticated Calls for Testing
+
+An MCP server requires an API key by default. The header of the key is `X-API-Key`, and the Console issues keys to the agents that use the server as a tool. To test with `curl`, turn authentication off for this walkthrough.
+
+1. Open the **Security** tab.
+2. Set **Method** to **None**, and click **Switch method** in the confirmation dialog.
+3. Click **Save**.
+
+:::warning
+A server with **Method** set to **None** accepts any caller. Use this setting only for this walkthrough, and set it back to **API Key** afterward.
+:::
+
+### Step 5: Get the MCP Server URL
+
+The URL follows the pattern `https://<gateway-host>/<mcp-server-context>/mcp`. For this guide, it is `https://localhost:8443/protected-mcp/mcp`. The host and port come from the **Public URL** of the gateway.
+
+Per the tip in Step 1, use the plain HTTP port of the gateway instead only if the gateway runs on `localhost` and is not reachable over a network. For a gateway reachable from another host, keep using HTTPS and configure `curl` to trust its certificate rather than skipping verification.
+
+## Verify
+
+The Streamable HTTP transport of MCP starts with an `initialize` request, followed by an `initialized` notification, then normal calls such as `tools/list`. A server may return a session ID in an `Mcp-Session-Id` response header on `initialize`. If it does, the MCP specification requires you to include that same header on every later request, or the server rejects them.
+
+The reference server used here does not issue a session ID, but the following commands capture and reuse one if present. Check what your own server does before assuming either way.
+
+```bash
+INVOKE_URL="<the URL from Step 5>"
+
+INIT_HEADERS=$(mktemp)
+curl -k -s -D "$INIT_HEADERS" -X POST "$INVOKE_URL" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}'
+
+SESSION_ID=$(grep -i '^mcp-session-id:' "$INIT_HEADERS" | cut -d' ' -f2 | tr -d '\r')
+
+curl -k -s -X POST "$INVOKE_URL" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+curl -k -s -X POST "$INVOKE_URL" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+```
+
+**Expected result:** The `tools/list` response contains only the tool names you approved. Using the reference server as an example, only `read_wiki_structure` is returned, with its description and input schema. The response arrives as a Server-Sent Events stream with the JSON payload inside a `data:` line.
+
+The other two tools on the reference server (`ask_wiki_question` and `read_wiki_contents`) never appear in this response, whatever the upstream server itself returns.
+
+A server with many tools can also paginate `tools/list` (`nextCursor` in the response, `cursor` in the next request). The reference server returns everything in one response, so pagination does not come up here. Do not assume one call always returns everything from a server you have not checked.
+
+### Optional: Try Calling a Denied Tool Directly
+
+The MCP Access Control policy enforces on individual requests too, not only on list responses. A tool omitted from `tools/list` is also rejected if you try to call it directly:
+
+```bash
+curl -k -s -X POST "$INVOKE_URL" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_wiki_contents","arguments":{"repoName":"facebook/react"}}}'
+```
+
+**Expected result:** The gateway rejects the call with a JSON-RPC error instead of the response of the tool. In this gateway version, that is an HTTP 400 with:
+
+```json
+{"error":{"code":-32000,"message":"MCP capability not allowed"},"id":3,"jsonrpc":"2.0"}
+```
+
+The `-32000` code and message are specific to this gateway, which chooses them within the JSON-RPC-reserved range for implementation-defined server errors. MCP itself does not standardize an error code for a policy-denied capability. Treat the exact code, message, and HTTP status as gateway-specific and subject to change between versions. This guide relies on one invariant: the gateway rejects the call and never executes the denied tool.
+
+## Troubleshooting
+
+| Symptom | Resolution |
+|---|---|
+| A tool you did not approve still appears in `tools/list` | Confirm that the tool is under **Denied Resources** on the **Manage Tools** tab with **Deny all** selected, and that you clicked **Save**. |
+| `HTTP 401` with `Valid API key required` | The **Security** method of the server is **API Key**. Set it to **None** for this walkthrough in Step 4, or send an API key in the `X-API-Key` header. |
+| **Add endpoint** stays unavailable | The Console cannot reach the server URL from its own backend. Use a URL that is reachable from the internet. |
+| `notifications/initialized` or `tools/list` returns `"Server not initialized"` | The server issued a session ID on `initialize` (check for an `Mcp-Session-Id` response header) and expects it on every later request. Add `-H "Mcp-Session-Id: $SESSION_ID"` to the call, as shown in Verify. |
+| `curl` fails with a TLS or certificate error | You are calling the `https://` port of the gateway with its self-signed certificate. If the gateway runs on `localhost` only, use the plain HTTP port instead (see the tip in Step 1), or add `-k` to the `curl` command. For a network-reachable gateway, configure `curl` to trust the certificate instead of using `-k` or plain HTTP. |
+| `tools/list` returns no tools at all, or a connection error | Check that the context in the URL matches the context of the server, and that the **Overview** tab still shows **Deployed**. |
+| `resources/list` or `prompts/list` returns empty, even though the upstream server has resources or prompts | In **Deny all** mode, the gateway hides every resource and prompt that you did not move to **Allowed Resources**. Move the ones you approved. |
+
+## What You Learned
+
+- What MCP tool poisoning is: a hidden instruction embedded in the `description` field of a tool, read by the model on every turn but easy for a person to miss.
+- Why it matters: it can lead to data exfiltration and unauthorized use of other tools, it can appear later in a server you already trusted, and it does not scale to manual review.
+- Why the fix belongs at the gateway: a name-based, default-deny allowlist does not require detecting malicious content, only controlling what the gateway exposes.
+- How to set the MCP Access Control rule on an MCP server in default-deny mode (**Deny all**), and that it complements, but does not replace, actually reviewing what you allowlist.
+
+## Next Steps
+
+- [Route MCP Traffic Through a Self-Hosted Gateway](../../ai-gateway/self-hosted-gateways/route-mcp-traffic.mdx): deploy an MCP server to your gateway and check the endpoint.
+- [MCP Servers](../../agent-control-plane/create/mcp-servers.mdx): register and manage MCP servers in Agent Control Plane.
+- [Block Prompt Injection with Guardrails](../govern-llm-traffic/block-prompt-injection-with-guardrails.mdx): the same defense-in-depth idea applied to LLM prompts instead of MCP tool metadata.
+
+## Try the Sample
+
+If you want to see an actual poisoned tool being filtered out, rather than an allowlist applied to a clean reference server, the [`mcp-tool-poisoning-demo`](https://github.com/wso2/api-platform/tree/main/samples/mcp-tool-poisoning-demo) sample sets one up locally. It runs a safe, defanged MCP server with one clean tool and one tool carrying a real (harmless, disclosed) prompt-injection payload in its description.
+
+Run `./setup.sh` to start it, then run `./demo.sh pass1` to see both tools reach a client unfiltered. After you set the MCP Access Control rule on an MCP server that points at the sample server instead of the public reference server used above, run `./demo.sh pass2` to see the poisoned tool disappear. Run `./demo.sh all` for both passes back to back. The `README.md` of the sample has a full disclaimer covering why it is safe to run.

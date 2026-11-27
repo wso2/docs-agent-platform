@@ -4,17 +4,26 @@ sidebar_position: 2
 
 # Manage Environments and Deployment Pipelines
 
-Environments and deployment pipelines are organization-level constructs that control *where* your agents run and *how* they are promoted from one stage to the next (for example `Development → Staging → Production`).
+Environments and deployment pipelines control *where* your agents run and *how* they move from one stage to the next, for example `development → production`.
 
-- An **environment** represents a runtime context (e.g., `dev`, `test`, `staging`, `production`) where agents are deployed and executed.
-- A **deployment pipeline** defines an ordered promotion path across those environments.
-- Each **project** is assigned one deployment pipeline, and agents in that project are **promoted** along its path.
+- An **environment** is a runtime context, such as `development`, `staging`, or `production`, where agents are deployed and run.
+- A **deployment pipeline** is an ordered promotion path across those environments.
+- Each **project** uses one deployment pipeline, and the agents in that project are **promoted** along its path.
 
-Environments and deployment pipelines are managed in WSO2 Cloud, not inside Agent Control Plane. They are shared by every product in your organization, so the environments you create there are the ones Agent Control Plane deploys agents to.
+Environments and deployment pipelines belong to your WSO2 Cloud organization and are shared by every product in it. The environments you create there are the ones Agent Control Plane deploys agents to.
+
+## Where Each Task Happens
+
+| Task | Where |
+|---|---|
+| Create and edit environments | WSO2 Cloud organization **Settings** → **Environments** |
+| Create, edit, and delete deployment pipelines | WSO2 Cloud organization **Settings** → **Deployment Pipelines** |
+| Choose a project's deployment pipeline | The project's **Settings** |
+| Promote an agent to the next environment | The agent's **Deploy** page in Agent Control Plane |
 
 ## Prerequisites
 
-- Access to the WSO2 Cloud Console with a role that can manage environments and deployment pipelines, such as **Admin** or **Platform Engineer**. See [Access Control](../concepts/organization.mdx#access-control).
+- A role that can manage environments and deployment pipelines, such as **Admin** or **Platform Engineer**. See [Access Control](../concepts/organization.mdx#access-control).
 
 ---
 
@@ -27,7 +36,7 @@ Environments and deployment pipelines are under **INFRASTRUCTURE** in the settin
 
 ---
 
-## Managing Environments
+## Manage Environments
 
 ### View Environments
 
@@ -47,13 +56,10 @@ In the settings sidebar, click **Environments**. The page lists every environmen
 
 3. Click **Create**.
 
-Agent Control Plane provisions the environment and installs its API Platform Gateway for
-you. Once created, the new environment appears in the list.
+Agent Control Plane provisions the environment and installs its API Platform Gateway for you. The new environment appears in the list.
 
 :::note
-The environment also gets its own identity service, which issues
-[AgentID](../concepts/agentid.mdx) credentials to every agent deployed there. It is
-provisioned and operated by WSO2. There is nothing to install or configure.
+The environment also gets its own identity service, which issues [AgentID](../concepts/agentid.mdx) credentials to every agent deployed there. WSO2 provisions and operates it, so there is nothing to install or configure.
 :::
 
 ### Edit an Environment
@@ -62,27 +68,17 @@ provisioned and operated by WSO2. There is nothing to install or configure.
 2. Change the **Display name**, **Description**, or **Critical environment** setting. The **Name** can't be changed.
 3. Click **Save**.
 
-### Access the Environment ThunderID Console
+### Access the Environment's ThunderID Console
 
-Each environment has its own ThunderID instance, and that instance is what issues
-[AgentID](../concepts/agentid.mdx) credentials to every agent deployed in the
-environment. A few tasks are done in its console rather than in Agent Control Plane —
-creating an OAuth application for an externally-hosted agent, for example, or
-looking up an agent's application by name.
+Each environment has its own ThunderID instance, which issues [AgentID](../concepts/agentid.mdx) credentials to every agent deployed in it. A few tasks are done in its console rather than in Agent Control Plane, such as creating an OAuth application for an externally-hosted agent, or looking up an agent's application by name.
 
-On Agent Control Plane the instance is provisioned and operated by WSO2. The console
-URL and its administrator credentials are issued to your organization along with the
-environment; ask your WSO2 administrator if you do not have them.
+WSO2 provisions and operates the instance. Its console URL and administrator credentials are issued to your organization along with the environment; ask your WSO2 administrator if you do not have them.
 
-Day-to-day AgentID work — provisioning, viewing, rotating, and revoking a
-credential — is done through Agent Control Plane instead, as described in
-[AgentID](../concepts/agentid.mdx), so you should rarely need this console.
+Day-to-day AgentID work, such as provisioning, viewing, rotating, and revoking a credential, is done in Agent Control Plane instead, as described in [AgentID](../concepts/agentid.mdx). You should rarely need this console.
 
 ---
 
-## Managing Deployment Pipelines
-
-A deployment pipeline defines the promotion path agents follow across environments. 
+## Manage Deployment Pipelines
 
 ### View Deployment Pipelines
 
@@ -113,38 +109,43 @@ Changing the promotion flow changes the path available to every agent in every p
 2. Confirm in the dialog.
 
 :::note
-You can't delete the organization's **Default** pipeline. Before deleting any other pipeline, check **Projects** on its details page and move those projects to a different pipeline (see [updating a project's deployment pipeline](#update-a-projects-deployment-pipeline)).
+You can't delete the organization's **Default** pipeline. Before deleting any other pipeline, check **Projects** on its details page and move those projects to a different pipeline. See [Change a Project's Deployment Pipeline](#change-a-projects-deployment-pipeline).
 :::
 
 ---
 
-## Update a project's deployment pipeline
+## Change a Project's Deployment Pipeline
 
-Every project is assigned a deployment pipeline, which determines the environments its agents can be promoted through. You change it in the project's settings, not in the organization settings.
+Every project uses one deployment pipeline. You choose it in the project's settings, not in the organization settings.
 
 1. In the WSO2 Cloud Console, open the project. Its **Overview** page shows the current pipeline under **Deployment pipeline**.
 2. Click **Settings**.
 3. Open the **Deployment pipeline** dropdown. Each option shows the pipeline name and its promotion flow, and the organization's default pipeline is marked **Default**.
 4. Select the pipeline you want and click **Save changes**.
 
-   > A deployment pipeline is required for a project. Changing it changes the promotion path available to all agents in the project.
+A project must always have a deployment pipeline. Changing it changes the promotion path for every agent in the project.
 
 ---
 
-## Promote an agent
+## Promote an Agent
 
-Promoting an agent deploys it from one environment to the next environment in the project's deployment pipeline.
+Promoting an agent deploys the same build from one environment to the next environment in the project's deployment pipeline.
 
-1. Open the agent and go to its **Deploy** page. Each environment in the pipeline is shown as a card.
-2. On the source environment's card, click **Promote**.
+1. In the WSO2 Cloud Console, open the project and click the agent under **All artifacts**. The agent opens in Agent Control Plane.
+2. In the left navigation, under **Agent lifecycle**, click **Deploy**. The page shows a **Setup** card with the selected build, followed by a card for each environment in the pipeline.
+3. On the card of the environment to promote from, click **Promote**.
 
-   > The **Promote** button appears only when the environment has a downstream target in the project's pipeline and the agent is currently **Active** in that environment.
+   > **Promote** appears only when the agent is deployed in that environment and the environment has a next environment in the pipeline.
 
-3. In the **Promote** drawer:
-   - **Target Environment** — if the source has more than one possible next environment, select the target.
-   - **Configuration** — choose how the target is configured:
-     - Enable **Use config from source environment** to inherit the source environment's environment variables and file mounts.
-     - Leave it disabled to set environment-specific **Environment Variables** and **File Mounts** for the target environment.
-4. Click **Promote**.
+4. In the **Promote from** drawer, set up the target environment under **Configuration**:
+   - Turn on **Use config from source environment** to reuse the source environment's environment variables and file mounts.
+   - Or leave it off and set the target's own **Environment Variables** and **File Mounts**. Click **Add** to add one, or **Upload .env file** to add environment variables from a file.
+   - Choose the **AMP Instrumentation Version** for the target environment.
 
-The same build is deployed to the target environment with the configuration you supplied. Repeat the process to advance the agent along the rest of the pipeline.
+   If the source environment has more than one next environment, also select the target environment.
+
+5. Click **Promote**.
+
+The target environment's card then shows the deployment. Repeat from that card to move the agent further along the pipeline.
+
+Promoting to a critical environment needs the production permission. See [How It Governs Promotion](../concepts/deployment-pipeline.mdx#how-it-governs-promotion).

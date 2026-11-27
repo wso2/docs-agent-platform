@@ -5,9 +5,6 @@ title: Environment
 # Environment
 
 An Environment is an isolated space where your agents run and resources are deployed. Typical examples include development, staging, and production. Every agent deployment, gateway registration, and MCP server endpoint in Agent Control Plane is scoped to one or more environments. 
-## Built on OpenChoreo's Environment Abstraction
-
-Agent Control Plane's environments are [OpenChoreo Environments](https://openchoreo.dev/docs/concepts/platform-abstractions/). OpenChoreo defines an Environment as representing "a stage in the software delivery lifecycle, such as development, staging, or production," providing the context for deploying and running applications — the policies, configurations, and constraints that apply there. Each environment maps to a distinct deployment target (an OpenChoreo Data Plane).
 
 ## What's Scoped Per Environment
 
@@ -20,7 +17,7 @@ Because agents, gateways, and proxies are all deployed per environment, most of 
 
 ## Where You Manage Environments
 
-Environments are managed in WSO2 Cloud and shared by every product in your organization. To create or edit one, open the organization **Settings** from the app launcher and click **Environments**. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
+Environments are managed in Choreo Cloud and shared by every product in your organization. To create or edit one, open the organization **Settings** from the app launcher and click **Environments**. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
 
 ## Relationship to Deployment Pipelines
 

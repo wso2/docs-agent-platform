@@ -325,6 +325,37 @@
         },
         {
           "type": "category",
+          "label": "Govern LLM Traffic",
+          "collapsed": true,
+          "items": [
+            "guides/govern-llm-traffic/enforce-token-based-rate-limiting",
+            "guides/govern-llm-traffic/set-up-a-multi-model-llm-service-provider",
+            "guides/govern-llm-traffic/block-prompt-injection-with-guardrails",
+            "guides/govern-llm-traffic/enforce-a-consistent-ai-persona"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Connect AI Coding Assistants",
+          "collapsed": true,
+          "items": [
+            "guides/ai-coding-assistants/configure-claude-code",
+            "guides/ai-coding-assistants/configure-codex-cli",
+            "guides/ai-coding-assistants/configure-gemini-cli",
+            "guides/ai-coding-assistants/configure-github-copilot"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Govern MCP Servers",
+          "collapsed": true,
+          "items": [
+            "guides/govern-mcp-servers/reduce-mcp-tool-poisoning-risk",
+            "guides/govern-mcp-servers/expose-a-multi-step-workflow-as-an-mcp-tool"
+          ]
+        },
+        {
+          "type": "category",
           "label": "Platform Administration",
           "collapsed": true,
           "items": [

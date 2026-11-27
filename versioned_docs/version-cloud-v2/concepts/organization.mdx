@@ -6,7 +6,7 @@ title: Organization
 
 An Organization is the top-level tenant boundary in choreo cloud. Every [Project](./project.mdx), [Environment](./environment.mdx), [Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
 
-Agent Control Plane doesn't own the organization. It is your Choreo Cloud organization, and Choreo Cloud manages it: its name and handle, its members, the groups and roles that grant access, single sign-on, billing, and audit logs. The same organization, with the same members and roles, is shared by every product you use in WSO2 Cloud, so Agent Control Plane sees the people and permissions you set up there.
+Agent Control Plane doesn't own the organization. It is your Choreo Cloud organization, and Choreo Cloud manages it: its name and handle, its members, the groups and roles that grant access, single sign-on, billing, and audit logs. The same organization, with the same members and roles, is shared by every product you use in Choreo Cloud, so Agent Control Plane sees the people and permissions you set up there.
 
 ## Manage the Organization
 
@@ -38,27 +38,27 @@ The **Infrastructure** section of the same menu holds organization-wide infrastr
 
 ## Access Control
 
-Access is managed for the whole organization in WSO2 Cloud, under **Settings** → **Access control**. A permission granted there applies across every project in the organization.
+Access is managed for the whole organization in Choreo Cloud, under **Settings** → **Access control**. A permission granted there applies across every project in the organization.
 
 ### One Permission Model, Every Entry Point
 
-Every Agent Control Plane action is authorized against an OAuth 2.0 scope named `amp:<resource>:<action>`, for example `amp:project:read`, `amp:agent:build`, or `amp:gateway:create`. WSO2 Cloud issues the scopes your roles grant as claims on your access token. The same scope gates the same capability whether you reach Agent Control Plane through the Console, the REST API, or the MCP servers.
+Every Agent Control Plane action is authorized against an OAuth 2.0 scope named `amp:<resource>:<action>`, for example `amp:project:read`, `amp:agent:build`, or `amp:gateway:create`. Choreo Cloud issues the scopes your roles grant as claims on your access token. The same scope gates the same capability whether you reach Agent Control Plane through the Console, the REST API, or the MCP servers.
 
 In **Access control**, a role's permissions are grouped by product. The Agent Control Plane permissions are under **AI & Agent Management** (`amp:*`). Other products keep their own areas, such as **Choreo Cloud** (`cloud:*`), **API Management** (`ap:*`), **Integration** (`ipaas:*`), and **Identity & Access Management** (`iam:*`). Hover a permission to see the exact handle the platform checks.
 
 :::note
-WSO2 Cloud's sign-in is not the same thing as the per-environment identity providers described in [Environment](./environment.mdx). WSO2 Cloud authenticates **people and service accounts against the control plane**: who may create, build, deploy, and promote. The per-environment providers are attached to gateways and govern runtime traffic: which token issuers an environment trusts on calls reaching a running agent or proxy endpoint.
+Choreo Cloud's sign-in is not the same thing as the per-environment identity providers described in [Environment](./environment.mdx). Choreo Cloud authenticates **people and service accounts against the control plane**: who may create, build, deploy, and promote. The per-environment providers are attached to gateways and govern runtime traffic: which token issuers an environment trusts on calls reaching a running agent or proxy endpoint.
 :::
 
 ### Groups Grant Roles
 
 You don't grant permissions one at a time, and you don't assign a role to a person directly. A **role** is a named bundle of permissions, each **group** grants one role, and a person gets a role by joining the group that grants it. Invite people into a group from **Members**.
 
-WSO2 Cloud ships these roles, each with a group of the same name:
+Choreo Cloud ships these roles, each with a group of the same name:
 
 | Role | What it covers |
 |------|----------------|
-| **Admin** | Full access to every WSO2 Cloud product, including members, billing, and settings. |
+| **Admin** | Full access to every Choreo Cloud product, including members, billing, and settings. |
 | **Platform Engineer** | Shared infrastructure: environments, gateways, deployment pipelines, the LLM and MCP catalog, evaluators, and sign-in setup. Also deploys agents to production. |
 | **Developer** | Builds, tests, and deploys agents. Full control over projects and agents, and connects agents to LLM Service Providers and MCP Servers without being able to register them. |
 | **Viewer** | Read-only access. |

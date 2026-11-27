@@ -6,9 +6,6 @@ title: Deployment Pipeline
 
 A Deployment Pipeline defines the order of [environments](./environment.mdx) that agents in a [project](./project.mdx) are allowed to move through. For example, requiring a built artifact to be deployed to staging before that deployment can be promoted to production. Every project is bound to exactly one deployment pipeline.
 
-## Built on OpenChoreo's Deployment Pipeline Abstraction
-
-Agent Control Plane's deployment pipelines are [OpenChoreo Deployment Pipelines](https://openchoreo.dev/docs/concepts/platform-abstractions/#deploymentpipeline). OpenChoreo defines a DeploymentPipeline as something that "defines the allowed progression paths for applications moving through environments", representing "the organization's software delivery process as a declarative configuration, encoding promotion rules and quality gates." A pipeline can specify parallel paths and conditional progressions based on application characteristics, not just a single linear chain of environments.
 
 ## How It Governs Promotion
 
@@ -18,7 +15,7 @@ Agent Control Plane's deployment pipelines are [OpenChoreo Deployment Pipelines]
 
 ## Where You Manage Deployment Pipelines
 
-Deployment pipelines are managed in WSO2 Cloud. To create or edit one, open the organization **Settings** from the app launcher and click **Deployment Pipelines**. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
+Deployment pipelines are managed in Choreo Cloud. To create or edit one, open the organization **Settings** from the app launcher and click **Deployment Pipelines**. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
 
 ## Relationship to Projects and Environments
 

@@ -1,6 +1,6 @@
-# WSO2 Agent Control Plane Instrumentation Package
+# Choreo Agent Control Plane Instrumentation Package
 
-Zero-code OpenTelemetry instrumentation package for externally-hosted Python agents using the Traceloop SDK, with trace visibility in the WSO2 Agent Control Plane.
+Zero-code OpenTelemetry instrumentation package for externally-hosted Python agents using the Traceloop SDK, with trace visibility in the Choreo Agent Control Plane.
 
 ## Overview
 
@@ -29,7 +29,7 @@ Each release of `amp-instrumentation` pins a specific Traceloop SDK version, so 
 
 ### 1. Register Your Agent
 
-First, register your agent as an external agent in the [WSO2 Agent Control Plane](../tutorials/create-your-first-agent.mdx) to obtain your agent API key and configuration details.
+First, register your agent as an external agent in the [Choreo Agent Control Plane](../tutorials/create-your-first-agent.mdx) to obtain your agent API key and configuration details.
 
 ### 2. Set Required Environment Variables in terminal
 
@@ -77,7 +77,7 @@ amp-instrument poetry run python script.py
 amp-instrument uv run python script.py
 ```
 
-That's it! Your application is now instrumented and sending traces to the WSO2 Agent Control Plane.
+That's it! Your application is now instrumented and sending traces to the Choreo Agent Control Plane.
 
 :::note What auto-instrumentation captures
 The Traceloop SDK generates GenAI spans by patching recognized LLM and framework SDKs (OpenAI, Anthropic, LangChain, LlamaIndex, CrewAI, and more). It does **not** trace raw HTTP calls. If your agent calls an LLM by hand with `httpx`, `requests`, or `urllib`, either call the model through a supported SDK - for example, the OpenAI SDK pointed at an OpenAI-compatible endpoint with `base_url` - or emit the spans yourself with [manual instrumentation](#manual-instrumentation).
@@ -276,4 +276,4 @@ The version set a given install actually accepts is assembled at runtime from th
 
 If you're picking a version in the create-agent form and see something that isn't in the table above, your platform admin added it. The pinned `traceloop-sdk` and supported Python versions for those entries live in the operator's chart values.
 
-On Agent Control Plane the available instrumentation versions and the platform default are managed by WSO2.
+On Agent Control Plane the available instrumentation versions and the platform default are managed by Choreo.

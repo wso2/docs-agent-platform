@@ -10,14 +10,14 @@ Environments and deployment pipelines control *where* your agents run and *how* 
 - A **deployment pipeline** is an ordered promotion path across those environments.
 - Each **project** uses one deployment pipeline, and the agents in that project are **promoted** along its path.
 
-Environments and deployment pipelines belong to your WSO2 Cloud organization and are shared by every product in it. The environments you create there are the ones Agent Control Plane deploys agents to.
+Environments and deployment pipelines belong to your Choreo Cloud organization and are shared by every product in it. The environments you create there are the ones Agent Control Plane deploys agents to.
 
 ## Where Each Task Happens
 
 | Task | Where |
 |---|---|
-| Create and edit environments | WSO2 Cloud organization **Settings** → **Environments** |
-| Create, edit, and delete deployment pipelines | WSO2 Cloud organization **Settings** → **Deployment Pipelines** |
+| Create and edit environments | Choreo Cloud organization **Settings** → **Environments** |
+| Create, edit, and delete deployment pipelines | Choreo Cloud organization **Settings** → **Deployment Pipelines** |
 | Choose a project's deployment pipeline | The project's **Settings** |
 | Promote an agent to the next environment | The agent's **Deploy** page in Agent Control Plane |
 
@@ -29,7 +29,7 @@ Environments and deployment pipelines belong to your WSO2 Cloud organization and
 
 ## Open the Organization Settings
 
-1. Sign in to the WSO2 Cloud Console.
+1. Sign in to the Choreo Cloud Console.
 2. Click the app launcher (the grid of dots at the top left), then click **Settings**.
 
 Environments and deployment pipelines are under **INFRASTRUCTURE** in the settings sidebar.
@@ -59,7 +59,7 @@ In the settings sidebar, click **Environments**. The page lists every environmen
 Agent Control Plane provisions the environment and installs its API Platform Gateway for you. The new environment appears in the list.
 
 :::note
-The environment also gets its own identity service, which issues [AgentID](../concepts/agentid.mdx) credentials to every agent deployed there. WSO2 provisions and operates it, so there is nothing to install or configure.
+The environment also gets its own identity service, which issues [AgentID](../concepts/agentid.mdx) credentials to every agent deployed there. Choreo provisions and operates it, so there is nothing to install or configure.
 :::
 
 ### Edit an Environment
@@ -72,7 +72,7 @@ The environment also gets its own identity service, which issues [AgentID](../co
 
 Each environment has its own ThunderID instance, which issues [AgentID](../concepts/agentid.mdx) credentials to every agent deployed in it. A few tasks are done in its console rather than in Agent Control Plane, such as creating an OAuth application for an externally-hosted agent, or looking up an agent's application by name.
 
-WSO2 provisions and operates the instance. Its console URL and administrator credentials are issued to your organization along with the environment; ask your WSO2 administrator if you do not have them.
+Choreo provisions and operates the instance. Its console URL and administrator credentials are issued to your organization along with the environment; ask your Choreo administrator if you do not have them.
 
 Day-to-day AgentID work, such as provisioning, viewing, rotating, and revoking a credential, is done in Agent Control Plane instead, as described in [AgentID](../concepts/agentid.mdx). You should rarely need this console.
 
@@ -118,7 +118,7 @@ You can't delete the organization's **Default** pipeline. Before deleting any ot
 
 Every project uses one deployment pipeline. You choose it in the project's settings, not in the organization settings.
 
-1. In the WSO2 Cloud Console, open the project. Its **Overview** page shows the current pipeline under **Deployment pipeline**.
+1. In the Choreo Cloud Console, open the project. Its **Overview** page shows the current pipeline under **Deployment pipeline**.
 2. Click **Settings**.
 3. Open the **Deployment pipeline** dropdown. Each option shows the pipeline name and its promotion flow, and the organization's default pipeline is marked **Default**.
 4. Select the pipeline you want and click **Save changes**.
@@ -131,7 +131,7 @@ A project must always have a deployment pipeline. Changing it changes the promot
 
 Promoting an agent deploys the same build from one environment to the next environment in the project's deployment pipeline.
 
-1. In the WSO2 Cloud Console, open the project and click the agent under **All artifacts**. The agent opens in Agent Control Plane.
+1. In the Choreo Cloud Console, open the project and click the agent under **All artifacts**. The agent opens in Agent Control Plane.
 2. In the left navigation, under **Agent lifecycle**, click **Deploy**. The page shows a **Setup** card with the selected build, followed by a card for each environment in the pipeline.
 3. On the card of the environment to promote from, click **Promote**.
 

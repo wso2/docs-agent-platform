@@ -7,7 +7,7 @@ description: Connect Claude Code, Codex, or another MCP client to the Agent Cont
 
 The Agent Control Plane Observer runs its own MCP server, separate from the [MCP Server](./mcp-server.mdx) that manages agents. Through it, an AI assistant can read a deployed agent's traces, runtime logs, build logs, and resource metrics. Every tool on it is read-only.
 
-The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to WSO2 Cloud in the browser, so the assistant acts with your own permissions.
+The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to Choreo Cloud in the browser, so the assistant acts with your own permissions.
 
 ## Endpoints
 
@@ -77,7 +77,7 @@ The examples use the US endpoint. For an EU organization, replace the URL with t
     - `--callback-port 33419` makes Claude Code listen on the port the client's redirect URIs name.
 
 2. Start Claude Code and run `/mcp`.
-3. Select **agent-manager-observer**, then select **Authenticate**. A browser opens on the WSO2 Cloud sign-in page.
+3. Select **agent-manager-observer**, then select **Authenticate**. A browser opens on the Choreo Cloud sign-in page.
 4. Sign in to the organization whose agents you want to inspect.
 
 After you sign in, `/mcp` shows the server as connected. Claude Code stores the token and refreshes it when it expires.
@@ -105,7 +105,7 @@ Codex reaches the server through [`mcp-remote`](https://www.npmjs.com/package/mc
     - `--callback-path /callback` matches the registered redirect URI; `mcp-remote` uses `/oauth/callback` by default.
     - `--static-oauth-client-info` uses the registered `am-obs-mcp` client instead of registering a new one.
 
-2. Start a new Codex session and ask for something that calls a tool, for example *Show the runtime logs of agent X in development*. A browser opens on the WSO2 Cloud sign-in page.
+2. Start a new Codex session and ask for something that calls a tool, for example *Show the runtime logs of agent X in development*. A browser opens on the Choreo Cloud sign-in page.
 3. Sign in to the organization whose agents you want to inspect.
 
 `mcp-remote` caches the token under `~/.mcp-auth/` and reuses it until it expires.

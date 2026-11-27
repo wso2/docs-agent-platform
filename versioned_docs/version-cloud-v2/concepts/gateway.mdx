@@ -4,9 +4,9 @@ title: Gateway
 
 # Gateway
 
-A Gateway is an organization-level infrastructure component that routes traffic through a controlled proxy. Every **[LLM Service Provider](./llm-service-provider.mdx)** and **[MCP Server](./mcp-proxy.mdx)** is exposed to agents through a gateway's invoke URL, rather than being called directly. Agent Control Plane currently supports the **WSO2 API Platform Gateway**.
+A Gateway is an organization-level infrastructure component that routes traffic through a controlled proxy. Every **[LLM Service Provider](./llm-service-provider.mdx)** and **[MCP Server](./mcp-proxy.mdx)** is exposed to agents through a gateway's invoke URL, rather than being called directly. Agent Control Plane currently supports the **API Platform Gateway**.
 
-Unlike Organization, Project, and Environment, the Gateway isn't an OpenChoreo abstraction. It's a [WSO2 API Platform](https://github.com/wso2/api-platform) component that Agent Control Plane registers and manages on top of OpenChoreo's infrastructure.
+Unlike Organization, Project, and Environment, the Gateway isn't an OpenChoreo abstraction. It's an [API Platform](https://github.com/wso2/api-platform) component that Agent Control Plane registers and manages on top of OpenChoreo's infrastructure.
 
 ## Why Traffic Goes Through a Gateway
 

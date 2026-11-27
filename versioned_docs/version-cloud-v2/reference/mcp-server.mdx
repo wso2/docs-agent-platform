@@ -1,13 +1,13 @@
 ---
 sidebar_position: 1
-description: Connect Claude Code, Codex, or another MCP client to the WSO2 Agent Control Plane MCP server and see which tools and scopes it offers.
+description: Connect Claude Code, Codex, or another MCP client to the Choreo Agent Control Plane MCP server and see which tools and scopes it offers.
 ---
 
 # MCP Server
 
-WSO2 Agent Control Plane runs a MCP server that MCP-capable AI assistants, such as Claude Code and Codex, connect to. Through it, an assistant can list and create projects, create agents, start builds, deploy agents, and attach LLM Service Providers and MCP Servers to agents.
+Choreo Agent Control Plane runs a MCP server that MCP-capable AI assistants, such as Claude Code and Codex, connect to. Through it, an assistant can list and create projects, create agents, start builds, deploy agents, and attach LLM Service Providers and MCP Servers to agents.
 
-The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to WSO2 Cloud in the browser, so the assistant acts with your own permissions in your own organization.
+The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to Choreo Cloud in the browser, so the assistant acts with your own permissions in your own organization.
 
 ## Endpoints
 
@@ -122,7 +122,7 @@ The examples use the US endpoint. For an EU organization, replace the URL with t
     - `--callback-port 33418` makes Claude Code listen on the port the client's redirect URIs name.
 
 2. Start Claude Code and run `/mcp`.
-3. Select **agent-manager**, then select **Authenticate**. A browser opens on the WSO2 Cloud sign-in page.
+3. Select **agent-manager**, then select **Authenticate**. A browser opens on the Choreo Cloud sign-in page.
 4. Sign in to the organization you want the assistant to act on.
 
 After you sign in, `/mcp` shows the server as connected. Claude Code stores the token and refreshes it when it expires.
@@ -150,7 +150,7 @@ Codex reaches the server through [`mcp-remote`](https://www.npmjs.com/package/mc
     - `--callback-path /callback` matches the registered redirect URI; `mcp-remote` uses `/oauth/callback` by default.
     - `--static-oauth-client-info` uses the registered `am-mcp` client instead of registering a new one.
 
-2. Start a new Codex session and ask for something that calls a tool, for example *List the projects in my organization*. A browser opens on the WSO2 Cloud sign-in page.
+2. Start a new Codex session and ask for something that calls a tool, for example *List the projects in my organization*. A browser opens on the Choreo Cloud sign-in page.
 3. Sign in to the organization you want the assistant to act on.
 
 `mcp-remote` caches the token under `~/.mcp-auth/` and reuses it until it expires.

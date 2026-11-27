@@ -66,4 +66,4 @@ For the console walkthrough of setting one up, see [Register an LLM Service Prov
 
 - Providers belong to an [Organization](./organization.mdx), not a project, so any agent in any project can use one.
 - Each provider is exposed through the [Gateway](./gateway.mdx) active in each [environment](./environment.mdx) it's deployed to.
-- Registering and changing providers is governed by RBAC — the **Platform Engineer** and **Admin** roles own them, while **Developers** can connect to a provider and configure guardrails without being able to register or delete one. See [Access Control](./organization.mdx#access-control).
+- Registering and changing providers is governed by RBAC — the **Platform Engineer** and **Admin** roles own them, including provider-level guardrails. **Developers** can connect agents to a provider and add guardrails to an agent's LLM configuration, but cannot register, change, or delete a provider. See [Access Control](./organization.mdx#access-control).

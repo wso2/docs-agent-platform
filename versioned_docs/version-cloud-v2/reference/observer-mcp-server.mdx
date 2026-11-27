@@ -1,11 +1,11 @@
 ---
 sidebar_position: 2
-description: Connect Claude Code, Codex, or another MCP client to the Agent Manager Observer MCP server to read an agent's traces, logs, and metrics.
+description: Connect Claude Code, Codex, or another MCP client to the Agent Control Plane Observer MCP server to read an agent's traces, logs, and metrics.
 ---
 
 # Observer MCP Server
 
-The Agent Manager Observer runs its own MCP server, separate from the [MCP Server](./mcp-server.mdx) that manages agents. Through it, an AI assistant can read a deployed agent's traces, runtime logs, build logs, and resource metrics. Every tool on it is read-only.
+The Agent Control Plane Observer runs its own MCP server, separate from the [MCP Server](./mcp-server.mdx) that manages agents. Through it, an AI assistant can read a deployed agent's traces, runtime logs, build logs, and resource metrics. Every tool on it is read-only.
 
 The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to WSO2 Cloud in the browser, so the assistant acts with your own permissions.
 

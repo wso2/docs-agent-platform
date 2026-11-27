@@ -17,7 +17,7 @@ credential into a working access token for calling the gateway.
 
 ## What Gets Injected
 
-Once your agent's AgentID finishes provisioning for an environment, Agent Manager injects four
+Once your agent's AgentID finishes provisioning for an environment, Agent Control Plane injects four
 environment variables into the agent's pod for that environment. No action is required on your
 part to receive them.
 
@@ -30,7 +30,7 @@ part to receive them.
 
 ```mermaid
 sequenceDiagram
-    participant AM as Agent Manager
+    participant AM as Agent Control Plane
     participant SS as Secret Store
     participant K8s as Kubernetes Secret
     participant Pod as Your Agent Pod
@@ -173,7 +173,7 @@ fails, the pod keeps running with the old, now-invalidated secret until you rest
 deployment yourself. When it succeeds, your agent does not need to detect anything itself: on
 restart, it reads the new values from Step 1 and mints a fresh token as usual.
 
-**Revoking** a credential is different. There is no new secret to hand the pod, so Agent Manager
+**Revoking** a credential is different. There is no new secret to hand the pod, so Agent Control Plane
 instead removes the old AgentID environment variables from the running pod, again best-effort.
 If that removal fails, the pod may keep referencing the revoked credential until it is
 redeployed. A revoked credential stops new tokens from being minted, but does not invalidate a

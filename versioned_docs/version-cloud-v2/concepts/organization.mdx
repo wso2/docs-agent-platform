@@ -4,13 +4,13 @@ title: Organization
 
 # Organization
 
-An Organization is the top-level tenant boundary in WSO2 Agent Manager. Every [Project](./project.mdx), [Environment](./environment.mdx), [Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
+An Organization is the top-level tenant boundary in choreo cloud. Every [Project](./project.mdx), [Environment](./environment.mdx), [Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
 
-Agent Manager doesn't own the organization. It is your WSO2 Cloud organization, and WSO2 Cloud manages it: its name and handle, its members, the groups and roles that grant access, single sign-on, billing, and audit logs. The same organization, with the same members and roles, is shared by every product you use in WSO2 Cloud, so Agent Manager sees the people and permissions you set up there.
+Agent Control Plane doesn't own the organization. It is your Choreo Cloud organization, and Choreo Cloud manages it: its name and handle, its members, the groups and roles that grant access, single sign-on, billing, and audit logs. The same organization, with the same members and roles, is shared by every product you use in WSO2 Cloud, so Agent Control Plane sees the people and permissions you set up there.
 
 ## Manage the Organization
 
-You manage the organization in the WSO2 Cloud Console. To open its settings, click the app launcher (the grid of dots at the top left), then click **Settings**. The **Organization** section has these pages:
+You manage the organization in the Choreo Cloud Console. To open its settings, click the app launcher (the grid of dots at the top left), then click **Settings**. The **Organization** section has these pages:
 
 | Page | What you manage there |
 |------|-----------------------|
@@ -25,7 +25,7 @@ You manage the organization in the WSO2 Cloud Console. To open its settings, cli
 The **Infrastructure** section of the same menu holds organization-wide infrastructure, such as **Environments** and **Deployment Pipelines**.
 
 :::warning
-**Delete organization** marks the organization and all its resources for deletion, including every Agent Manager project and agent. They are permanently deleted after 30 days.
+**Delete organization** marks the organization and all its resources for deletion, including every Agent Control Plane project and agent. They are permanently deleted after 30 days.
 :::
 
 ## What an Organization Contains
@@ -42,9 +42,9 @@ Access is managed for the whole organization in WSO2 Cloud, under **Settings** â
 
 ### One Permission Model, Every Entry Point
 
-Every Agent Manager action is authorized against an OAuth 2.0 scope named `amp:<resource>:<action>`, for example `amp:project:read`, `amp:agent:build`, or `amp:gateway:create`. WSO2 Cloud issues the scopes your roles grant as claims on your access token. The same scope gates the same capability whether you reach Agent Manager through the Console, the REST API, or the MCP servers.
+Every Agent Control Plane action is authorized against an OAuth 2.0 scope named `amp:<resource>:<action>`, for example `amp:project:read`, `amp:agent:build`, or `amp:gateway:create`. WSO2 Cloud issues the scopes your roles grant as claims on your access token. The same scope gates the same capability whether you reach Agent Control Plane through the Console, the REST API, or the MCP servers.
 
-In **Access control**, a role's permissions are grouped by product. The Agent Manager permissions are under **AI & Agent Management** (`amp:*`). Other products keep their own areas, such as **Choreo Cloud** (`cloud:*`), **API Management** (`ap:*`), **Integration** (`ipaas:*`), and **Identity & Access Management** (`iam:*`). Hover a permission to see the exact handle the platform checks.
+In **Access control**, a role's permissions are grouped by product. The Agent Control Plane permissions are under **AI & Agent Management** (`amp:*`). Other products keep their own areas, such as **Choreo Cloud** (`cloud:*`), **API Management** (`ap:*`), **Integration** (`ipaas:*`), and **Identity & Access Management** (`iam:*`). Hover a permission to see the exact handle the platform checks.
 
 :::note
 WSO2 Cloud's sign-in is not the same thing as the per-environment identity providers described in [Environment](./environment.mdx). WSO2 Cloud authenticates **people and service accounts against the control plane**: who may create, build, deploy, and promote. The per-environment providers are attached to gateways and govern runtime traffic: which token issuers an environment trusts on calls reaching a running agent or proxy endpoint.
@@ -62,12 +62,7 @@ WSO2 Cloud ships these roles, each with a group of the same name:
 | **Platform Engineer** | Shared infrastructure: environments, gateways, deployment pipelines, the LLM and MCP catalog, evaluators, and sign-in setup. Also deploys agents to production. |
 | **Developer** | Builds, tests, and deploys agents. Full control over projects and agents, and connects agents to LLM Service Providers and MCP Servers without being able to register them. |
 | **Viewer** | Read-only access. |
-| **API Publisher** | API Platform only: designs, publishes, and manages APIs. It grants no Agent Manager permissions. |
+| **API Publisher** | API Platform only: designs, publishes, and manages APIs. It grants no Agent Control Plane permissions. |
 
 To see exactly what a role allows, open it from the **Roles** tab of **Access control**.
 
-### Production Is a Separate Permission
-
-Deploying an agent isn't one permission, it's two. `amp:agent:env-non-production` and `amp:agent:env-production` are distinct scopes. The Developer role has only the first, so developers iterate freely in non-production environments, while production deployment and rollback stay with Platform Engineers and Admins.
-
-This is what makes a [Deployment Pipeline](./deployment-pipeline.mdx) a real control rather than a convention: the pipeline defines the path an agent takes through environments, and the permission split decides who is allowed to move it along that path.

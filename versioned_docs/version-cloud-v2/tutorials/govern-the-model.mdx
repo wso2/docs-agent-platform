@@ -76,7 +76,7 @@ indirection exists.
 
 Providers are managed at the organization level, so a single registration can be shared across all projects. To set this up:
 
-1. Switch to the Organization view in the Agent Manager console by clicking the organization icon next to the Agent Manager logo.
+1. Switch to the Organization view in the Agent Control Plane console by clicking the organization icon next to the Agent Control Plane logo.
 2. Go to **LLM Service Providers** in the Resource section.
 3. Click **Add Service Provider**.
 
@@ -145,7 +145,7 @@ Now add this new environment variable:
 |---|---|
 | `USE_LLM_PROVIDER` | `true` |
 
-You do **not** add `LLM_PROVIDER_URL` or `LLM_PROVIDER_KEY`. Agent Manager injects
+You do **not** add `LLM_PROVIDER_URL` or `LLM_PROVIDER_KEY`. Agent Control Plane injects
 those as system-managed variables when the provider is attached. Observe that they're
 read-only in the console environment variable section, so the agent can't be repointed at an ungoverned
 endpoint by editing its config.

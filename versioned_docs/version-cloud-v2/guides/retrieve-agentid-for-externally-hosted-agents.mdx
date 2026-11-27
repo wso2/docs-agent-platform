@@ -4,7 +4,7 @@ sidebar_position: 13
 
 # Retrieve AgentID Credentials for an Externally-Hosted Agent
 
-An Externally-Hosted agent runs outside WSO2 Agent Manager, so the platform has no pod to
+An Externally-Hosted agent runs outside WSO2 Agent Control Plane, so the platform has no pod to
 inject its [AgentID](../concepts/agentid.mdx) credential into. Instead, you generate the
 credential from the console and configure your agent with it yourself. This guide walks through
 generating, using, and rotating that credential.
@@ -48,7 +48,7 @@ exists; the Client Secret stays masked until you reveal one. Click **Regenerate 
 the button's label the first time too, there's no separate "Generate" step — and the new
 `client_id`/`client_secret` pair appears immediately above it.
 
-Copy both values now. This is your only chance to see the secret; Agent Manager never stores it
+Copy both values now. This is your only chance to see the secret; Agent Control Plane never stores it
 anywhere: the environment's ThunderID instance mints it fresh for this one response, and there is
 nothing left to retrieve afterward. If you navigate away before copying it, click **Regenerate
 Secret** again; the old one still works until you do.

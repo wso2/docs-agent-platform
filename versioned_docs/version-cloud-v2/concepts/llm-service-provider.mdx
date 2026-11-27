@@ -10,7 +10,7 @@ LLM Service Providers are organization-level resources that represent connection
 
 An agent could hold an api key and call the upstream llm provider url itself. That works until you have more than one agent, and then the problems arrive together. the same credential might be copied into every agent that needs it, rotating it means redeploying all of them, nobody can see how many tokens are being spent or by whom, and there is no place to enforce a limit or a safety policy short of editing agent code.
 
-An LLM Service Provider is the indirection that fixes all of those at once. The upstream credential is stored once, centrally, and never handed to an agent. Agents are given a **gateway URL and a platform-issued API key** instead, so what they actually call is Agent Manager's gateway, which then calls the model on their behalf. Because every request passes through that one point:
+An LLM Service Provider is the indirection that fixes all of those at once. The upstream credential is stored once, centrally, and never handed to an agent. Agents are given a **gateway URL and a platform-issued API key** instead, so what they actually call is Agent Control Plane's gateway, which then calls the model on their behalf. Because every request passes through that one point:
 
 - **Credentials rotate in one place.** Update the provider's upstream credential and every agent using it picks up the change, no redeployment, no agent ever having held the real key.
 - **Usage is attributable.** Traffic is identified per consumer rather than arriving at the model provider as one anonymous key.
@@ -56,7 +56,7 @@ They apply at three levels, which stack:
 2. **Resource-wise guardrails** on the provider are scoped to individual operations, so you can constrain `POST /chat/completions` differently from the rest of the API.
 3. **Agent-level guardrails** on the agent-to-provider binding are attached when a provider is [configured on an agent](../guides/configure-agent-llm-configuration.mdx), and applied **in addition to** the provider's own, so one agent's stricter requirement doesn't have to become everyone's.
 
-Which policies you can attach isn't fixed by Agent Manager: the available policy definitions are **reported by the active gateways in the organization**, each carrying its own parameter schema. The gateway is what enforces them, so the gateway is what determines the menu.
+Which policies you can attach isn't fixed by Agent Control Plane: the available policy definitions are **reported by the active gateways in the organization**, each carrying its own parameter schema. The gateway is what enforces them, so the gateway is what determines the menu.
 
 The practical consequence is the one worth remembering, a guardrail can be added, tightened, or removed **without rebuilding or redeploying the agent**. Security tightening what the model may return is a provider-side configuration change, not a code change.
 

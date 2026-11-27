@@ -9,7 +9,7 @@ can't abuse, and monitors prove it behaves. Now it has to serve actual
 employees.
 
 :::info This chapter needs a platform-hosted agent
-Promotion, suspend, and endpoint security are all things Agent Manager can
+Promotion, suspend, and endpoint security are all things Agent Control Plane can
 only do for a workload it runs. If your agent is externally-hosted, follow
 along to understand the model. The actions themselves won't be available to
 you, and the deployment and endpoint security stay your responsibility. Only
@@ -190,7 +190,7 @@ file mounts it needs. Same pattern as Step 3, just for production this time.
 
 You may find you *can't* do this. That's the system working as intended.
 Promoting into production requires `amp:agent:env-production`,
-[a separate permission](../concepts/organization.mdx#production-is-a-separate-permission)
+[a separate permission](../concepts/deployment-pipeline.mdx#how-it-governs-promotion)
 from the `amp:agent:env-non-production` you've been using all series. A
 **Developer** typically has the non-production scope but not the production
 one. A **Platform Engineer** has both.

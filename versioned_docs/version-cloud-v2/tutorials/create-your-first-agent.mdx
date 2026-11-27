@@ -9,7 +9,7 @@ import TabItem from '@theme/TabItem';
 
 AcmeCorp’s IT operations team spends countless hours managing repetitive L1 support requests, including password resets, application access grants, and system status inquiries.
 
-In this tutorial, you will take a pre-built IT support agent and bring it to life using WSO2 Agent Manager.
+In this tutorial, you will take a pre-built IT support agent and bring it to life using WSO2 Agent Control Plane.
 
 ## About This Series
 
@@ -34,7 +34,7 @@ problem the previous one leaves behind, so they're meant to be read in order.
 
 ## What You'll Need
 
-- An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
+- An Agent Control Plane account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
 - An OpenAI API key.
 
 The agent itself is an [`it-helpdesk-agent`](https://github.com/wso2/agent-manager/tree/main/samples/it-helpdesk-agent).
@@ -49,7 +49,7 @@ creation time. See [Internal and External Agent](../concepts/internal-and-extern
 
 | | **Platform-Hosted** | **Externally-Hosted** |
 |---|---|---|
-| Who builds and runs it | Agent Manager, from your repository | You, wherever you like |
+| Who builds and runs it | Agent Control Plane, from your repository | You, wherever you like |
 | Tracing | Automatic, no code changes | Requires the `amp-instrumentation` package |
 
 If you're new here, pick **Platform-Hosted**. Most of the series works either
@@ -60,7 +60,7 @@ where they appear.
 
 ## Step 1: Create the Agent
 
-Log in to the Agent Manager console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/). There's no separate Agent Manager username or password to create: sign in with your existing Google or GitHub account, and Agent Manager Cloud federates that login for you.
+Log in to the Agent Control Plane console at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/). There's no separate Agent Control Plane username or password to create: sign in with your existing Google or GitHub account, and Agent Control Plane federates that login for you.
 
 If you don't belong to an organization yet, you'll be prompted to create one first. Give it a **Name** and a **Handle** (a short, URL-safe identifier for your organization), then continue.
 
@@ -68,7 +68,7 @@ Every organization already has a **default** project, so you land directly
 inside it once you're logged in.
 
 If you'd rather use a different project, go to the organization view (click
-the organization icon next to the Agent Manager logo), open **Projects**, and
+the organization icon next to the Agent Control Plane logo), open **Projects**, and
 either select an existing one or click **Add Project** and fill in:
 
 | Field | Value |
@@ -105,7 +105,7 @@ The repository is public, so no Git Secret is needed.
 Choose **Python**, leave the start command as `python main.py`, and pick a
 language version of `3.11` or later.
 
-Leave **Enable auto instrumentation** checked. Agent Manager injects an OpenTelemetry init container at build time, so the agent
+Leave **Enable auto instrumentation** checked. Agent Control Plane injects an OpenTelemetry init container at build time, so the agent
 emits traces without a single line of tracing code in the sample. The full
 mechanism is in [Observability](../concepts/observability.mdx).
 
@@ -203,7 +203,7 @@ you register. They aren't tied to a first deployment.
 ## Step 2: Build process of the platform hosted agent
 
 :::info Platform-hosted only
-Building is something Agent Manager does to source it fetched itself. If you
+Building is something Agent Control Plane does to source it fetched itself. If you
 registered an externally-hosted agent, your process is already running.
 Skip to Step 4.
 :::
@@ -328,7 +328,7 @@ traced.
 
 If you went platform-hosted, note what you did *not* have to do: no Dockerfile, no CI
 pipeline, no registry, no Kubernetes manifests, no OpenTelemetry setup. The
-whole agent deployment process was taken care of by the Agent Manager
+whole agent deployment process was taken care of by the Agent Control Plane
 Platform. If you went externally-hosted, you kept your own runtime and still
 got the traces.
 

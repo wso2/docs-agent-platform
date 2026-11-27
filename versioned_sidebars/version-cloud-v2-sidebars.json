@@ -334,11 +334,6 @@
               "label": "LLM Service Providers"
             },
             "guides/configure-agent-llm-configuration",
-            {
-              "type": "doc",
-              "id": "guides/register-mcp-proxy",
-              "label": "MCP Servers"
-            },
             "guides/environment-management",
             "guides/amp-instrumentation"
           ]

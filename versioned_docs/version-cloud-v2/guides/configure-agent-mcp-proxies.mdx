@@ -4,13 +4,13 @@ sidebar_position: 11
 
 # Configure MCP Servers for an Agent
 
-Agents can be configured to use one or more [MCP Servers](./register-mcp-proxy.mdx) registered for the organization or for the agent's project. Each binding — called a **tool configuration** — references an MCP server and exposes the proxy's per-environment endpoint (and, where required, an API key) to the agent. The process differs slightly between **Platform-hosted** and **External** agents, but both follow the same pattern: reference an org-level proxy from the agent.
+Agents can be configured to use one or more [MCP Servers](../agent-control-plane/create/mcp-servers.mdx) registered for the organization or for the agent's project. Each binding — called a **tool configuration** — references an MCP server and exposes the proxy's per-environment endpoint (and, where required, an API key) to the agent. The process differs slightly between **Platform-hosted** and **External** agents, but both follow the same pattern: reference an org-level proxy from the agent.
 
 The agent does not embed the proxy. It references it, and the platform resolves the proxy's endpoint for the agent's target environment at deploy time. Because the org-level proxy owns its per-environment gateway artifacts, changing the proxy does not redeploy the agent automatically — the agent picks up any change on its next deployment.
 
 ## Prerequisites
 
-- At least one MCP server registered for the organization or for the agent's project (see [Register an MCP Server](./register-mcp-proxy.mdx))
+- At least one MCP server registered for the organization or for the agent's project (see [MCP Servers](../agent-control-plane/create/mcp-servers.mdx))
 - An agent created in a project (Platform-hosted or External)
 
 ---
@@ -176,7 +176,7 @@ If promoting a platform-hosted agent fails with an error like:
 
 the agent's tool configuration has no working connection to the proxy in the target environment yet. Promoting anyway would deploy the agent with an empty MCP URL and API key, so the platform blocks it upfront instead of letting the agent fail on its first tool call.
 
-To resolve it, open the MCP server that the tool configuration references and confirm it is actually deployed to the target environment (see [Register an MCP Server](./register-mcp-proxy.mdx)). Saving the proxy's configuration, even without changing anything, makes the platform recheck every agent bound to it and complete any binding that has now become possible. Retry the promotion afterward.
+To resolve it, open the MCP server that the tool configuration references and confirm it is actually deployed to the target environment (see [MCP Servers](../agent-control-plane/create/mcp-servers.mdx)). Saving the proxy's configuration, even without changing anything, makes the platform recheck every agent bound to it and complete any binding that has now become possible. Retry the promotion afterward.
 
 ### The connection stays stuck even after the proxy is deployed there
 

@@ -10,7 +10,7 @@ Environments and deployment pipelines are organization-level constructs that con
 - A **deployment pipeline** defines an ordered promotion path across those environments.
 - Each **project** is assigned one deployment pipeline, and agents in that project are **promoted** along its path.
 
-Environments and deployment pipelines are managed in WSO2 Cloud, not inside Agent Manager. They are shared by every product in your organization, so the environments you create there are the ones Agent Manager deploys agents to.
+Environments and deployment pipelines are managed in WSO2 Cloud, not inside Agent Control Plane. They are shared by every product in your organization, so the environments you create there are the ones Agent Control Plane deploys agents to.
 
 ## Prerequisites
 
@@ -43,11 +43,11 @@ In the settings sidebar, click **Environments**. The page lists every environmen
    | **Name** *(required)* | The environment's identifier. It can't be changed after the environment is created. | `staging` |
    | **Display name** *(required)* | The name shown throughout the Console. | `Staging` |
    | **Description** | An optional description. | `Pre-production testing` |
-   | **Critical environment** | Turn this on for an environment that runs production-grade deployments. Deploying an agent to a critical environment requires a [separate permission](../concepts/organization.mdx#production-is-a-separate-permission). | — |
+   | **Critical environment** | Turn this on for an environment that runs production-grade deployments. Deploying an agent to a critical environment requires a [separate permission](../concepts/deployment-pipeline.mdx#how-it-governs-promotion). | — |
 
 3. Click **Create**.
 
-Agent Manager provisions the environment and installs its API Platform Gateway for
+Agent Control Plane provisions the environment and installs its API Platform Gateway for
 you. Once created, the new environment appears in the list.
 
 :::note
@@ -66,16 +66,16 @@ provisioned and operated by WSO2. There is nothing to install or configure.
 
 Each environment has its own ThunderID instance, and that instance is what issues
 [AgentID](../concepts/agentid.mdx) credentials to every agent deployed in the
-environment. A few tasks are done in its console rather than in Agent Manager —
+environment. A few tasks are done in its console rather than in Agent Control Plane —
 creating an OAuth application for an externally-hosted agent, for example, or
 looking up an agent's application by name.
 
-On Agent Manager Cloud the instance is provisioned and operated by WSO2. The console
+On Agent Control Plane the instance is provisioned and operated by WSO2. The console
 URL and its administrator credentials are issued to your organization along with the
 environment; ask your WSO2 administrator if you do not have them.
 
 Day-to-day AgentID work — provisioning, viewing, rotating, and revoking a
-credential — is done through Agent Manager instead, as described in
+credential — is done through Agent Control Plane instead, as described in
 [AgentID](../concepts/agentid.mdx), so you should rarely need this console.
 
 ---

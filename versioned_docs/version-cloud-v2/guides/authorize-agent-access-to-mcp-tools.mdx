@@ -36,7 +36,7 @@ The authorization mechanism is identical for every agent. The only difference is
 ## Prerequisites
 
 - `amctl` installed and logged in against your organization.
-- An active AI Gateway for the environment you are configuring. On Agent Manager Cloud this is provisioned for you.
+- An active AI Gateway for the environment you are configuring. On Agent Control Plane this is provisioned for you.
 - A reachable upstream MCP server URL.
 
 This guide uses the `amctl api` command to call the control plane directly, which makes every step precise and copy-pasteable. The examples use the `default` organization, `default` project, and `default` environment — substitute your own.
@@ -77,7 +77,7 @@ amctl api /orgs/default/mcp-proxies -X POST --input - <<'JSON'
 JSON
 ```
 
-You can also register a proxy through the Console — see [Register an MCP Server](./register-mcp-proxy.mdx) — but the rest of this guide uses the API for the parts that define authorization.
+You can also register a proxy through the Console — see [MCP Servers](../agent-control-plane/create/mcp-servers.mdx) — but the rest of this guide uses the API for the parts that define authorization.
 
 ---
 
@@ -182,5 +182,5 @@ Changing who can do what is now a matter of editing scopes and role assignments 
 ## Next steps
 
 - [AgentID](../concepts/agentid.mdx) — the identity each agent is issued, and how these scopes attach to it.
-- [Register an MCP Server](./register-mcp-proxy.mdx) — the full proxy registration reference, including the Console flow.
+- [MCP Servers](../agent-control-plane/create/mcp-servers.mdx) — the full proxy registration reference, including the Console flow.
 - [Configure Agent MCP Servers](./configure-agent-mcp-proxies.mdx) — attach a proxy to an agent so it can call the tools.

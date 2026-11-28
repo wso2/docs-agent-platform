@@ -19,7 +19,7 @@ An LLM Service Provider is the indirection that fixes all of those at once. The 
 
 ## How Gateways Expose a Provider
 
-A provider is defined once at the organization level, but it isn't reachable until it's deployed to a [Gateway](./gateway.mdx). The platform deploys one gateway artifact per [environment](./environment.mdx) the provider is configured for, onto an egress gateway in that environment. This is the same define-once/deploy-per-environment pattern the rest of the platform follows: one provider record, several running exposures of it.
+A provider is defined once at the organization level, but it isn't reachable until it's deployed to an [AI Gateway](./gateway.mdx). The platform deploys one gateway artifact per [environment](./environment.mdx) the provider is configured for, onto an egress gateway in that environment. This is the same define-once/deploy-per-environment pattern the rest of the platform follows: one provider record, several running exposures of it.
 
 Each provider takes a **context path** that is unique within the organization, and the invoke URL agents call is that path on the gateway host. Several providers can share a gateway as long as their context paths differ.
 
@@ -65,5 +65,5 @@ For the console walkthrough of setting one up, see [Register an LLM Service Prov
 ## Relationship to Other Concepts
 
 - Providers belong to an [Organization](./organization.mdx), not a project, so any agent in any project can use one.
-- Each provider is exposed through the [Gateway](./gateway.mdx) active in each [environment](./environment.mdx) it's deployed to.
+- Each provider is exposed through the [AI Gateway](./gateway.mdx) active in each [environment](./environment.mdx) it's deployed to.
 - Registering and changing providers is governed by RBAC — the **Platform Engineer** and **Admin** roles own them, including provider-level guardrails. **Developers** can connect agents to a provider and add guardrails to an agent's LLM configuration, but cannot register, change, or delete a provider. See [Access Control](./organization.mdx#access-control).

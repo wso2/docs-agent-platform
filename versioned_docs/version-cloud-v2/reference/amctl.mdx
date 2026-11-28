@@ -1,0 +1,157 @@
+---
+sidebar_position: 3
+sidebar_label: amctl CLI
+description: Install amctl, sign in to Choreo Agent Control Plane in the US or EU region, and manage contexts, organizations, and agents from the terminal.
+---
+
+# amctl CLI
+
+`amctl` is the command-line interface for Choreo Agent Control Plane. It signs in to Choreo Cloud in the browser and acts with your own permissions in your organization, so every command is limited to what your role allows.
+
+## Installation
+
+`amctl` is published on the [`amctl` releases page](https://github.com/wso2/agent-manager/releases?q=amctl) as one archive per platform. Download the archive for your platform from the latest release.
+
+| Platform | Archive |
+|----------|---------|
+| macOS (Apple silicon) | `amctl_v<version>_darwin_arm64.tar.gz` |
+| macOS (Intel) | `amctl_v<version>_darwin_amd64.tar.gz` |
+| Linux (x86-64) | `amctl_v<version>_linux_amd64.tar.gz` |
+| Linux (ARM64) | `amctl_v<version>_linux_arm64.tar.gz` |
+| Windows (x64) | `amctl_v<version>_windows_amd64.zip` |
+
+Each release also has a `checksums.txt` file with the SHA-256 checksum of every archive.
+
+### macOS and Linux
+
+Set `VERSION` to the latest release version and `PLATFORM` to your platform from the table, then download, extract, and install the binary:
+
+```bash
+VERSION=<version>
+PLATFORM=darwin_arm64
+curl -fsSLO "https://github.com/wso2/agent-manager/releases/download/amctl/v${VERSION}/amctl_v${VERSION}_${PLATFORM}.tar.gz"
+tar -xzf "amctl_v${VERSION}_${PLATFORM}.tar.gz" amctl
+sudo mv amctl /usr/local/bin/
+```
+
+### Windows
+
+```powershell
+$Version = "<version>"
+Invoke-WebRequest -Uri "https://github.com/wso2/agent-manager/releases/download/amctl/v$Version/amctl_v${Version}_windows_amd64.zip" -OutFile amctl.zip
+Expand-Archive amctl.zip -DestinationPath $env:USERPROFILE\amctl
+$env:Path += ";$env:USERPROFILE\amctl"
+```
+
+To keep `amctl` on the `PATH` in new terminals, add `%USERPROFILE%\amctl` under **System Properties** > **Environment Variables**.
+
+### Verify the Installation
+
+```bash
+amctl version
+```
+
+## Sign In
+
+Run `amctl login` to sign in:
+
+```bash
+amctl login
+```
+
+The first sign-in asks which region your organization is in:
+
+```text
+Which WSO2 Cloud region do you want to log in to?
+  1) United States (--region us)
+  2) Europe (--region eu)
+Choose 1-2 [1]:
+```
+
+| Region | `--region` value | Agent Control Plane API |
+|--------|------------------|-------------------------|
+| US | `us` | `https://prod-v2-wso2cloud.gateway.cloud.choreolabs.com/agent-manager-service-agent-manager-api` |
+| EU | `eu` | `https://prod-v2-eu-wso2cloud.gateway.eu.cloud.choreolabs.com/agent-manager-service-agent-manager-api` |
+
+Press **Enter** at the next prompt to open the Choreo Cloud sign-in page in your browser. After you sign in, the browser returns to `amctl` on `http://127.0.0.1:10325/callback`. If `amctl` cannot open a browser, for example over SSH, it prints the sign-in URL to open on another machine.
+
+`amctl` saves the session as the `cloud` context in `~/.amctl/config`. When your account belongs to a single organization, that organization becomes the active one. When it belongs to several, select one with `amctl context org use <org>` or pass `--org` on each command.
+
+### Sign In Again
+
+`amctl login` with no flags signs in again to the current context and keeps its region, so the region prompt appears only on the first sign-in. To move to the other region, pass `--region`:
+
+```bash
+amctl login --region eu
+```
+
+`--region` also skips the prompt on the first sign-in, for use in scripts. When there is no terminal to prompt on, or `--json` is set, and `--region` is not passed, `amctl` signs in to the US region.
+
+### `amctl login` Options
+
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `--region` | string | (none) | Region to sign in to: `us` or `eu`. Implies `--cloud`. |
+| `--cloud` | bool | `false` | Sign in to Choreo Cloud as the `cloud` context, even when another context is current. Keeps the stored region. |
+| `--client-id` | string | (none) | OAuth client ID. The browser sign-in uses `amctl` when it is not set. |
+| `--client-secret` | string | (none) | OAuth client secret. When set, `amctl` uses the client credentials grant instead of the browser sign-in. Requires `--client-id`. |
+
+## Contexts and Organizations
+
+A context is a saved sign-in. The `cloud` context holds your Choreo Cloud session, and every command runs against the current context and its active organization.
+
+| Command | Description |
+|---------|-------------|
+| `amctl context show` | Show the current context, organization, and linked project. |
+| `amctl context org list` | List the organizations your account belongs to. |
+| `amctl context org use <org>` | Set the active organization. |
+| `amctl context instance list` | List the saved contexts. |
+| `amctl context instance use <name>` | Switch to a saved context without signing in again. |
+| `amctl context instance remove <name>` | Remove a saved context. Asks you to type the name to confirm; pass `--yes` to skip the prompt, which is required when there is no terminal. |
+| `amctl context link` | Link the current directory to an organization, a project (`--project`), and optionally an agent (`--agent`). Commands run from the directory or its subdirectories use the link. Linked directories always use the `default` environment. |
+| `amctl context unlink` | Remove the link for the current directory. |
+
+Switching to another context clears every directory link, because links do not record which context they belong to.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `amctl login` | Sign in to Choreo Cloud. |
+| `amctl context` | View and manage contexts, organizations, and directory links. |
+| `amctl project` | Create, list, get, and delete projects. |
+| `amctl agent` | Create, build, deploy, and delete agents; manage their LLM and MCP Proxy configurations and A2A agent cards; and fetch their status, logs, metrics, and traces. |
+| `amctl llm-provider` | Create, list, and delete LLM Service Providers. |
+| `amctl gateway` | List and inspect gateways. |
+| `amctl api` | Make an authenticated request to the Agent Control Plane API. |
+| `amctl skills` | Install, list, and remove AI assistant skills. |
+| `amctl version` | Print the `amctl` version. |
+| `amctl completion` | Generate a shell autocompletion script. |
+
+Run `amctl <command> --help` for the subcommands and flags of each command.
+
+## Global Flags
+
+These flags apply to every command:
+
+| Flag | Description |
+|------|-------------|
+| `--org <org>` | Run the command in this organization instead of the active one. |
+| `--json` | Write a JSON envelope to stdout instead of text. Errors are written to stdout too. |
+| `-h`, `--help` | Show help for the command. |
+| `-v`, `--version` | Print the `amctl` version. |
+
+## JSON Output
+
+With `--json`, every command writes one envelope. A successful command returns the scope it ran in and its result in `data`:
+
+```json
+{
+  "instance": "cloud",
+  "org": "acme",
+  "project": "support",
+  "data": {}
+}
+```
+
+A failed command returns `error` in place of `data`, with `status`, `code`, and `message` fields. The `org`, `project`, `environment`, and `agent` fields appear only when the command used them.

@@ -1,16 +1,16 @@
 ---
-title: Gateway
+title: AI Gateway
 ---
 
-# Gateway
+# AI Gateway
 
-A Gateway is an organization-level infrastructure component that routes traffic through a controlled proxy. Every **[LLM Service Provider](./llm-service-provider.mdx)** and **[MCP Server](./mcp-proxy.mdx)** is exposed to agents through a gateway's invoke URL, rather than being called directly. Agent Control Plane currently supports the **API Platform Gateway**.
+The AI Gateway is the organization-level infrastructure that routes your agents' traffic through a controlled proxy. Every **[LLM Service Provider](./llm-service-provider.mdx)** and **[MCP Server](./mcp-proxy.mdx)** is exposed to agents through a gateway's invoke URL, rather than being called directly. Agent Control Plane currently supports the **API Platform Gateway**.
 
-Unlike Organization, Project, and Environment, the Gateway isn't an OpenChoreo abstraction. It's an [API Platform](https://github.com/wso2/api-platform) component that Agent Control Plane registers and manages on top of OpenChoreo's infrastructure.
+The AI Gateway is made up of one or more gateways. Every environment comes with a managed gateway, and you can add self-hosted gateways for outbound traffic. Each gateway is an [API Platform](https://github.com/wso2/api-platform) gateway that Agent Control Plane registers and manages. See [Manage AI Gateways](../agent-control-plane/administer/gateways.mdx).
 
-## Why Traffic Goes Through a Gateway
+## Why Traffic Goes Through the AI Gateway
 
-Routing LLM and MCP traffic through a gateway rather than exposing upstream providers directly gives Agent Control Plane one place to apply cross-cutting controls:
+Routing LLM and MCP traffic through the AI Gateway rather than exposing upstream providers directly gives Agent Control Plane one place to apply cross-cutting controls:
 
 - **Authentication** — agents authenticate with platform issued API keys instead of upstream provider credentials.
 - **Access control** — which API operations or MCP tools/resources/prompts an agent can reach.

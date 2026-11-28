@@ -12,7 +12,7 @@ Because agents, gateways, and proxies are all deployed per environment, most of 
 
 - **Agent deployments** — a given agent version is deployed independently to each environment it's promoted to.
 - **AgentID** — every environment provisions its own dedicated identity for each agent that runs in it; see [Agent ID](./agentid.mdx).
-- **Gateway artifacts** — an [LLM Service Provider](./llm-service-provider.mdx) or [MCP Server](./mcp-proxy.mdx) deploys one gateway artifact per environment it's configured for, to that environment's active **[Gateway](./gateway.mdx)**.
+- **Gateway artifacts** — an [LLM Service Provider](./llm-service-provider.mdx) or [MCP Server](./mcp-proxy.mdx) deploys one gateway artifact per environment it's configured for, to that environment's active **[AI Gateway](./gateway.mdx)**.
 - **Identity providers** — the token issuers each environment's gateway trusts. A token accepted in development is not automatically accepted in production. 
 
 ## Where You Manage Environments

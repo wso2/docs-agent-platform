@@ -4,7 +4,7 @@ sidebar_position: 6
 
 # MCP Server
 
-An **MCP Server** in Agent Control Plane is a governed entry point to one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, Agent Control Plane connects to the upstream server, discovers the tools, resources, and prompts it exposes, and publishes an endpoint through that environment's platform [Gateway](./gateway.mdx). Agents call the tools through that gateway endpoint with a platform-issued key, never with the upstream server's own credentials, so access can be secured, controlled, and rewritten per environment.
+An **MCP Server** in Agent Control Plane is a governed entry point to one or more upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers. For each environment you configure, Agent Control Plane connects to the upstream server, discovers the tools, resources, and prompts it exposes, and publishes an endpoint through that environment's [AI Gateway](./gateway.mdx). Agents call the tools through that gateway endpoint with a platform-issued key, never with the upstream server's own credentials, so access can be secured, controlled, and rewritten per environment.
 
 Earlier versions of Agent Control Plane called this resource an **MCP Proxy**. The API and the platform MCP server tools still use that name, for example the `/mcp-proxies` paths and the `list_mcp_proxies` tool.
 
@@ -25,7 +25,7 @@ For a project MCP server, each environment it is deployed to has its own binding
 
 ## How an MCP Server Is Deployed
 
-An MCP server is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. Agent Control Plane deploys one gateway artifact per configured environment, onto an egress-capable [Gateway](./gateway.mdx) in that environment. When the environment has exactly one egress gateway the platform infers it and you pick nothing; when it has more than one, the target gateway must be specified as the endpoint is deployed. See [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
+An MCP server is multi-environment. You attach one or more endpoints to it, and each endpoint serves one or more environments. Agent Control Plane deploys one gateway artifact per configured environment, onto an egress-capable [AI Gateway](./gateway.mdx) in that environment. When the environment has exactly one egress gateway the platform infers it and you pick nothing; when it has more than one, the target gateway must be specified as the endpoint is deployed. See [How the Egress Gateway Is Selected](./gateway.mdx#how-the-egress-gateway-is-selected).
 
 - Environments with an endpoint get a deployed artifact on their gateway.
 - Environments without an endpoint are left unconfigured: there is no artifact, and agents that reference the MCP server there receive empty connection values.

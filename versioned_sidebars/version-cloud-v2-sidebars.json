@@ -240,7 +240,7 @@
             {
               "type": "doc",
               "id": "agent-control-plane/administer/gateways",
-              "label": "Manage Gateways"
+              "label": "Manage AI Gateways"
             },
             {
               "type": "doc",
@@ -386,6 +386,11 @@
           "type": "doc",
           "id": "reference/observer-mcp-server",
           "label": "Observer MCP Server"
+        },
+        {
+          "type": "doc",
+          "id": "reference/amctl",
+          "label": "amctl CLI"
         }
       ]
     }

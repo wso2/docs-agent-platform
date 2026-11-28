@@ -25,8 +25,6 @@ This guide walks you through creating custom evaluators in the AMP Console. Cust
 3. Click the **Evaluators** sub-tab to see the evaluators list.
 4. Click **Create Evaluator**.
 
-![Evaluators list with Create Evaluator button](../img/evaluation/custom-eval-list.png)
-
 ---
 
 ## Create a Custom Evaluator
@@ -40,8 +38,6 @@ This guide walks you through creating custom evaluators in the AMP Console. Cust
    - **Code**: write a Python function with arbitrary evaluation logic (deterministic rules, external API calls, regex matching, statistical analysis, or any combination)
    - **LLM-Judge**: write a prompt template that instructs an LLM to score trace quality — use this when evaluation requires subjective judgment (semantic accuracy, domain-specific quality, or nuanced reasoning assessment)
 
-![Basic details form](../img/evaluation/custom-eval-basic-details.png)
-
 ### Step 2: Select Evaluation Level
 
 Select the level at which your evaluator operates:
@@ -49,8 +45,6 @@ Select the level at which your evaluator operates:
 - **Trace**: evaluates the full execution from input to output (`Trace` object)
 - **Agent**: evaluates a single agent's steps and decisions (`AgentTrace` object)
 - **LLM**: evaluates a single LLM call with messages and response (`LLMSpan` object)
-
-![Evaluation level selection](../img/evaluation/custom-eval-code-details.png)
 
 ### Step 3: Write the Evaluation Logic
 
@@ -78,8 +72,6 @@ def evaluate(trace: Trace) -> EvalResult:
     except json.JSONDecodeError as e:
         return EvalResult(score=0.0, explanation=f"Invalid JSON: {e}")
 ```
-
-![Code editor](../img/evaluation/custom-eval-code-editor.png)
 
 :::tip
 Use `EvalResult.skip()` instead of returning a score of 0.0 when the evaluator is not applicable. Skipped evaluations are tracked separately and do not affect aggregated scores.
@@ -118,8 +110,6 @@ Evaluate whether the agent:
 
 Score 1.0 if all criteria are met, 0.5 if partially met, 0.0 if the response is incorrect or misleading.
 ```
-
-![LLM judge prompt editor](../img/evaluation/custom-eval-llm-judge-editor.png)
 
 :::tip
 LLM judge evaluators inherit the same **Model**, **Temperature**, and **Criteria** configuration as built-in LLM-as-Judge evaluators. These parameters are configurable when adding the evaluator to a monitor.

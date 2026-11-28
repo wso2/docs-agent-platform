@@ -4,7 +4,7 @@ title: Organization
 
 # Organization
 
-An Organization is the top-level tenant boundary in choreo cloud. Every [Project](./project.mdx), [Environment](./environment.mdx), [Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
+An Organization is the top-level tenant boundary in choreo cloud. Every [Project](./project.mdx), [Environment](./environment.mdx), [AI Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
 
 Agent Control Plane doesn't own the organization. It is your Choreo Cloud organization, and Choreo Cloud manages it: its name and handle, its members, the groups and roles that grant access, single sign-on, billing, and audit logs. The same organization, with the same members and roles, is shared by every product you use in Choreo Cloud, so Agent Control Plane sees the people and permissions you set up there.
 
@@ -34,7 +34,7 @@ The **Infrastructure** section of the same menu holds organization-wide infrastr
 
 **[LLM Service Providers](./llm-service-provider.mdx)** are defined at the organization level, so any agent in any project can reference them. **[MCP Servers](./mcp-proxy.mdx)** can be defined for the organization, where any project's agents can use them, or for a single project, where only that project's agents can use them.
 
-**[Environments](./environment.mdx)** and **[Gateways](./gateway.mdx)** are organization-level. An environment has at most one ingress gateway for inbound calls to its agents, and may have several egress gateways hosting outbound LLM and MCP traffic. Identity providers are attached to those gateways, and determine which token issuers each environment trusts.
+**[Environments](./environment.mdx)** and **[AI Gateways](./gateway.mdx)** are organization-level. An environment has at most one ingress gateway for inbound calls to its agents, and may have several egress gateways hosting outbound LLM and MCP traffic. Identity providers are attached to those gateways, and determine which token issuers each environment trusts.
 
 ## Access Control
 

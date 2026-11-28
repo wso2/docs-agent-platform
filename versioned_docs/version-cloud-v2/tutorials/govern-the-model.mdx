@@ -46,8 +46,8 @@ Nothing sits between the agent and OpenAI, so nothing can inspect or block
 what it sends or gets back.
 
 **By the end of this chapter**, the agent won't hold an OpenAI key at all. It'll
-hold a platform-issued gateway key instead, and every call will route through a
-[gateway](../concepts/gateway.mdx) that enforces guardrails and rate limits
+hold a platform-issued gateway key instead, and every call will route through an
+[AI Gateway](../concepts/gateway.mdx) that enforces guardrails and rate limits
 before the request ever reaches OpenAI:
 
 ```mermaid

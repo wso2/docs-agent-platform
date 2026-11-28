@@ -1,0 +1,71 @@
+---
+title: Get Started with Self-Hosted AI & Agent Management
+description: Find the quick start guide for each AI & Agent Management component you can run on your own infrastructure, and see how the components fit together.
+---
+
+# Get Started
+
+AI & Agent Management has four components that you can run on your own infrastructure. Each one installs on its own, so you can start with the component that matches what you want to do and add the others later. This page helps you pick the right quick start guide.
+
+:::tip Prefer not to manage the infrastructure?
+Run AI & Agent Management in the cloud, or in a hybrid setup with your own AI gateways. See the [Quick Start Guide](../quick-start.mdx) for the cloud.
+:::
+
+## Self-Hosted Components
+
+| Component | What it does | Its quick start runs on |
+| :--- | :--- | :--- |
+| **Agent Manager** | Builds, deploys, observes, and evaluates AI agents, and governs the LLM and MCP traffic they send. | A local Kubernetes cluster (k3d), set up from a dev container |
+| **AI & Agent Control Plane** | Manages AI gateways, LLM providers, LLM and MCP proxies, AI policies, and secrets from one console, then deploys that configuration to the gateways. | Docker Compose |
+| **AI Gateway** | Routes LLM and MCP traffic, and applies policies such as guardrails and token-based rate limits to it. | Docker Compose |
+| **API Portal & AI Hub** | Gives developers a catalog where they discover, subscribe to, and try the APIs and MCP servers you publish. | Docker Compose |
+
+The components work together. Agent Manager installs an AI Gateway to route the LLM traffic of your agents. You can register AI gateways with the AI & Agent Control Plane to manage all of them from one place. The API Portal & AI Hub makes your APIs and MCP servers available to the developers who build on them.
+
+## What Do You Want to Do?
+
+### Build, Run, and Observe AI Agents
+
+You want Agent Manager: a platform that deploys your AI agents on Kubernetes, gives each one an identity, and records traces, logs, and metrics for every request. It also governs the models and tools your agents use through an AI Gateway.
+
+The quick start installs Agent Manager, the OpenChoreo platform it runs on, an AI Gateway, and the observability stack on a local k3d cluster. It needs Docker with at least 8 GB of RAM and 4 CPUs, and takes 15 to 20 minutes.
+
+| Guide | What you will do |
+| :--- | :--- |
+| [Agent Manager: Quick Start Guide](https://wso2.com/agent-platform/docs/v1.0.0/get-started/quick-start/) | Install Agent Manager with one command, and sign in to the Console. |
+| [Create Your First Agent](https://wso2.com/agent-platform/docs/v1.0.0/tutorials/create-your-first-agent/) | Deploy a sample IT support agent, chat with it, and read its first trace. |
+
+To install Agent Manager on an existing Kubernetes cluster, see [On Your Environment](https://wso2.com/agent-platform/docs/v1.0.0/guides/on-your-environment/). To run it on a single virtual machine, see [Run Agent Manager on a VM with Docker](https://wso2.com/agent-platform/docs/v1.0.0/guides/on-a-vm/).
+
+### Route and Govern LLM and MCP Traffic
+
+You want the AI Gateway: a lightweight gateway that you download and run on its own. It needs no control plane or console. You configure it through its management API.
+
+| Guide | What you will do |
+| :--- | :--- |
+| [AI Gateway: Quick Start Guide](https://wso2.com/api-platform/docs/ai-gateway/1.2.0/quick-start-guide/) | Run the gateway with Docker Compose, configure an LLM provider, and route your first LLM request through the gateway. |
+| [MCP Proxy](https://wso2.com/api-platform/docs/ai-gateway/1.2.0/gateway-artifacts/mcp-proxy/) | Expose an MCP server through the gateway, and connect to it from an MCP client. |
+
+### Manage AI Gateways and AI Policies Centrally
+
+You already run AI gateways, or plan to, and want one console to manage the LLM providers, MCP proxies, guardrails, and cost controls across all of them.
+
+| Guide | What you will do |
+| :--- | :--- |
+| [AI & Agent Control Plane: Quick Start Guide](https://wso2.com/api-platform/docs/ai-workspace/1.0.0/getting-started/) | Run the AI & Agent Control Plane with Docker Compose, connect an AI Gateway, configure an LLM provider, and send your first prompt. |
+
+### Publish APIs and MCP Servers for Developers
+
+You want a developer portal where developers find the APIs and MCP servers they can use, subscribe to them, and try them out.
+
+| Guide | What you will do |
+| :--- | :--- |
+| [API Portal & AI Hub: Quick Start Guide](https://wso2.com/api-platform/docs/api-portal/1.0.0/quickstart-guide/) | Run the API Portal & AI Hub with Docker Compose, then publish an API and an MCP server to its catalog. |
+
+## After Your First Quick Start
+
+| I want to... | Go here |
+| :--- | :--- |
+| Explore the full documentation of a component | [Agent Manager](https://wso2.com/agent-platform/docs/v1.0.0/get-started/what-is-amp/) · [AI & Agent Control Plane](https://wso2.com/api-platform/docs/ai-workspace/1.0.0/overview/) · [AI Gateway](https://wso2.com/api-platform/docs/ai-gateway/1.2.0/overview/) · [API Portal & AI Hub](https://wso2.com/api-platform/docs/api-portal/1.0.0/overview/) |
+| Manage agents from the terminal | [CLI Installation](https://wso2.com/agent-platform/docs/v1.0.0/guides/cli-installation/) |
+| Plan a production deployment of the AI Gateway | [Setup and Deployment](https://wso2.com/api-platform/docs/ai-gateway/1.2.0/setup-and-deployment/) |

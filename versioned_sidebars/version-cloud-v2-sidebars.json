@@ -316,11 +316,6 @@
               "type": "doc",
               "id": "api-portal/discover/browse-mcp-servers",
               "label": "MCP Servers"
-            },
-            {
-              "type": "doc",
-              "id": "api-portal/discover/ai-agent-discovery",
-              "label": "AI Agents"
             }
           ]
         },
@@ -332,11 +327,6 @@
               "type": "doc",
               "id": "api-portal/administer/manage-mcp-servers",
               "label": "Manage MCP Servers"
-            },
-            {
-              "type": "doc",
-              "id": "api-portal/administer/llm-instructions",
-              "label": "LLM Instructions"
             }
           ]
         }

@@ -11,7 +11,7 @@ Deploy a platform-hosted agent that speaks the [Agent2Agent (A2A) protocol](http
 
 A client fetches the agent's card, picks a transport, and sends messages; the agent answers with a task.
 
-Your agent serves its own card and its own A2A routes. Agent Manager publishes it to the gateway with two transports at fixed path prefixes under the agent's URL:
+Your agent serves its own card and its own A2A routes. Agent Control Plane publishes it to the gateway with two transports at fixed path prefixes under the agent's URL:
 
 | Path | What it serves |
 |---|---|
@@ -27,7 +27,7 @@ Clients reach the agent only through the gateway, so the gateway's CORS and auth
 
 - An agent that serves the A2A protocol on a single port, with JSON-RPC under `/rpc`, HTTP+JSON under `/rest`, and its card at `/.well-known/agent-card.json`. The [A2A Notes Agent sample](../tutorials/deploy-the-a2a-notes-agent-sample.mdx) is a working example built on the `a2a-sdk` Python package.
 - The agent's source in a GitHub repository.
-- An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
+- An Agent Control Plane account. Sign up at [Choreo Cloud Console](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
 
 ## Step 1: Create the Agent
 

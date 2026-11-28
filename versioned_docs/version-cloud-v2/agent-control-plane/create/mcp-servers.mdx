@@ -4,16 +4,40 @@ title: MCP Servers
 
 # MCP Servers
 
-An MCP server provides tools, resources, and prompts for agents. You can register an MCP server for the whole organization or for a project, and agents call its tools through their [tool configurations](../develop/tool-configurations.mdx) or the **MCP Servers** section when you create the agent.
+An MCP server provides tools, resources, and prompts for agents. You register an upstream [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server in Agent Control Plane, and agents call its tools through the AI Gateway, using their [tool configurations](../develop/tool-configurations.mdx) or the **MCP Servers** section when you create the agent.
 
-## View MCP servers
+Registering an MCP server in Agent Control Plane lets you:
+
+- Authenticate agents with platform-issued API keys instead of the upstream server's credentials.
+- Restrict which tools, resources, and prompts agents can reach.
+- Rename or remap capabilities for agents without changing the upstream server.
+- Point each environment at a different upstream server, and apply gateway policies per environment.
+
+To learn how MCP servers are deployed across environments, see [MCP Server](../../concepts/mcp-proxy.mdx).
+
+## Organization and Project MCP Servers
+
+You can register an MCP server for the whole organization or for a single project:
+
+- An **organization** MCP server can be used by agents in any project. Registering it adds it to the catalog, so no further step is needed.
+- A **project** MCP server can be used only by agents in that project. A project's MCP servers also include those published from its components.
+
+## Prerequisites
+
+- A role that can register MCP servers, such as **Admin** or **Platform Engineer**. See [Access Control](../../concepts/organization.mdx#access-control).
+- An upstream MCP server URL that the AI Gateway can reach, for each environment you want to serve.
+- Any credential the upstream MCP server requires, such as an API key sent in an HTTP header.
+
+## View MCP Servers
 
 - **Organization level**: In the left navigation, under **Resources**, click **MCP servers**.
-- **Project level**: In the left navigation, click **MCP servers**. The list shows the MCP servers registered for the organization or the project, and those published from the project's components.
+- **Project level**: In the left navigation, click **MCP servers**. The list shows the MCP servers registered for the organization or the project, and those published from the project's components. Filter it with **All**, **Project**, or **From organization**. Each server is labeled **Project** or **Organization**.
 
 The **MCP Servers** page lists the servers with their **Name**, **Version**, and when they were **Last Updated**. Use **Search MCP servers** to find a server by name.
 
-## Register an MCP server
+## Register an MCP Server
+
+Registering works the same way for the organization and for a project. Start from the organization's or the project's **MCP Servers** page.
 
 1. On the **MCP Servers** page, click **Register MCP server**. The **Register MCP Server** page opens.
 2. Enter the server's details:
@@ -44,3 +68,83 @@ The **MCP Servers** page lists the servers with their **Name**, **Version**, and
 5. Click **Create**.
 
 The server is listed on the **MCP Servers** page.
+
+For a project MCP server, each environment the endpoint is assigned to gets its own deployment. Agent Control Plane discovers that deployment's tools through its gateway once it is deployed. An MCP server published from a component appears in the project's list without being registered, once its component is published to an environment.
+
+## Configure an MCP Server
+
+Click a server on the **MCP Servers** page to open it. The page header shows the server's **Context**. To change the server's details or its endpoints, click **Edit MCP server**.
+
+The settings on the tabs belong to an endpoint, not to the server as a whole. If the server has more than one endpoint, select the endpoint to view or change at the top of the page. A change applies to every environment that endpoint serves. To use different settings in different environments, serve those environments from separate endpoints.
+
+If you change a setting and leave the page without saving, the Console asks you to confirm.
+
+### Overview
+
+A read-only summary of the selected endpoint:
+
+- **Auth Type**: how agents authenticate to the server, set on the **Security** tab.
+- **Manage Tools**: the number of tools the server exposes.
+- **Deployment**: each environment the endpoint serves, and whether it is **Deployed** or **Undeployed** there.
+
+### Connection
+
+The upstream connection: the **MCP Server Endpoint URL**, and an optional authentication header sent to the MCP server. A stored credential is hidden. Leave it unchanged to keep it, or enter a new value to replace it. Click **Save**.
+
+### Manage Tools
+
+The tools, resources, and prompts the endpoint exposes, and which of them agents can reach:
+
+- **Allow all** permits everything except the exceptions you list.
+- **Deny all** blocks everything except the exceptions you list.
+
+Click **Save** to apply.
+
+### Security
+
+How agents authenticate to the server through the gateway:
+
+| Field | Description | Example |
+|---|---|---|
+| **Method** | `API Key`, `OAuth`, or none. | `API Key` |
+| **Key Location** | For `API Key`, whether the key is sent in a header or a query parameter. | `header` |
+| **Header Key** / **Query Param Key** | For `API Key`, the name of the header or query parameter that carries the key. | `X-API-Key` |
+
+Changing the method of a server that agents already use asks you to confirm, because agents configured for the old method stop working until their tool configuration is updated.
+
+With **OAuth**, the **Authorization** section restricts individual tools to callers whose token carries the required scopes:
+
+- **Scopes**: the scopes defined for the server. Click **Create Scope** to add one. Scopes apply to the whole server, across every endpoint and environment.
+- **Tools**: assign scopes to each tool. A caller needs every scope a tool requires. A tool that is blocked on the **Manage Tools** tab is marked **Blocked by Manage Tools**.
+
+For the full flow of defining scopes and granting them to agents, see [Authorize Agent Access to MCP Tools](../../guides/authorize-agent-access-to-mcp-tools.mdx).
+
+Click **Save**.
+
+### Rewrite
+
+Change what agents see for each capability without changing the upstream server. Turn rewriting on, then select a capability:
+
+- **Tool**: **Name**, **Description**, **Input Schema**, **Output Schema**, and **Target**, the backend tool name that calls are forwarded to.
+- **Resource**: **URI**, **Description**, and **Target**, the backend resource URI that reads are forwarded to.
+- **Prompt**: **Name**, **Description**, and **Target**, the backend prompt name that requests are forwarded to.
+
+Click **Save**.
+
+### Policies
+
+Add gateway policies to the server. Click **Add Policy**, choose a policy, and configure it. Drag policies to change their execution order. Access control, security, and rewrite are set on their own tabs.
+
+## Verify the MCP Server
+
+Open the server and check the **Overview** tab: **Deployment** shows **Deployed** for each environment you configured, and **Manage Tools** shows the expected number of tools. Agents reach the server through the gateway once you attach it to them.
+
+## Notes
+
+- Changing an MCP server does not redeploy the agents that use it. Each agent picks up the change on its next deployment.
+- Agents never receive the upstream server's credentials. API keys for agents are issued per agent and environment when you attach the server to an agent.
+
+## Next Steps
+
+- [Configure MCP Servers for an Agent](../../guides/configure-agent-mcp-proxies.mdx): attach the server to an agent so it can use its tools.
+- [Authorize Agent Access to MCP Tools](../../guides/authorize-agent-access-to-mcp-tools.mdx): restrict tools to agents with the right scopes.

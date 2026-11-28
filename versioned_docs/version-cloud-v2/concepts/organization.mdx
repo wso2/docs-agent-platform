@@ -4,52 +4,65 @@ title: Organization
 
 # Organization
 
-An Organization is the top-level tenant boundary in WSO2 Agent Manager. Every [Project](./project.mdx), [Environment](./environment.mdx), [Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
+An Organization is the top-level tenant boundary in choreo cloud. Every [Project](./project.mdx), [Environment](./environment.mdx), [AI Gateway](./gateway.mdx), and resource you register belongs to exactly one organization.
 
-Organizations aren't something Agent Manager owns or invents, they're managed by [OpenChoreo](https://openchoreo.dev), the platform Agent Manager is built on. Agent Manager is a control plane layered on top of OpenChoreo. So when you create an organization, you're creating the same organization OpenChoreo itself would recognize.
+Agent Control Plane doesn't own the organization. It is your Choreo Cloud organization, and Choreo Cloud manages it: its name and handle, its members, the groups and roles that grant access, single sign-on, billing, and audit logs. The same organization, with the same members and roles, is shared by every product you use in Choreo Cloud, so Agent Control Plane sees the people and permissions you set up there.
+
+## Manage the Organization
+
+You manage the organization in the Choreo Cloud Console. To open its settings, click the app launcher (the grid of dots at the top left), then click **Settings**. The **Organization** section has these pages:
+
+| Page | What you manage there |
+|------|-----------------------|
+| **General** | The organization name, the handle (which cannot be changed), the organization unit ID, the AI assistant setting, and deleting the organization. |
+| **Members** | The organization's users and their groups. Invite people with **Invite user**, and track invitations under **Pending invitations**. |
+| **Access control** | The groups, the roles they grant, and the assignments between them. See [Access Control](#access-control). |
+| **Billing** | The subscription and usage for each product, including AI & Agent Management. |
+| **Service contacts** | The people notified about upcoming cloud changes, such as maintenance windows, by category (**General**, **Security**, **Billing**) and product. |
+| **Single sign-on** | An OpenID Connect identity provider, so people in your organization sign in with their work account. |
+| **Audit logs** | The audit activity in the organization, filterable by time range. |
+
+The **Infrastructure** section of the same menu holds organization-wide infrastructure, such as **Environments** and **Deployment Pipelines**.
+
+:::warning
+**Delete organization** marks the organization and all its resources for deletion, including every Agent Control Plane project and agent. They are permanently deleted after 30 days.
+:::
 
 ## What an Organization Contains
 
-**[Projects](./project.mdx)** are the containers your agents live in. Every agent belongs to exactly one project, and a project is also what a **[Deployment Pipeline](./deployment-pipeline.mdx)** attaches to — so the promotion path an agent follows is decided at the project level rather than per agent. An organization typically holds several projects, one per application or team.
+**[Projects](./project.mdx)** are the containers your agents live in. Every agent belongs to exactly one project, and a project is also what a **[Deployment Pipeline](./deployment-pipeline.mdx)** attaches to, so the promotion path an agent follows is decided at the project level rather than per agent. An organization typically holds several projects, one per application or team.
 
-**[LLM Service Providers](./llm-service-provider.mdx)** and **[MCP Proxies](./mcp-proxy.mdx)** are defined at the organization level rather than inside a project, so any agent in any project can reference them.
+**[LLM Service Providers](./llm-service-provider.mdx)** are defined at the organization level, so any agent in any project can reference them. **[MCP Servers](./mcp-proxy.mdx)** can be defined for the organization, where any project's agents can use them, or for a single project, where only that project's agents can use them.
 
-**[Environments](./environment.mdx)** and **[Gateways](./gateway.mdx)** are organization-level. An environment has at most one ingress gateway for inbound calls to its agents, and may have several egress gateways hosting outbound LLM and MCP traffic. Identity providers are attached to those gateways, and determine which token issuers each environment trusts.
-
+**[Environments](./environment.mdx)** and **[AI Gateways](./gateway.mdx)** are organization-level. An environment has at most one ingress gateway for inbound calls to its agents, and may have several egress gateways hosting outbound LLM and MCP traffic. Identity providers are attached to those gateways, and determine which token issuers each environment trusts.
 
 ## Access Control
 
-Access control in Agent Manager is defined at the organization level and nowhere else. Users, groups, and roles all belong to an organization, and a permission granted there applies across every project inside it.
+Access is managed for the whole organization in Choreo Cloud, under **Settings** → **Access control**. A permission granted there applies across every project in the organization.
 
 ### One Permission Model, Every Entry Point
 
-Every action in the organization is authorized against an OAuth 2.0 scope named `amp:<resource>:<action>`(ex:- `amp:project:read`, `amp:agent:build`, `amp:gateway:create`).Scopes are issued as claims on an access token by the platform's identity provider. The same scope gates the same capability whether you reach the platform through the Console, the REST API, or the MCP servers.
+Every Agent Control Plane action is authorized against an OAuth 2.0 scope named `amp:<resource>:<action>`, for example `amp:project:read`, `amp:agent:build`, or `amp:gateway:create`. Choreo Cloud issues the scopes your roles grant as claims on your access token. The same scope gates the same capability whether you reach Agent Control Plane through the Console, the REST API, or the MCP servers.
+
+In **Access control**, a role's permissions are grouped by product. The Agent Control Plane permissions are under **AI & Agent Management** (`amp:*`). Other products keep their own areas, such as **Choreo Cloud** (`cloud:*`), **API Management** (`ap:*`), **Integration** (`ipaas:*`), and **Identity & Access Management** (`iam:*`). Hover a permission to see the exact handle the platform checks.
 
 :::note
-This platform identity provider is not the same thing as the per-environment identity providers described in [Environment](./environment.mdx). This one authenticates **people and service accounts against the control plane** — who may create, build, deploy, and promote. The per-environment providers are attached to gateways and govern runtime traffic which token issuers an environment trusts on calls reaching a running agent or proxy endpoint.
+Choreo Cloud's sign-in is not the same thing as the per-environment identity providers described in [Environment](./environment.mdx). Choreo Cloud authenticates **people and service accounts against the control plane**: who may create, build, deploy, and promote. The per-environment providers are attached to gateways and govern runtime traffic: which token issuers an environment trusts on calls reaching a running agent or proxy endpoint.
 :::
 
-### Roles Bundle Scopes Around Personas
+### Groups Grant Roles
 
-You don't grant scopes one at a time. A **role** is a named bundle of scopes, and you assign it to a **user** or to a **group** — assigning through groups is how access is usually managed at any real size, since team membership changes far more often than the permission set a team needs.
+You don't grant permissions one at a time, and you don't assign a role to a person directly. A **role** is a named bundle of permissions, each **group** grants one role, and a person gets a role by joining the group that grants it. Invite people into a group from **Members**.
 
-Agent Manager ships four predefined roles, each shaped around a job rather than around a resource:
+Choreo Cloud ships these roles, each with a group of the same name:
 
-- **Agent Manager Admin** — everything, including the things nobody else can do like managing roles and groups, managing agent identities, and organization settings.
-- **Developer** — builds and ships agents. Full control over projects and agents, and consumes shared resources (connecting to LLM providers and MCP servers) without being able to register or change them.
-- **AI Lead** — owns the model and tool surface. Registers LLM providers, MCP servers, scopes, and evaluators for the whole organization, but only reads and builds agents rather than owning them.
-- **Platform Engineer** — owns the infrastructure. Environments, gateways, and deployment pipelines, plus the agent operations that touch production.
+| Role | What it covers |
+|------|----------------|
+| **Admin** | Full access to every Choreo Cloud product, including members, billing, and settings. |
+| **Platform Engineer** | Shared infrastructure: environments, gateways, deployment pipelines, the LLM and MCP catalog, evaluators, and sign-in setup. Also deploys agents to production. |
+| **Developer** | Builds, tests, and deploys agents. Full control over projects and agents, and connects agents to LLM Service Providers and MCP Servers without being able to register them. |
+| **Viewer** | Read-only access. |
+| **API Publisher** | API Platform only: designs, publishes, and manages APIs. It grants no Agent Control Plane permissions. |
 
-The split between those last two is the useful part: an AI Lead governs *what agents may use*, while a Platform Engineer governs *where agents run*. Neither role can do the other's job, and neither has to wait on an admin to do their own.
+To see exactly what a role allows, open it from the **Roles** tab of **Access control**.
 
-### Production Is a Separate Permission
-
-Deploying an agent isn't one permission it's two. `amp:agent:deploy-non-production` and `amp:agent:deploy-production` are distinct scopes, so a Developer can iterate freely in development and staging while production deployment, promotion, and suspension stay with Platform Engineers and admins.
-
-This is what makes a [Deployment Pipeline](./deployment-pipeline.mdx) a real control rather than a convention, the pipeline defines the path an agent takes through environments, and the permission split decides who is allowed to move it along that path.
-
-### Administration Is Its Own Set of Permissions
-
-Organization-level administration tasks like inviting or removing members, assigning roles, managing identity providers, managing service accounts are modeled as their own set of permissions (`amp:org:invite-member`, `amp:org:assign-role`, `amp:org:manage-idp`, and so on), kept separate from the permissions on the resources (agents, gateways, providers) inside the organization. Someone can be given full control over the agents in an organization without also gaining the ability to change who else has access to it.
-
-**Service accounts** cover the callers that aren't people. A CI pipeline that builds and deploys agents needs the same scopes a Developer has, but it can't go through an interactive login. A service account gives it its own identity and its own role assignment, so automated access is granted and revoked independently of any individual's account.

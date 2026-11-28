@@ -6,15 +6,16 @@ title: Deployment Pipeline
 
 A Deployment Pipeline defines the order of [environments](./environment.mdx) that agents in a [project](./project.mdx) are allowed to move through. For example, requiring a built artifact to be deployed to staging before that deployment can be promoted to production. Every project is bound to exactly one deployment pipeline.
 
-## Built on OpenChoreo's Deployment Pipeline Abstraction
-
-Agent Manager's deployment pipelines are [OpenChoreo Deployment Pipelines](https://openchoreo.dev/docs/concepts/platform-abstractions/#deploymentpipeline). OpenChoreo defines a DeploymentPipeline as something that "defines the allowed progression paths for applications moving through environments", representing "the organization's software delivery process as a declarative configuration, encoding promotion rules and quality gates." A pipeline can specify parallel paths and conditional progressions based on application characteristics, not just a single linear chain of environments.
 
 ## How It Governs Promotion
 
 - An agent version is deployed to one environment at a time, following the order the project's pipeline allows.
-- Moving an agent from one environment to the next is a **promotion** — a distinct, permissioned action (`amp:agent:promote`) from the initial deploy.
-- Because deploying to a production environment is a separate permission (`amp:agent:deploy-production`) from deploying to a non-production one (`amp:agent:deploy-non-production`), a pipeline's promotion order is also an access-control boundary: someone can be allowed to push to staging without being allowed to push straight to production.
+- Moving an agent from one environment to the next is a **promotion**: the same build is deployed to the next environment in the pipeline.
+- Because deploying to a production environment is a separate permission (`amp:agent:env-production`) from deploying to a non-production one (`amp:agent:env-non-production`), a pipeline's promotion order is also an access-control boundary: someone can be allowed to push to staging without being allowed to push straight to production.
+
+## Where You Manage Deployment Pipelines
+
+Deployment pipelines are managed in Choreo Cloud. To create or edit one, open the organization **Settings** from the app launcher and click **Deployment Pipelines**. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
 
 ## Relationship to Projects and Environments
 

@@ -1,0 +1,124 @@
+---
+sidebar_position: 2
+description: Connect Claude Code, Codex, or another MCP client to the Agent Control Plane Observer MCP server to read an agent's traces, logs, and metrics.
+---
+
+# Observer MCP Server
+
+The Agent Control Plane Observer runs its own MCP server, separate from the [MCP Server](./mcp-server.mdx) that manages agents. Through it, an AI assistant can read a deployed agent's traces, runtime logs, build logs, and resource metrics. Every tool on it is read-only.
+
+The server speaks MCP over Streamable HTTP. Every request carries an OAuth 2.0 access token that you get by signing in to Choreo Cloud in the browser, so the assistant acts with your own permissions.
+
+## Endpoints
+
+Use the endpoint for the region your organization is in.
+
+| Region | MCP server URL | Sign-in host |
+|--------|----------------|--------------|
+| US | `https://agent-manager-observer.obs.dp.us.cloud.choreolabs.io/mcp` | `accounts.cloud.choreolabs.com` |
+| EU | `https://agent-manager-observer.obs.dp.eu.cloud.choreolabs.io/mcp` | `accounts.eu.cloud.choreolabs.com` |
+
+## Authentication
+
+| Setting | Value |
+|---------|-------|
+| OAuth client ID | `am-obs-mcp` |
+| Client type | Public client, no client secret |
+| Flow | Authorization Code with PKCE (`S256`) |
+| Redirect URIs | `http://127.0.0.1:33419/callback`, `http://localhost:33419/callback` |
+| Access token lifetime | 1 hour, renewed with a refresh token |
+
+The Observer has its own OAuth client and its own callback port. A token from the `am-mcp` client of the [MCP Server](./mcp-server.mdx) does not work here, because each token is issued for one server's URL only.
+
+## Available Tools
+
+The server provides seven tools. A tool runs only when your token carries the scope listed for it; otherwise the call returns a permission error that names the missing scope. See [Access Control](../concepts/organization.mdx#access-control) for how roles grant scopes.
+
+The tools look data up by name. `list_traces`, `get_traces`, `get_runtime_logs`, and `get_metrics` take the `organization`, `project`, `agent`, and `environment`. `get_trace_details` takes the `organization` and a `trace_id`, `get_build_logs` takes the `organization` and a `build_name`, and `get_span_details` takes a `trace_id` and a `span_id`. Use the [MCP Server](./mcp-server.mdx) tools, such as `list_project_agent_pairs`, `list_environments`, and `list_builds`, to look up project, agent, environment, and build names.
+
+### Traces
+
+A trace query covers at most 30 days.
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `list_traces` | List a summary of an agent's recent traces in a time window, with optional filters and cursor paging. | `amp:observability:trace-read` |
+| `get_traces` | Return an agent's traces in a time window with full span details, with the same filters as `list_traces`. | `amp:observability:trace-read` |
+| `get_trace_details` | Return one trace's metadata and span list. | `amp:observability:trace-read` |
+| `get_span_details` | Return one span's timing, inputs, outputs, and attributes, by trace ID and span ID. A span is one step of a trace, such as an LLM call or a tool invocation. | `amp:observability:trace-read` |
+
+### Logs and Metrics
+
+A runtime log or metrics query covers at most 14 days.
+
+| Tool | Description | Required scope |
+|------|-------------|----------------|
+| `get_runtime_logs` | Return a deployed agent's application logs, filtered by time window, log level, sort order, or text search. | `amp:observability:log-read` |
+| `get_build_logs` | Return the step-by-step output of one build of a platform-hosted agent. | `amp:observability:build-log-read` |
+| `get_metrics` | Return an agent's CPU and memory usage, requests, and limits over a time range. | `amp:observability:metric-read` |
+
+## Connect an AI Assistant
+
+The examples use the US endpoint. For an EU organization, replace the URL with the EU endpoint from [Endpoints](#endpoints). You can add this server next to the [MCP Server](./mcp-server.mdx) in the same assistant: they use different names and callback ports.
+
+### Claude Code
+
+1. Add the server:
+
+    ```bash
+    claude mcp add --transport http agent-manager-observer \
+      https://agent-manager-observer.obs.dp.us.cloud.choreolabs.io/mcp \
+      --client-id am-obs-mcp \
+      --callback-port 33419
+    ```
+
+    - `--transport http` selects the Streamable HTTP transport.
+    - `--client-id am-obs-mcp` uses the Observer's registered OAuth client instead of registering a new one.
+    - `--callback-port 33419` makes Claude Code listen on the port the client's redirect URIs name.
+
+2. Start Claude Code and run `/mcp`.
+3. Select **agent-manager-observer**, then select **Authenticate**. A browser opens on the Choreo Cloud sign-in page.
+4. Sign in to the organization whose agents you want to inspect.
+
+After you sign in, `/mcp` shows the server as connected. Claude Code stores the token and refreshes it when it expires.
+
+### Codex
+
+Codex reaches the server through [`mcp-remote`](https://www.npmjs.com/package/mcp-remote), which runs the browser sign-in and passes Codex's stdio transport on to the HTTP endpoint. `mcp-remote` needs Node.js and `npx` on your `PATH`.
+
+1. Add this block to `~/.codex/config.toml`:
+
+    ```toml
+    [mcp_servers.agent-manager-observer]
+    command = "npx"
+    args = [
+      "-y",
+      "mcp-remote@latest",
+      "https://agent-manager-observer.obs.dp.us.cloud.choreolabs.io/mcp",
+      "33419",
+      "--callback-path", "/callback",
+      "--static-oauth-client-info", '{"client_id":"am-obs-mcp"}',
+    ]
+    ```
+
+    - `33419` is the callback port the `am-obs-mcp` client registers.
+    - `--callback-path /callback` matches the registered redirect URI; `mcp-remote` uses `/oauth/callback` by default.
+    - `--static-oauth-client-info` uses the registered `am-obs-mcp` client instead of registering a new one.
+
+2. Start a new Codex session and ask for something that calls a tool, for example *Show the runtime logs of agent X in development*. A browser opens on the Choreo Cloud sign-in page.
+3. Sign in to the organization whose agents you want to inspect.
+
+`mcp-remote` caches the token under `~/.mcp-auth/` and reuses it until it expires.
+
+### Other MCP Clients
+
+Any MCP client that supports Streamable HTTP and OAuth 2.0 Authorization Code with PKCE can connect. Configure it with:
+
+- The MCP server URL for your region, from [Endpoints](#endpoints).
+- Client ID `am-obs-mcp`, with no client secret.
+- A callback listener on port `33419` at the path `/callback`.
+
+## Next Steps
+
+- Try a few prompts, for example *List the failed traces of agent X in the last hour*, *Why did the latest build of agent Y fail?*, or *Show the memory usage of agent Z today*.
+- See [Traces](../agent-control-plane/observability/traces.mdx) for the same data in the Console.

@@ -9,7 +9,7 @@ can't abuse, and monitors prove it behaves. Now it has to serve actual
 employees.
 
 :::info This chapter needs a platform-hosted agent
-Promotion, suspend, and endpoint security are all things Agent Manager can
+Promotion, suspend, and endpoint security are all things Agent Control Plane can
 only do for a workload it runs. If your agent is externally-hosted, follow
 along to understand the model. The actions themselves won't be available to
 you, and the deployment and endpoint security stay your responsibility. Only
@@ -36,9 +36,9 @@ development, then staging, then production.
 
 ```mermaid
 flowchart LR
-  B["Build<br/>one image"] -->|"deploy-non-production"| D["Development"]
-  D -->|"promote<br/>deploy-non-production"| S["Staging"]
-  S -->|"promote<br/>deploy-production"| P["Production"]
+  B["Build<br/>one image"] -->|"env-non-production"| D["Development"]
+  D -->|"promote<br/>env-non-production"| S["Staging"]
+  S -->|"promote<br/>env-production"| P["Production"]
 ```
 
 One image is built once and moves rightward. Each hop is a promotion, and the
@@ -52,13 +52,16 @@ environments and update the pipeline later too, exactly like you're doing in
 this chapter.
 :::
 
-If your installation only has a development environment, add staging and
-production now. You need at least two to see a promotion happen.
+If your organization only has a development environment, add staging and
+production now, in Choreo Cloud: open **Settings** from the app launcher, click
+**Environments**, and click **Create Environment**. Turn on **Critical
+environment** for production. You need at least two environments to see a
+promotion happen. See [Manage Environments and Deployment Pipelines](../guides/environment-management.mdx).
 
-After creating the environments, go to the **Deployment Pipelines** view on
-the organization page. If the two new environments aren't visible in the
-promotion chain yet, click **Edit Pipeline** and add them: **Default**,
-**Staging**, and **Production**, in that order. Then click **Save**.
+After creating the environments, click **Deployment Pipelines** in the same
+settings sidebar. If the new environments aren't in your project's pipeline
+yet, click the edit icon on the pipeline and add them to its promotion flow:
+development, then staging, then production. Then click **Save Changes**.
 
 ## Step 2: Configure the LLM and MCP for Your New Environments
 
@@ -92,7 +95,7 @@ production:
   environments exist, create a new MCP server and switch the agent over to it:
 
   1. Register a new MCP server the same way as in
-     [Chapter 3](./give-the-agent-real-tools.mdx#step-1-register-github-as-an-mcp-proxy),
+     [Chapter 3](./give-the-agent-real-tools.mdx#step-1-register-github-as-an-mcp-server),
      with a new name such as `GitHub All Environments`. Use the same endpoint
      URL and `Authorization` header, and check **Development**, **Staging**,
      and **Production** under **Deployment Configuration**. Then fence the tools
@@ -106,7 +109,7 @@ production:
 
   Remove the old configuration before adding the new one, because both would
   inject the same variable names. Full detail:
-  [Configure Agent MCP Proxies](../guides/configure-agent-mcp-proxies.mdx).
+  [Configure Agent MCP Servers](../guides/configure-agent-mcp-proxies.mdx).
 
 The LLM binding can also point each environment at a different target. Because
 each environment has its own tab under **LLM Configurations**, staging might use
@@ -165,7 +168,7 @@ actual origins, not `*`.
 All three are enforced at the gateway that fronts a platform-hosted agent's
 endpoint. An externally-hosted agent's endpoint is yours, so authentication
 and CORS on it are yours to implement. What you *do* still get from the
-platform is everything on the outbound side: the LLM provider and MCP proxy
+platform is everything on the outbound side: the LLM provider and MCP server
 governance from Chapters 2 and 3, plus AgentID, traces, and evaluation.
 :::
 
@@ -186,9 +189,9 @@ promotion won't block on those. In the promotion dialog, set production's own
 file mounts it needs. Same pattern as Step 3, just for production this time.
 
 You may find you *can't* do this. That's the system working as intended.
-Promoting into production requires `amp:agent:deploy-production`,
-[a separate permission](../concepts/organization.mdx#production-is-a-separate-permission)
-from the `amp:agent:deploy-non-production` you've been using all series. A
+Promoting into production requires `amp:agent:env-production`,
+[a separate permission](../concepts/deployment-pipeline.mdx#how-it-governs-promotion)
+from the `amp:agent:env-non-production` you've been using all series. A
 **Developer** typically has the non-production scope but not the production
 one. A **Platform Engineer** has both.
 

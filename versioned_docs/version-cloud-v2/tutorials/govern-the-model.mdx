@@ -46,8 +46,8 @@ Nothing sits between the agent and OpenAI, so nothing can inspect or block
 what it sends or gets back.
 
 **By the end of this chapter**, the agent won't hold an OpenAI key at all. It'll
-hold a platform-issued gateway key instead, and every call will route through a
-[gateway](../concepts/gateway.mdx) that enforces guardrails and rate limits
+hold a platform-issued gateway key instead, and every call will route through an
+[AI Gateway](../concepts/gateway.mdx) that enforces guardrails and rate limits
 before the request ever reaches OpenAI:
 
 ```mermaid
@@ -76,7 +76,7 @@ indirection exists.
 
 Providers are managed at the organization level, so a single registration can be shared across all projects. To set this up:
 
-1. Switch to the Organization view in the Agent Manager console by clicking the organization icon next to the Agent Manager logo.
+1. Switch to the Organization view in the Agent Control Plane console by clicking the organization icon next to the Agent Control Plane logo.
 2. Go to **LLM Service Providers** in the Resource section.
 3. Click **Add Service Provider**.
 
@@ -145,7 +145,7 @@ Now add this new environment variable:
 |---|---|
 | `USE_LLM_PROVIDER` | `true` |
 
-You do **not** add `LLM_PROVIDER_URL` or `LLM_PROVIDER_KEY`. Agent Manager injects
+You do **not** add `LLM_PROVIDER_URL` or `LLM_PROVIDER_KEY`. Agent Control Plane injects
 those as system-managed variables when the provider is attached. Observe that they're
 read-only in the console environment variable section, so the agent can't be repointed at an ungoverned
 endpoint by editing its config.
@@ -210,7 +210,7 @@ Off-topic requests refused and one central credential, neither of which required
 touching the agent.
 
 The division of labor here is the real lesson, and it maps onto
-[roles](../concepts/organization.mdx#access-control): an **AI Lead** owns
+[roles](../concepts/organization.mdx#access-control): a **Platform Engineer** owns
 providers and guardrails, a **Developer** owns the agent, and neither has to wait
 on the other. A Developer can *connect* to a provider but not register or change
 one.

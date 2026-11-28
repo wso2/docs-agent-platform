@@ -5,7 +5,7 @@ description: Deploy the A2A Notes Agent sample, a Python agent that summarizes m
 
 # Deploy the A2A Notes Agent Sample
 
-WSO2 Agent Manager includes a ready-to-deploy sample agent that speaks the [A2A protocol](https://a2a-protocol.org/), called the A2A Notes Agent. In this tutorial you deploy it as an **A2A Agent**, then call it through the gateway over both A2A transports. You do not need to write or change any code.
+Choreo Agent Control Plane includes a ready-to-deploy sample agent that speaks the [A2A protocol](https://a2a-protocol.org/), called the A2A Notes Agent. In this tutorial you deploy it as an **A2A Agent**, then call it through the gateway over both A2A transports. You do not need to write or change any code.
 
 The sample lives in the platform's GitHub repository, at [`samples/a2a-agent`](https://github.com/wso2/agent-manager/tree/main/samples/a2a-agent). It is built on the official [`a2a-sdk`](https://github.com/a2aproject/a2a-python) Python package and FastAPI.
 
@@ -18,18 +18,18 @@ Give the A2A Notes Agent meeting notes and it does one of two things, both backe
 | `summarize-notes` | Condenses the notes into at most three sentences. This is the default skill. | A `text/plain` artifact, streamed as it is written |
 | `extract-action-items` | Pulls out who owes what, and when | An `application/json` artifact |
 
-The sample shows the A2A protocol surface Agent Manager publishes:
+The sample shows the A2A protocol surface Agent Control Plane publishes:
 
 - **An agent card** at `/.well-known/agent-card.json`, declaring a JSON-RPC interface under `/rpc`, an HTTP+JSON interface under `/rest`, and the two skills.
 - **Both transports from one process**, over one task store, so a task sent over JSON-RPC can be read over HTTP+JSON.
 - **Streaming** through `SendStreamingMessage`, which returns the summary as a stream of artifact chunks.
 - **The task lifecycle**: `submitted`, `working`, then `completed`. A request with no notes is `rejected`, and a failed model call is `failed`.
 
-For how Agent Manager exposes A2A agents in general, see [Deploy an A2A Agent](../guides/deploy-an-a2a-agent.mdx).
+For how Agent Control Plane exposes A2A agents in general, see [Deploy an A2A Agent](../guides/deploy-an-a2a-agent.mdx).
 
 ## Prerequisites
 
-- An Agent Manager Cloud account. Sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
+- An Agent Control Plane account. Sign up at [Choreo Cloud Console](https://console.agent-manager.cloud.wso2.com/) if you don't have one yet.
 - An OpenAI API key. Both skills call the model.
 
 ## Step 1: Create and Deploy the Agent

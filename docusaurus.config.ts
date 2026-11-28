@@ -197,6 +197,11 @@ const config: Config = {
         // Send the /latest/ form of each pre-reorganisation URL to the
         // canonical page in one hop; the alias follows whatever is current.
         redirects: [
+          // cloud-v2 merged its MCP registration guide into the Agent Control Plane page.
+          {
+            from: '/cloud-v2/guides/register-mcp-proxy',
+            to: '/cloud-v2/agent-control-plane/create/mcp-servers',
+          },
           ...reorganizedPaths.map(([from, to]) => ({
             from: `/latest/${from}`,
             to: `/${latestVersion}/${to}`,

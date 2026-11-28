@@ -8,7 +8,7 @@ This guide walks you through creating an evaluation monitor, viewing results, an
 
 ## Prerequisites
 
-- An Agent Manager Cloud account (sign up at [console.agent-manager.cloud.wso2.com](https://console.agent-manager.cloud.wso2.com/))
+- An Agent Control Plane account (sign up at [Choreo Cloud Console](https://console.agent-manager.cloud.wso2.com/))
 - An agent registered in AMP with an active environment
 - Agent traces being collected (see [Observe Your First Agent](../tutorials/observe-first-agent.mdx))
 - For LLM-as-Judge evaluators: an API key for a [supported LLM provider](../concepts/evaluation.mdx#supported-llm-providers)
@@ -23,8 +23,6 @@ This guide walks you through creating an evaluation monitor, viewing results, an
 2. Click the **Evaluation** tab.
 3. Click **Add Monitor**.
 
-![Evaluation tab with Add Monitor button](../img/evaluation/evaluation-tab.png)
-
 ---
 
 ### Step 2: Configure Monitor Details
@@ -36,8 +34,6 @@ Fill in the monitor configuration:
 - **Data Collection Type**: Choose one:
   - **Past Traces**: evaluate traces from a specific time window. Set a **Start Time** and **End Time**. The evaluation runs immediately after creation.
   - **Future Traces**: evaluate new traces on a recurring schedule. Set an **interval** in minutes (minimum 5 minutes).
-
-![Monitor details form](../img/evaluation/create-step1.png)
 
 :::tip Choosing a monitor type
 Use **Past Traces** when you want to assess historical agent behavior, such as reviewing last week's interactions after a deployment. Use **Future Traces** for ongoing production quality monitoring.
@@ -55,10 +51,6 @@ Use **Past Traces** when you want to assess historical agent behavior, such as r
 
 For a full reference of available evaluators and their parameters, see [Built-in Evaluators](../concepts/evaluation.mdx#built-in-evaluators). You can also create your own (see [Custom Evaluators](./custom-evaluators.mdx)).
 
-![Evaluator selection grid](../img/evaluation/create-step2-evaluators.png)
-
-![Evaluator configuration drawer](../img/evaluation/evaluator-drawer.png)
-
 ---
 
 ### Step 4: Configure LLM Providers (LLM-as-Judge only)
@@ -75,8 +67,6 @@ The **model** field on LLM-as-Judge evaluators uses `provider/model` format (e.g
 :::tip
 You only need to add each provider once per monitor. All evaluators using that provider share the same credentials.
 :::
-
-![LLM provider configuration](../img/evaluation/llm-provider-config.png)
 
 ---
 
@@ -108,8 +98,6 @@ The monitor dashboard provides several views of your evaluation results:
 - **Run Summary**: latest run status with quick access to run history.
 - **Performance by Evaluator**: a time-series chart showing how each evaluator's score trends over time. Useful for spotting regressions or improvements.
 
-![Monitor dashboard](../img/evaluation/monitor-dashboard.png)
-
 ### Score Breakdowns
 
 When your monitor includes agent-level or LLM-level evaluators, the dashboard shows additional breakdown tables below the performance chart.
@@ -134,7 +122,6 @@ A table with one row per LLM model used across the evaluated traces. Each row sh
 
 This helps you compare quality across different models used by your agents.
 
-
 ### Run History
 
 The dashboard also shows a history of all evaluation runs. Each run displays:
@@ -148,13 +135,9 @@ You can take actions on individual runs:
 - **Rerun**: re-execute the evaluation run.
 - **View Logs**: see detailed execution logs for troubleshooting.
 
-![Run history](../img/evaluation/run-history.png)
-
 ### Run Logs
 
 Click **View Logs** on any run to open the log viewer. This displays the application logs from the monitor's evaluation job, useful for diagnosing failed or unexpected runs.
-
-![Run logs](../img/evaluation/run-logs.png)
 
 ---
 
@@ -165,8 +148,6 @@ Evaluation scores are also visible directly in the trace view, making it easy to
 ### Score Column in Traces Table
 
 The traces list includes a **Score** column showing the average evaluator score for each trace. Scores are color-coded (green for high scores, red for low), giving you a quick visual indicator of which traces need attention.
-
-![Traces table with score column](../img/evaluation/traces-table-scores.png)
 
 ### Scores in Span Details
 
@@ -180,8 +161,6 @@ Click any trace to open the trace timeline. Select a span to view its details pa
    - **Skipped evaluators**: shown with a skip reason instead of a score
 
 Trace-level scores appear on the root span. Agent-level and LLM-level scores appear on their respective agent and LLM spans.
-
-![Span details with scores tab](../img/evaluation/span-scores-tab.png)
 
 ---
 

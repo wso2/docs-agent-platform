@@ -240,7 +240,7 @@
             {
               "type": "doc",
               "id": "agent-control-plane/administer/gateways",
-              "label": "Manage Gateways"
+              "label": "Manage AI Gateways"
             },
             {
               "type": "doc",
@@ -365,11 +365,6 @@
               "label": "LLM Service Providers"
             },
             "guides/configure-agent-llm-configuration",
-            {
-              "type": "doc",
-              "id": "guides/register-mcp-proxy",
-              "label": "MCP Proxies"
-            },
             "guides/environment-management",
             "guides/amp-instrumentation"
           ]
@@ -406,6 +401,29 @@
         "tutorials/deploy-the-a2a-notes-agent-sample"
       ],
       "className": "sidebar-section-icon-tutorials"
+    },
+    {
+      "type": "category",
+      "label": "References",
+      "className": "sidebar-section-icon-references",
+      "collapsed": true,
+      "items": [
+        {
+          "type": "doc",
+          "id": "reference/mcp-server",
+          "label": "MCP Server"
+        },
+        {
+          "type": "doc",
+          "id": "reference/observer-mcp-server",
+          "label": "Observer MCP Server"
+        },
+        {
+          "type": "doc",
+          "id": "reference/amctl",
+          "label": "amctl CLI"
+        }
+      ]
     }
   ]
 }

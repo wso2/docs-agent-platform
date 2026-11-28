@@ -7,7 +7,7 @@ import TabItem from '@theme/TabItem';
 
 # Deploy the Ballerina Leave Assistant Sample
 
-WSO2 Agent Manager includes a ready to deploy sample agent written in Ballerina, called the Leave Assistant. It shows how a Ballerina agent runs on the platform's Ballerina buildpack, or on your own machine with its traces sent to Agent Manager, using a realistic HR scenario built around employee leave requests.
+Choreo Agent Control Plane includes a ready to deploy sample agent written in Ballerina, called the Leave Assistant. It shows how a Ballerina agent runs on the platform's Ballerina buildpack, or on your own machine with its traces sent to Agent Control Plane, using a realistic HR scenario built around employee leave requests.
 
 This guide explains what the sample does and walks you through running it either way. You do not need to write or change any code to follow it.
 
@@ -48,8 +48,8 @@ Two employees are included with the sample so you can try it out right after dep
 
 | | **Platform-Hosted** | **Externally-Hosted** |
 |---|---|---|
-| Who builds and runs it | Agent Manager, from the GitHub repository | You, on your own machine |
-| Tracing | Automatic when **Enable auto instrumentation** is on (the default). Agent Manager supplies the tracing settings and API key | You turn it on in `Config.toml` and set the endpoint and an API key you generate as environment variables |
+| Who builds and runs it | Agent Control Plane, from the GitHub repository | You, on your own machine |
+| Tracing | Automatic when **Enable auto instrumentation** is on (the default). Agent Control Plane supplies the tracing settings and API key | You turn it on in `Config.toml` and set the endpoint and an API key you generate as environment variables |
 | How you chat with it | The built in **Try It** window | HTTP requests to `localhost:8000` |
 
 See [Internal and External Agent](../concepts/internal-and-external-agent.mdx) for the full comparison.
@@ -82,7 +82,7 @@ Platform-hosted Ballerina agents must use Ballerina `2201.13.x`. The Ballerina b
 
 ### Step 1: Start Creating the Agent
 
-1. Open your project in Agent Manager and go to **Agents**.
+1. Open your project in Agent Control Plane and go to **Agents**.
 2. Click **Add Agent**.
 3. Select **Platform-Hosted Agent**.
 4. Choose **Source Code** as the source type.
@@ -106,13 +106,13 @@ Platform-hosted Ballerina agents must use Ballerina `2201.13.x`. The Ballerina b
 
 Select **Ballerina**. You will not see the **Language Version** or **Start Command** fields that other languages ask for. The platform reads the Ballerina version from the `distribution` field in the sample's `Ballerina.toml` and knows how to build and run it directly. That version must be `2201.13.x`, the only version the Ballerina buildpack supports.
 
-Leave **Enable auto instrumentation** turned on. This lets Agent Manager automatically set up tracing for the agent, so its conversations and tool calls show up under **Observability** with no extra setup on your part.
+Leave **Enable auto instrumentation** turned on. This lets Agent Control Plane automatically set up tracing for the agent, so its conversations and tool calls show up under **Observability** with no extra setup on your part.
 
 The form also shows a **Tracing Support for Ballerina-Based Agents** note with the line `import ballerinax/amp as _;`. The sample already contains that line, so you have nothing to add. [How the Agent Is Instrumented](#how-the-agent-is-instrumented) explains what it does and what to add to your own agent.
 
 ### Step 5: Choose Chat Agent as the Interface Type
 
-Choose **Chat Agent**, not **Custom API Agent**. The sample already exposes the standard chat interface Agent Manager expects, so choosing Chat Agent gives you the built in **Try It** chat window immediately, with nothing further to configure. Custom API Agent is for agents that expose their own custom endpoints and would require you to supply an OpenAPI specification, which this sample does not use.
+Choose **Chat Agent**, not **Custom API Agent**. The sample already exposes the standard chat interface Agent Control Plane expects, so choosing Chat Agent gives you the built in **Try It** chat window immediately, with nothing further to configure. Custom API Agent is for agents that expose their own custom endpoints and would require you to supply an OpenAPI specification, which this sample does not use.
 
 ### Step 6: Set the Environment Variable
 
@@ -148,7 +148,7 @@ Review your settings and click **Deploy**. The build compiles the sample and pac
 
 ### Step 1: Register the Agent
 
-1. Open your project in Agent Manager and go to **Agents**.
+1. Open your project in Agent Control Plane and go to **Agents**.
 2. Click **Add Agent**.
 3. Select **Externally-Hosted Agent**.
 4. Fill in the agent details:
@@ -177,11 +177,11 @@ The sample already has the code changes tracing needs, so you do not need to edi
     observabilityIncluded = true
     ```
 
-* `main.bal` imports the Agent Manager module: `import ballerinax/amp as _;`. Only Ballerina `2201.13.x` uses it. On `2201.14.x` the module stays inactive, so the line does no harm.
+* `main.bal` imports the Agent Control Plane module: `import ballerinax/amp as _;`. Only Ballerina `2201.13.x` uses it. On `2201.14.x` the module stays inactive, so the line does no harm.
 
 ### Step 3: Turn on Tracing in Config.toml
 
-How traces reach Agent Manager depends on your Ballerina version:
+How traces reach Agent Control Plane depends on your Ballerina version:
 
 * **`2201.13.x`** uses the `ballerinax/amp` module, which the Setup Agent panel describes.
 * **`2201.14.x`** uses Ballerina's built-in OpenTelemetry exporter. `ballerinax/amp` does not yet work on `2201.14.x`: the agent fails at startup when tracing is turned on.
@@ -209,7 +209,7 @@ tracingProvider = "otel"
 tracesProtocol = "http/protobuf"
 ```
 
-Agent Manager receives traces over HTTP, so `tracesProtocol` must be `http/protobuf`. Without it, the exporter uses gRPC and the traces do not arrive. See [OpenTelemetry trace configurations](https://ballerina.io/learn/supported-observability-tools-and-platforms/opentelemetry/#trace-configurations) for the other settings.
+Agent Control Plane receives traces over HTTP, so `tracesProtocol` must be `http/protobuf`. Without it, the exporter uses gRPC and the traces do not arrive. See [OpenTelemetry trace configurations](https://ballerina.io/learn/supported-observability-tools-and-platforms/opentelemetry/#trace-configurations) for the other settings.
 
 </TabItem>
 </Tabs>
@@ -311,7 +311,7 @@ The last one should come back as a clear rejection, since E-3002 only has 3 annu
 </TabItem>
 <TabItem value="external" label="Externally-Hosted Agent">
 
-An externally-hosted agent has no **Try It** window, because Agent Manager does not run it. Send messages to the agent's `POST /chat` endpoint from a second terminal instead:
+An externally-hosted agent has no **Try It** window, because Agent Control Plane does not run it. Send messages to the agent's `POST /chat` endpoint from a second terminal instead:
 
 ```bash
 curl -s localhost:8000/chat \
@@ -338,13 +338,13 @@ Open the **Observability** tab afterward to see which tool the agent called for 
 
 ## How the Agent Is Instrumented
 
-The traces under **Observability** depend on three pieces. The sample already has the first two. For a platform-hosted agent, Agent Manager provides the third.
+The traces under **Observability** depend on three pieces. The sample already has the first two. For a platform-hosted agent, Agent Control Plane provides the third.
 
 | Piece | Where it lives | Who provides it |
 |---|---|---|
 | The `ballerinax/amp` import | `main.bal` | The sample |
 | The `observabilityIncluded` build option | `Ballerina.toml` | The sample |
-| Tracing settings, collector address, and API key | The running agent's configuration | Agent Manager, when **Enable auto instrumentation** is on |
+| Tracing settings, collector address, and API key | The running agent's configuration | Agent Control Plane, when **Enable auto instrumentation** is on |
 
 The sample is built on Ballerina `2201.13.x` (`distribution = "2201.13.4"` in `Ballerina.toml`), so it traces through the `ballerinax/amp` module. It imports the module for its side effect only, which is why the import ends in `as _`:
 
@@ -359,22 +359,22 @@ It also turns on observability for the build in `Ballerina.toml`:
 observabilityIncluded = true
 ```
 
-At runtime Agent Manager turns tracing on with `amp` as the tracing provider. It also sets `BAL_CONFIG_VAR_BALLERINAX_AMP_OTELENDPOINT` and `BAL_CONFIG_VAR_BALLERINAX_AMP_APIKEY` for the agent. That is why the platform-hosted steps only ask for the OpenAI key, and why you do not add a tracing section to `Config.toml`.
+At runtime Agent Control Plane turns tracing on with `amp` as the tracing provider. It also sets `BAL_CONFIG_VAR_BALLERINAX_AMP_OTELENDPOINT` and `BAL_CONFIG_VAR_BALLERINAX_AMP_APIKEY` for the agent. That is why the platform-hosted steps only ask for the OpenAI key, and why you do not add a tracing section to `Config.toml`.
 
 ### Add It to Your Own Ballerina Agent
 
-For an agent you write yourself and deploy through Agent Manager:
+For an agent you write yourself and deploy through Agent Control Plane:
 
 1. Set `distribution` in `Ballerina.toml` to a `2201.13.x` version. The Ballerina buildpack supports only `2201.13.x`.
 2. Add `import ballerinax/amp as _;` to one of your `.bal` files.
 3. Add `observabilityIncluded = true` under `[build-options]` in `Ballerina.toml`.
 4. Keep **Enable auto instrumentation** turned on when you create the agent.
 
-That is all. The tracing settings and credentials come from Agent Manager.
+That is all. The tracing settings and credentials come from Agent Control Plane.
 
-### If the Agent Runs Outside Agent Manager
+### If the Agent Runs Outside Agent Control Plane
 
-An externally-hosted Ballerina agent needs the same import and build option. It also needs the third piece, which Agent Manager cannot provide because it does not run the agent. You supply it yourself: the tracing settings in `Config.toml`, and the collector address and API key as environment variables.
+An externally-hosted Ballerina agent needs the same import and build option. It also needs the third piece, which Agent Control Plane cannot provide because it does not run the agent. You supply it yourself: the tracing settings in `Config.toml`, and the collector address and API key as environment variables.
 
 Follow Steps 3 to 6 in the **Externally-Hosted Agent** tab under [Deploy the Sample](#deploy-the-sample). They work the same way for any Ballerina agent, not only the sample.
 

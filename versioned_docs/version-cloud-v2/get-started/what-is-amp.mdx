@@ -1,29 +1,31 @@
 ---
 sidebar_position: 1
+description: Choreo Agent Management is a managed Choreo Cloud service for deploying, governing, observing, and evaluating AI agents.
 ---
+
 # Choreo Agent Management
 
-An open control plane designed for enterprises to deploy, manage, and govern AI agents at scale.
+A managed Choreo Cloud service for deploying, governing, and observing AI agents.
 
 ## Overview
 
-Choreo Agent Management provides a comprehensive platform for enterprise AI agent management. It enables organizations to deploy AI agents (both internally hosted and externally deployed), monitor their behavior through full-stack observability, and enforce governance policies at scale.
+Choreo Agent Management is part of Choreo Cloud. You sign in, open a project, and bring your agents. Choreo runs the platform for you: it builds and hosts your agents, and provisions the AI Gateway and identity service for each environment. There is no infrastructure to install or operate.
 
-Built on [OpenChoreo](https://github.com/openchoreo/openchoreo) for internal agent deployments, the platform leverages OpenTelemetry for extensible instrumentation across multiple AI frameworks.
+Your Choreo Cloud organization is shared across Choreo products, so the members, roles, environments, and deployment pipelines you set up in Choreo Cloud apply to your agents too. See [Organization](../concepts/organization.mdx).
 
-## Key Features
+## What You Can Do
 
-- **Deploy at Scale** - Deploy and run AI agents on Kubernetes with production-ready configurations
-- **Lifecycle Management** - Manage agent versions, configurations, and deployments from a unified control plane
-- **Governance** - Enforce policies, manage access controls, and ensure compliance across all agents
-- **Full Observability** - Capture traces, metrics, and logs for complete visibility into agent behavior
-- **Continuous Evaluation** - Assess agent quality with built-in evaluators across multiple dimensions — accuracy, safety, reasoning, tool usage, and more
-- **Auto-Instrumentation** - OpenTelemetry-based instrumentation for AI frameworks with zero code changes
-- **External Agent Support** - Monitor and govern externally deployed agents alongside internal ones
+- **Deploy agents from source.** Point Choreo at a GitHub repository, and it builds the agent, deploys it, and gives it an endpoint. See [Platform-Hosted and Externally-Hosted Agents](../concepts/internal-and-external-agent.mdx).
+- **Bring agents you already run.** Register an agent that runs elsewhere, and observe and govern it alongside the agents Choreo hosts.
+- **Promote across environments.** Move the same build from development to production along your project's deployment pipeline, with production deployments under a separate permission. See [Deployment Pipeline](../concepts/deployment-pipeline.mdx).
+- **Govern models and tools.** Give agents access to LLM service providers and MCP servers through the [AI Gateway](../ai-gateway/overview.mdx), with platform-issued keys, guardrails, and per-tool access control.
+- **Give every agent an identity.** Each agent gets an [AgentID](../concepts/agentid.mdx) credential in every environment it runs in.
+- **Observe agent behavior.** Capture traces, logs, and metrics for every request. Python agents that Choreo hosts can be instrumented with no code changes. See [Observability](../concepts/observability.mdx).
+- **Evaluate continuously.** Score agent quality with built-in and custom evaluators, such as accuracy, safety, reasoning, and tool use. See [Evaluation](../concepts/evaluation.mdx).
 
 ## Getting Started
 
-Sign up and start managing agents in the [Choreo Agent Management Console](#).
+Follow the [Quick Start Guide](../quick-start.mdx) to deploy a sample agent, chat with it, and inspect its trace.
 
 ## Terms of Use
 

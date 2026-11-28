@@ -299,6 +299,41 @@
     },
     {
       "type": "category",
+      "label": "API Portal & AI Hub",
+      "className": "sidebar-section-icon-portal",
+      "collapsed": true,
+      "items": [
+        {
+          "type": "doc",
+          "id": "api-portal/overview",
+          "label": "Overview"
+        },
+        {
+          "type": "category",
+          "label": "Discover",
+          "items": [
+            {
+              "type": "doc",
+              "id": "api-portal/discover/browse-mcp-servers",
+              "label": "MCP Servers"
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Administer",
+          "items": [
+            {
+              "type": "doc",
+              "id": "api-portal/administer/manage-mcp-servers",
+              "label": "Manage MCP Servers"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "category",
       "label": "Guides",
       "collapsed": true,
       "items": [

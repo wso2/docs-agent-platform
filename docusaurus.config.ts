@@ -3,8 +3,21 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import fs from 'fs';
 import gtmNoscriptPlugin from './plugins/gtm-noscript';
+import logger from '@docusaurus/logger';
+import path from 'path';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
+
+// Pages written for the combined documentation site, which also has the
+// self-hosted Agent Manager releases, AI & Agent Control Plane, and AI Gateway
+// docs. Their relative links to those pages can't be resolved in this site, so
+// here they become links to the same pages on the combined site (the URL at
+// which the page's folder is served there), and they skip the broken links check.
+// Every other page keeps the usual check.
+const combinedSitePages: Record<string, string> = {
+  'versioned_docs/version-cloud-v2/self-hosted/get-started.mdx':
+    'https://choreolabs.com/documentation/agent-management/self-hosted/',
+};
 const versions: string[] = JSON.parse(fs.readFileSync('./versions.json', 'utf-8'));
 // Versions cut ahead of their release. Their pages are built and reachable by URL,
 // but stay out of the version dropdown, the announcement bar, search, and search
@@ -163,7 +176,18 @@ const config: Config = {
   markdown: {
     mermaid: true,
     hooks: {
-      onBrokenMarkdownLinks: 'warn',
+      onBrokenMarkdownLinks: ({sourceFilePath, url}) => {
+        const page = sourceFilePath.split(path.sep).join('/');
+        const base = Object.entries(combinedSitePages).find(([file]) => page === file || page.endsWith(`/${file}`))?.[1];
+        if (base) {
+          // ./ai-gateway/1.2.0/overview.md#tag -> <base>ai-gateway/1.2.0/overview#tag
+          const target = new URL(url, base);
+          target.pathname = target.pathname.replace(/(\/index|\/README)?\.mdx?$/i, (m, index) => (index ? '/' : ''));
+          return target.href;
+        }
+        logger.warn`Markdown link with URL code=${url} in source file path=${path.relative(process.cwd(), sourceFilePath)} couldn't be resolved.`;
+        return undefined;
+      },
     },
   },
 
